@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
+import { ASSISTANT_MODELS, DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, primaryBtnClass } from "@/lib/ui";
+
+const MODEL_STORAGE_KEY = "vreka-assistant-model";
 
 export default function AsistenPage() {
   const supabase = createClient();
@@ -13,7 +16,19 @@ export default function AsistenPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
+    if (isValidAssistantModel(saved)) setModel(saved);
+  }, []);
+
+  function handleModelChange(value: string) {
+    if (!isValidAssistantModel(value)) return;
+    setModel(value);
+    window.localStorage.setItem(MODEL_STORAGE_KEY, value);
+  }
 
   async function load() {
     setLoading(true);
@@ -58,7 +73,7 @@ export default function AsistenPage() {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, model }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -84,13 +99,31 @@ export default function AsistenPage() {
 
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
-      <header>
-        <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
-          Modul 04
-        </p>
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
-          Asisten
-        </h1>
+      <header className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
+            Modul 04
+          </p>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+            Asisten
+          </h1>
+        </div>
+        <div>
+          <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
+            Model
+          </label>
+          <select
+            value={model}
+            onChange={(e) => handleModelChange(e.target.value)}
+            className="bg-panel2 border border-line rounded-sm px-3 py-2 text-sm text-white focus:border-cyan-glow/60 transition-colors"
+          >
+            {ASSISTANT_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label} — {m.tagline}
+              </option>
+            ))}
+          </select>
+        </div>
       </header>
 
       <HudPanel className="flex-1 flex flex-col min-h-0" as="section">
