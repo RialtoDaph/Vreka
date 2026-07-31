@@ -5,7 +5,7 @@ import { getElevenLabsClient, DEFAULT_VOICE_ID, TTS_MODEL_ID } from "@/lib/assis
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

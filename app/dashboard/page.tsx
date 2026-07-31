@@ -7,7 +7,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
