@@ -18,6 +18,8 @@ export default function TransactionsTab() {
 
   const [type, setType] = useState<TransactionType>("expense");
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const [categorizing, setCategorizing] = useState(false);
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [occurredOn, setOccurredOn] = useState(
@@ -28,9 +30,32 @@ export default function TransactionsTab() {
     setEditingId(null);
     setType("expense");
     setCategory(EXPENSE_CATEGORIES[0]);
+    setCategoryTouched(false);
     setAmount("");
     setDescription("");
     setOccurredOn(new Date().toISOString().slice(0, 10));
+  }
+
+  async function handleDescriptionBlur() {
+    if (editingId || categoryTouched || !description.trim()) return;
+    setCategorizing(true);
+    try {
+      const res = await fetch("/api/assistant/categorize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, description: description.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.category === "string" && !categoryTouched) {
+          setCategory(data.category);
+        }
+      }
+    } catch {
+      // gagal nebak kategori bukan hal fatal, user masih bisa pilih manual
+    } finally {
+      setCategorizing(false);
+    }
   }
 
   function toggleForm() {
@@ -42,6 +67,7 @@ export default function TransactionsTab() {
     setEditingId(tx.id);
     setType(tx.type);
     setCategory(tx.category);
+    setCategoryTouched(true);
     setAmount(String(tx.amount).replace(".", ","));
     setDescription(tx.description ?? "");
     setOccurredOn(tx.occurred_on);
@@ -157,10 +183,15 @@ export default function TransactionsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Kategori</label>
+                <label className={labelClass}>
+                  Kategori {categorizing && <span className="text-cyan-glow normal-case">(nebak...)</span>}
+                </label>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    setCategoryTouched(true);
+                  }}
                   className={inputClass}
                 >
                   {categories.map((c) => (
@@ -185,6 +216,7 @@ export default function TransactionsTab() {
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
+                  onBlur={handleDescriptionBlur}
                   className={inputClass}
                   placeholder="Makan siang tim"
                 />

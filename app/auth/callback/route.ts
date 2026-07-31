@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     return fail("Link konfirmasi tidak valid. Coba daftar ulang buat dapet link baru.");
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {

@@ -1,13 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import HudPanel from "@/components/HudPanel";
 import StatCard from "@/components/StatCard";
+import OverviewInsight from "@/components/OverviewInsight";
 import { formatCurrency, formatDate, daysUntil } from "@/lib/format";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -66,6 +67,8 @@ export default async function OverviewPage() {
           Ringkasan Sistem
         </h1>
       </header>
+
+      <OverviewInsight />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
