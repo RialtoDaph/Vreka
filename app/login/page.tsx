@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import HudPanel from "@/components/HudPanel";
@@ -14,6 +14,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // /auth/callback bounces its failures back here as ?error=. Read it off
+  // window rather than useSearchParams so this page stays statically rendered.
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("error");
+    if (reason) {
+      setError(reason);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,13 +41,21 @@ export default function LoginPage() {
       router.push("/dashboard");
       router.refresh();
     } else {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // Without this the link falls back to the project's Site URL, which
+          // is what sends confirmation emails to localhost.
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
       setLoading(false);
       if (error) {
         setError(error.message);
         return;
       }
-      setNotice("Akun dibuat. Cek email kamu buat konfirmasi, terus login di sini.");
+      setNotice("Akun dibuat. Klik link konfirmasi di email kamu — nanti langsung masuk sendiri.");
       setMode("signin");
     }
   }
