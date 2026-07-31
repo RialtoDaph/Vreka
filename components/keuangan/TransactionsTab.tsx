@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Transaction, TransactionType } from "@/lib/types";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
@@ -14,6 +14,7 @@ export default function TransactionsTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [type, setType] = useState<TransactionType>("expense");
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
@@ -22,6 +23,30 @@ export default function TransactionsTab() {
   const [occurredOn, setOccurredOn] = useState(
     new Date().toISOString().slice(0, 10)
   );
+
+  function resetForm() {
+    setEditingId(null);
+    setType("expense");
+    setCategory(EXPENSE_CATEGORIES[0]);
+    setAmount("");
+    setDescription("");
+    setOccurredOn(new Date().toISOString().slice(0, 10));
+  }
+
+  function toggleForm() {
+    resetForm();
+    setShowForm((s) => !s);
+  }
+
+  function startEdit(tx: Transaction) {
+    setEditingId(tx.id);
+    setType(tx.type);
+    setCategory(tx.category);
+    setAmount(String(tx.amount).replace(".", ","));
+    setDescription(tx.description ?? "");
+    setOccurredOn(tx.occurred_on);
+    setShowForm(true);
+  }
 
   async function load() {
     setLoading(true);
@@ -45,26 +70,31 @@ export default function TransactionsTab() {
     setCategory(t === "income" ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]);
   }
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!amount) return;
+    const parsed = parseAmount(amount);
+    if (!amount || !Number.isFinite(parsed) || parsed <= 0) return;
     setSaving(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
 
-    await supabase.from("transactions").insert({
-      user_id: user.id,
+    const payload = {
       type,
       category,
-      amount: Number(amount),
+      amount: parsed,
       description: description || null,
       occurred_on: occurredOn,
-    });
+    };
 
-    setAmount("");
-    setDescription("");
+    if (editingId) {
+      await supabase.from("transactions").update(payload).eq("id", editingId);
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from("transactions").insert({ user_id: user.id, ...payload });
+    }
+
+    resetForm();
     setSaving(false);
     setShowForm(false);
     load();
@@ -80,17 +110,14 @@ export default function TransactionsTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className={primaryBtnClass}
-        >
+        <button onClick={toggleForm} className={primaryBtnClass}>
           {showForm ? "Batal" : "+ Catat Transaksi"}
         </button>
       </div>
 
       {showForm && (
         <HudPanel>
-          <form onSubmit={handleAdd} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex border border-line rounded-sm overflow-hidden text-sm font-mono w-fit">
               <button
                 type="button"
@@ -120,14 +147,13 @@ export default function TransactionsTab() {
               <div>
                 <label className={labelClass}>Jumlah (€)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   required
-                  min={0.01}
-                  step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="50.00"
+                  placeholder="50,00"
                 />
               </div>
               <div>
@@ -166,7 +192,7 @@ export default function TransactionsTab() {
             </div>
 
             <button type="submit" disabled={saving} className={primaryBtnClass}>
-              {saving ? "Menyimpan..." : "Simpan Transaksi"}
+              {saving ? "Menyimpan..." : editingId ? "Update Transaksi" : "Simpan Transaksi"}
             </button>
           </form>
         </HudPanel>
@@ -206,6 +232,9 @@ export default function TransactionsTab() {
                     {tx.type === "income" ? "+" : "-"}
                     {formatCurrency(Number(tx.amount))}
                   </span>
+                  <button onClick={() => startEdit(tx)} className={ghostBtnClass}>
+                    Edit
+                  </button>
                   <button
                     onClick={() => handleDelete(tx.id)}
                     className={dangerBtnClass}

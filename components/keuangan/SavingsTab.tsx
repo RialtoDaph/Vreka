@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SavingsGoal } from "@/lib/types";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
 
@@ -13,6 +13,7 @@ export default function SavingsTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [addFundId, setAddFundId] = useState<string | null>(null);
   const [addFundValue, setAddFundValue] = useState("");
 
@@ -20,6 +21,28 @@ export default function SavingsTab() {
   const [target, setTarget] = useState("");
   const [current, setCurrent] = useState("");
   const [deadline, setDeadline] = useState("");
+
+  function resetForm() {
+    setEditingId(null);
+    setName("");
+    setTarget("");
+    setCurrent("");
+    setDeadline("");
+  }
+
+  function toggleForm() {
+    resetForm();
+    setShowForm((s) => !s);
+  }
+
+  function startEdit(goal: SavingsGoal) {
+    setEditingId(goal.id);
+    setName(goal.name);
+    setTarget(String(goal.target_amount).replace(".", ","));
+    setCurrent(String(goal.current_amount).replace(".", ","));
+    setDeadline(goal.deadline ?? "");
+    setShowForm(true);
+  }
 
   async function load() {
     setLoading(true);
@@ -36,35 +59,39 @@ export default function SavingsTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !target) return;
+    const parsedTarget = parseAmount(target);
+    const parsedCurrent = current ? parseAmount(current) : 0;
+    if (!name || !target || !Number.isFinite(parsedTarget) || parsedTarget <= 0) return;
     setSaving(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
 
-    await supabase.from("savings_goals").insert({
-      user_id: user.id,
+    const payload = {
       name,
-      target_amount: Number(target),
-      current_amount: Number(current) || 0,
+      target_amount: parsedTarget,
+      current_amount: Number.isFinite(parsedCurrent) ? parsedCurrent : 0,
       deadline: deadline || null,
-    });
+    };
 
-    setName("");
-    setTarget("");
-    setCurrent("");
-    setDeadline("");
+    if (editingId) {
+      await supabase.from("savings_goals").update(payload).eq("id", editingId);
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from("savings_goals").insert({ user_id: user.id, ...payload });
+    }
+
+    resetForm();
     setSaving(false);
     setShowForm(false);
     load();
   }
 
   async function handleAddFund(goal: SavingsGoal) {
-    const add = Number(addFundValue);
-    if (!add) return;
+    const add = parseAmount(addFundValue);
+    if (!Number.isFinite(add) || !add) return;
     await supabase
       .from("savings_goals")
       .update({ current_amount: Number(goal.current_amount) + add })
@@ -82,14 +109,14 @@ export default function SavingsTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button onClick={() => setShowForm((s) => !s)} className={primaryBtnClass}>
+        <button onClick={toggleForm} className={primaryBtnClass}>
           {showForm ? "Batal" : "+ Target Baru"}
         </button>
       </div>
 
       {showForm && (
         <HudPanel>
-          <form onSubmit={handleAdd} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className={labelClass}>Nama Target</label>
@@ -105,22 +132,20 @@ export default function SavingsTab() {
               <div>
                 <label className={labelClass}>Target (€)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   required
-                  min={0.01}
-                  step="0.01"
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   className={inputClass}
-                  placeholder="10000.00"
+                  placeholder="10000,00"
                 />
               </div>
               <div>
                 <label className={labelClass}>Sudah Terkumpul (opsional)</label>
                 <input
-                  type="number"
-                  min={0}
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={current}
                   onChange={(e) => setCurrent(e.target.value)}
                   className={inputClass}
@@ -138,7 +163,7 @@ export default function SavingsTab() {
               </div>
             </div>
             <button type="submit" disabled={saving} className={primaryBtnClass}>
-              {saving ? "Menyimpan..." : "Simpan Target"}
+              {saving ? "Menyimpan..." : editingId ? "Update Target" : "Simpan Target"}
             </button>
           </form>
         </HudPanel>
@@ -163,9 +188,14 @@ export default function SavingsTab() {
               <HudPanel key={goal.id}>
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-sm font-semibold text-slate-100">{goal.name}</h3>
-                  <button onClick={() => handleDelete(goal.id)} className={dangerBtnClass}>
-                    Hapus
-                  </button>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button onClick={() => startEdit(goal)} className={ghostBtnClass}>
+                      Edit
+                    </button>
+                    <button onClick={() => handleDelete(goal.id)} className={dangerBtnClass}>
+                      Hapus
+                    </button>
+                  </div>
                 </div>
                 <div className="h-2 bg-panel2 rounded-full overflow-hidden mb-2">
                   <div
@@ -186,8 +216,8 @@ export default function SavingsTab() {
                 {addFundId === goal.id ? (
                   <div className="flex gap-2">
                     <input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       autoFocus
                       value={addFundValue}
                       onChange={(e) => setAddFundValue(e.target.value)}

@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Debt, DebtDirection } from "@/lib/types";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, dangerBtnClass } from "@/lib/ui";
+import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
 
 export default function DebtsTab() {
   const supabase = createClient();
@@ -13,12 +13,37 @@ export default function DebtsTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [partyName, setPartyName] = useState("");
   const [direction, setDirection] = useState<DebtDirection>("i_owe");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
+
+  function resetForm() {
+    setEditingId(null);
+    setPartyName("");
+    setDirection("i_owe");
+    setAmount("");
+    setDueDate("");
+    setNotes("");
+  }
+
+  function toggleForm() {
+    resetForm();
+    setShowForm((s) => !s);
+  }
+
+  function startEdit(debt: Debt) {
+    setEditingId(debt.id);
+    setPartyName(debt.party_name);
+    setDirection(debt.direction);
+    setAmount(String(debt.amount).replace(".", ","));
+    setDueDate(debt.due_date ?? "");
+    setNotes(debt.notes ?? "");
+    setShowForm(true);
+  }
 
   async function load() {
     setLoading(true);
@@ -36,28 +61,31 @@ export default function DebtsTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!partyName || !amount) return;
+    const parsed = parseAmount(amount);
+    if (!partyName || !amount || !Number.isFinite(parsed) || parsed <= 0) return;
     setSaving(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
 
-    await supabase.from("debts").insert({
-      user_id: user.id,
+    const payload = {
       party_name: partyName,
       direction,
-      amount: Number(amount),
+      amount: parsed,
       due_date: dueDate || null,
       notes: notes || null,
-    });
+    };
 
-    setPartyName("");
-    setAmount("");
-    setDueDate("");
-    setNotes("");
+    if (editingId) {
+      await supabase.from("debts").update(payload).eq("id", editingId);
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from("debts").insert({ user_id: user.id, ...payload });
+    }
+
+    resetForm();
     setSaving(false);
     setShowForm(false);
     load();
@@ -77,14 +105,14 @@ export default function DebtsTab() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button onClick={() => setShowForm((s) => !s)} className={primaryBtnClass}>
+        <button onClick={toggleForm} className={primaryBtnClass}>
           {showForm ? "Batal" : "+ Catat Utang/Piutang"}
         </button>
       </div>
 
       {showForm && (
         <HudPanel>
-          <form onSubmit={handleAdd} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex border border-line rounded-sm overflow-hidden text-sm font-mono w-fit">
               <button
                 type="button"
@@ -125,14 +153,13 @@ export default function DebtsTab() {
               <div>
                 <label className={labelClass}>Jumlah (€)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   required
-                  min={0.01}
-                  step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="500.00"
+                  placeholder="500,00"
                 />
               </div>
               <div>
@@ -156,7 +183,7 @@ export default function DebtsTab() {
             </div>
 
             <button type="submit" disabled={saving} className={primaryBtnClass}>
-              {saving ? "Menyimpan..." : "Simpan"}
+              {saving ? "Menyimpan..." : editingId ? "Update" : "Simpan"}
             </button>
           </form>
         </HudPanel>
@@ -200,6 +227,9 @@ export default function DebtsTab() {
                     className="text-xs font-mono text-cyan-glow/80 hover:text-cyan-glow"
                   >
                     {debt.status === "paid" ? "Buka lagi" : "Tandai lunas"}
+                  </button>
+                  <button onClick={() => startEdit(debt)} className={ghostBtnClass}>
+                    Edit
                   </button>
                   <button onClick={() => handleDelete(debt.id)} className={dangerBtnClass}>
                     Hapus
