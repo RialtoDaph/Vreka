@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import HudPanel from "@/components/HudPanel";
 import StatCard from "@/components/StatCard";
-import { formatRupiah, formatDate, daysUntil } from "@/lib/format";
+import { formatCurrency, formatDate, daysUntil } from "@/lib/format";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -70,19 +70,19 @@ export default async function OverviewPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Saldo Bulan Ini"
-          value={formatRupiah(saldo)}
-          hint={`Masuk ${formatRupiah(income)}`}
+          value={formatCurrency(saldo)}
+          hint={`Masuk ${formatCurrency(income)}`}
           tone={saldo >= 0 ? "mint" : "rose"}
         />
         <StatCard
           label="Pengeluaran Bulan Ini"
-          value={formatRupiah(expense)}
+          value={formatCurrency(expense)}
           tone="amber"
         />
         <StatCard
           label="Utang Aktif"
-          value={formatRupiah(iOwe)}
-          hint={owedToMe > 0 ? `Piutang ${formatRupiah(owedToMe)}` : undefined}
+          value={formatCurrency(iOwe)}
+          hint={owedToMe > 0 ? `Piutang ${formatCurrency(owedToMe)}` : undefined}
           tone={iOwe > 0 ? "rose" : "mint"}
         />
         <StatCard

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Debt, DebtDirection } from "@/lib/types";
-import { formatRupiah, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, dangerBtnClass } from "@/lib/ui";
 
@@ -123,15 +123,16 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Jumlah (Rp)</label>
+                <label className={labelClass}>Jumlah (€)</label>
                 <input
                   type="number"
                   required
-                  min={1}
+                  min={0.01}
+                  step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="500000"
+                  placeholder="500.00"
                 />
               </div>
               <div>
@@ -192,7 +193,7 @@ export default function DebtsTab() {
                       debt.direction === "i_owe" ? "text-rose-glow" : "text-mint-glow"
                     } ${debt.status === "paid" ? "opacity-40 line-through" : ""}`}
                   >
-                    {formatRupiah(Number(debt.amount))}
+                    {formatCurrency(Number(debt.amount))}
                   </span>
                   <button
                     onClick={() => toggleStatus(debt)}

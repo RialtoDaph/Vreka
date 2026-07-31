@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Transaction, TransactionType } from "@/lib/types";
-import { formatRupiah, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
@@ -118,15 +118,16 @@ export default function TransactionsTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Jumlah (Rp)</label>
+                <label className={labelClass}>Jumlah (€)</label>
                 <input
                   type="number"
                   required
-                  min={1}
+                  min={0.01}
+                  step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="50000"
+                  placeholder="50.00"
                 />
               </div>
               <div>
@@ -203,7 +204,7 @@ export default function TransactionsTab() {
                     }`}
                   >
                     {tx.type === "income" ? "+" : "-"}
-                    {formatRupiah(Number(tx.amount))}
+                    {formatCurrency(Number(tx.amount))}
                   </span>
                   <button
                     onClick={() => handleDelete(tx.id)}

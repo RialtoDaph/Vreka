@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SavingsGoal } from "@/lib/types";
-import { formatRupiah, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
 
@@ -103,15 +103,16 @@ export default function SavingsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Target (Rp)</label>
+                <label className={labelClass}>Target (€)</label>
                 <input
                   type="number"
                   required
-                  min={1}
+                  min={0.01}
+                  step="0.01"
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   className={inputClass}
-                  placeholder="10000000"
+                  placeholder="10000.00"
                 />
               </div>
               <div>
@@ -119,6 +120,7 @@ export default function SavingsTab() {
                 <input
                   type="number"
                   min={0}
+                  step="0.01"
                   value={current}
                   onChange={(e) => setCurrent(e.target.value)}
                   className={inputClass}
@@ -172,8 +174,8 @@ export default function SavingsTab() {
                   />
                 </div>
                 <div className="flex justify-between text-xs font-mono text-slate-400 mb-3">
-                  <span>{formatRupiah(Number(goal.current_amount))}</span>
-                  <span>{formatRupiah(Number(goal.target_amount))} · {pct}%</span>
+                  <span>{formatCurrency(Number(goal.current_amount))}</span>
+                  <span>{formatCurrency(Number(goal.target_amount))} · {pct}%</span>
                 </div>
                 {goal.deadline && (
                   <p className="text-[11px] text-slate-600 mb-3">
@@ -185,6 +187,7 @@ export default function SavingsTab() {
                   <div className="flex gap-2">
                     <input
                       type="number"
+                      step="0.01"
                       autoFocus
                       value={addFundValue}
                       onChange={(e) => setAddFundValue(e.target.value)}
