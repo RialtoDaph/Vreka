@@ -8,6 +8,7 @@ const NAV = [
   { href: "/dashboard/keuangan", label: "Keuangan", icon: "⌬" },
   { href: "/dashboard/kerjaan", label: "Kerjaan", icon: "▤" },
   { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },
+  { href: "/dashboard/asisten", label: "Asisten", icon: "✦" },
 ];
 
 export default function Sidebar() {
