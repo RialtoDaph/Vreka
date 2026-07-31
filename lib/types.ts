@@ -1,0 +1,62 @@
+export type TransactionType = "income" | "expense";
+
+export type Transaction = {
+  id: string;
+  user_id: string;
+  type: TransactionType;
+  category: string;
+  amount: number;
+  description: string | null;
+  occurred_on: string;
+  created_at: string;
+};
+
+export type DebtDirection = "i_owe" | "owed_to_me";
+export type DebtStatus = "unpaid" | "paid";
+
+export type Debt = {
+  id: string;
+  user_id: string;
+  party_name: string;
+  direction: DebtDirection;
+  amount: number;
+  status: DebtStatus;
+  due_date: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type SavingsGoal = {
+  id: string;
+  user_id: string;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  deadline: string | null;
+  created_at: string;
+};
+
+export type TaskStatus = "todo" | "done";
+export type TaskPriority = "low" | "medium" | "high";
+
+export type Task = {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  deadline: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  created_at: string;
+};
+
+export type StudyNote = {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string | null;
+  category: string;
+  progress: number;
+  created_at: string;
+  updated_at: string;
+};

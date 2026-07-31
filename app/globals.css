@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #05080d;
+  background-image:
+    linear-gradient(rgba(75, 232, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(75, 232, 255, 0.05) 1px, transparent 1px);
+  background-size: 42px 42px;
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(75, 232, 255, 0.25);
+  color: #eafcff;
+}
+
+:focus-visible {
+  outline: 2px solid #4be8ff;
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #05080d;
+}
+::-webkit-scrollbar-thumb {
+  background: #1c2b40;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #24405c;
+}
+
+@keyframes scan {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(75, 232, 255, 0.5),
+    transparent
+  );
+  width: 40%;
+  animation: scan 5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.pulse-dot {
+  animation: pulse-glow 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanline::after,
+  .pulse-dot {
+    animation: none !important;
+  }
+}
