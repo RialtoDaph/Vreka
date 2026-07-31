@@ -25,6 +25,37 @@ domain produksi, bukan `http://localhost:3000` bawaannya, dan `/auth/callback`
 harus masuk daftar Redirect URLs — kalau nggak, link konfirmasi email bakal
 nembak localhost.
 
+## Gmail (opsional — biar Aslan bisa cek/bales email)
+
+1. **Google Cloud Console** (console.cloud.google.com):
+   - Bikin project baru.
+   - APIs & Services → Library → enable **Gmail API**.
+   - APIs & Services → OAuth consent screen → User type **External**, tambahin
+     scope `gmail.readonly` + `gmail.compose`, dan tambahin akun Gmail kamu
+     sendiri sebagai **Test user** (biar nggak perlu proses verifikasi Google).
+   - APIs & Services → Credentials → Create Credentials → **OAuth client ID**,
+     tipe **Web application**. Authorized redirect URI-nya:
+     ```
+     https://<domain-produksi-vreka-kamu>/api/google/oauth/callback
+     ```
+     (bukan URL Supabase — ini callback punya Vreka sendiri, soalnya integrasi
+     Gmail-nya dipisah dari login, biar akun yang udah ada nggak kesenggol.)
+   - Copy **Client ID** dan **Client Secret**.
+2. Set di Vercel: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+3. Set `SUPABASE_SERVICE_ROLE_KEY` di Vercel — ambil dari Supabase Dashboard →
+   Project Settings → API → **service_role** secret. Ini kunci admin yang
+   bypass semua RLS, cuma dipakai server-side di route cron harian; jangan
+   pernah expose ke client.
+4. Set `CRON_SECRET` di Vercel (string acak bebas) — Vercel otomatis kirim ini
+   sebagai header pas motoran cron job-nya, dipakai buat mastiin cuma Vercel
+   yang bisa manggil endpoint digest email.
+5. Redeploy, lalu buka halaman **Aslan** → klik **Connect Gmail**.
+
+Setelah connect, Aslan bisa cari/baca email dan bikin **draft balesan** (nggak
+pernah auto-kirim) pas diminta lewat chat, plus dapet ringkasan email belum
+dibaca otomatis sekali sehari (`vercel.json` — jadwal `0 7 * * *` UTC; di
+Vercel Hobby plan, cron cuma bisa jalan maksimal sekali sehari).
+
 ## Modul
 
 - **Keuangan** — transaksi (pemasukan/pengeluaran), utang/piutang, target tabungan
@@ -32,5 +63,7 @@ nembak localhost.
 - **Pelajaran** — catatan + progress tracker
 - **Aslan** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi
   keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan lewat
-  chat, nyimpen memory jangka panjang soal kamu, dan punya mode ngobrol pakai
-  suara (push-to-talk, lewat ElevenLabs) kalau `ELEVENLABS_API_KEY` di-set
+  chat, nyimpen memory jangka panjang soal kamu, punya mode ngobrol pakai suara
+  (push-to-talk, lewat ElevenLabs) kalau `ELEVENLABS_API_KEY` di-set, dan kalau
+  Gmail di-connect bisa cari/baca email, bikin draft balesan, plus ringkasan
+  email belum dibaca otomatis sekali sehari

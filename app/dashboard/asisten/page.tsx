@@ -28,13 +28,49 @@ export default function AsistenPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement>(null);
 
+  const [gmailEmail, setGmailEmail] = useState<string | null>(null);
+  const [gmailLoading, setGmailLoading] = useState(true);
+  const [gmailNotice, setGmailNotice] = useState<string | null>(null);
+
   useEffect(() => {
     const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
     if (isValidAssistantModel(saved)) setModel(saved);
     setVoiceSupported(
       typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia
     );
+
+    const params = new URLSearchParams(window.location.search);
+    const gmailError = params.get("gmail_error");
+    const gmailConnected = params.get("gmail");
+    if (gmailError) setGmailNotice(`Gagal connect Gmail: ${gmailError}`);
+    else if (gmailConnected === "connected") setGmailNotice("Gmail berhasil terhubung.");
+    if (gmailError || gmailConnected) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
   }, []);
+
+  useEffect(() => {
+    async function loadGmailStatus() {
+      setGmailLoading(true);
+      const { data } = await supabase
+        .from("google_credentials")
+        .select("email_address")
+        .maybeSingle();
+      setGmailEmail(data?.email_address ?? null);
+      setGmailLoading(false);
+    }
+    loadGmailStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleDisconnectGmail() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("google_credentials").delete().eq("user_id", user.id);
+    setGmailEmail(null);
+  }
 
   function handleModelChange(value: string) {
     if (!isValidAssistantModel(value)) return;
@@ -242,6 +278,36 @@ export default function AsistenPage() {
           </div>
         </div>
       </header>
+
+      <HudPanel className="text-sm">
+        {gmailNotice && (
+          <p className="text-xs font-mono text-cyan-glow mb-2">{gmailNotice}</p>
+        )}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
+              Gmail
+            </p>
+            <p className="text-slate-300 truncate">
+              {gmailLoading
+                ? "Memuat..."
+                : gmailEmail
+                  ? `Terhubung: ${gmailEmail}`
+                  : "Belum terhubung — Aslan belum bisa cek/bales email kamu."}
+            </p>
+          </div>
+          {!gmailLoading &&
+            (gmailEmail ? (
+              <button onClick={handleDisconnectGmail} className={ghostBtnClass}>
+                Disconnect
+              </button>
+            ) : (
+              <a href="/api/google/oauth/start" className={primaryBtnClass}>
+                Connect Gmail
+              </a>
+            ))}
+        </div>
+      </HudPanel>
 
       <HudPanel className="flex-1 flex flex-col min-h-0" as="section">
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
