@@ -211,7 +211,7 @@ export default function AsistenPage() {
             Modul 04
           </p>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
-            Asisten
+            Aslan
           </h1>
         </div>
         <div className="flex items-end gap-3">

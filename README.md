@@ -7,7 +7,7 @@ Dibangun dengan Next.js (App Router) + Supabase + Tailwind CSS.
 ## Setup
 
 1. Copy `.env.example` ke `.env.local` dan isi kredensial Supabase + Anthropic +
-   ElevenLabs kamu (ElevenLabs opsional, cuma dipakai buat mode suara di Asisten).
+   ElevenLabs kamu (ElevenLabs opsional, cuma dipakai buat mode suara di Aslan).
 2. `npm install`
 3. `npm run dev`
 
@@ -30,7 +30,7 @@ nembak localhost.
 - **Keuangan** — transaksi (pemasukan/pengeluaran), utang/piutang, target tabungan
 - **Kerjaan** — to-do dengan deadline & prioritas
 - **Pelajaran** — catatan + progress tracker
-- **Asisten** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi
+- **Aslan** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi
   keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan lewat
   chat, nyimpen memory jangka panjang soal kamu, dan punya mode ngobrol pakai
   suara (push-to-talk, lewat ElevenLabs) kalau `ELEVENLABS_API_KEY` di-set
