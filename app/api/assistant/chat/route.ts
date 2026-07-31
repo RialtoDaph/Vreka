@@ -3,10 +3,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { buildAssistantSystemPrompt } from "@/lib/assistant/context";
 import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistant/tools";
+import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
 
 export const dynamic = "force-dynamic";
 
-const MODEL = "claude-opus-5";
 const MAX_TOOL_ITERATIONS = 5;
 
 function textFromContent(content: Anthropic.ContentBlock[]): string {
@@ -15,6 +15,16 @@ function textFromContent(content: Anthropic.ContentBlock[]): string {
     .map((block) => block.text)
     .join("\n")
     .trim();
+}
+
+// Haiku 4.5 doesn't support adaptive thinking or the effort parameter — sending
+// either returns a 400. Opus 5 / Sonnet 5 support both.
+function modelRequestExtras(model: string) {
+  if (model === "claude-haiku-4-5") return {};
+  return {
+    thinking: { type: "adaptive" as const },
+    output_config: { effort: "low" as const },
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -32,6 +42,7 @@ export async function POST(request: NextRequest) {
   if (!userMessage) {
     return NextResponse.json({ error: "Pesan kosong." }, { status: 400 });
   }
+  const model = isValidAssistantModel(body?.model) ? body.model : DEFAULT_ASSISTANT_MODEL;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -68,13 +79,12 @@ export async function POST(request: NextRequest) {
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model,
       max_tokens: 2048,
       system: systemPrompt,
       messages,
       tools: ASSISTANT_TOOLS,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "low" },
+      ...modelRequestExtras(model),
     });
 
     if (response.stop_reason === "refusal") {
