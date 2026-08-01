@@ -2,8 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import HudPanel from "@/components/HudPanel";
 import StatCard from "@/components/StatCard";
 import OverviewInsight from "@/components/OverviewInsight";
+import AslanHero from "@/components/dashboard/AslanHero";
+import QuickCommands from "@/components/dashboard/QuickCommands";
+import StatusIntegrasi from "@/components/dashboard/StatusIntegrasi";
+import MissionTimeline from "@/components/dashboard/MissionTimeline";
+import LiveFeed, { type FeedItem } from "@/components/dashboard/LiveFeed";
+import { Task } from "@/lib/types";
 import { formatCurrency, formatDate, daysUntil } from "@/lib/format";
-import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +19,20 @@ export default async function OverviewPage() {
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     .toISOString()
     .slice(0, 10);
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(startOfToday);
+  endOfToday.setDate(endOfToday.getDate() + 1);
 
   const [
     { data: txMonth },
     { data: unpaidDebts },
     { data: goals },
     { data: upcomingTasks },
+    { data: todayTasks },
+    { data: overdueTasks },
     { data: notes },
+    { data: gmailCred },
   ] = await Promise.all([
     supabase
       .from("transactions")
@@ -34,7 +46,24 @@ export default async function OverviewPage() {
       .eq("status", "todo")
       .order("deadline", { ascending: true, nullsFirst: false })
       .limit(5),
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("status", "todo")
+      .not("deadline", "is", null)
+      .gte("deadline", startOfToday.toISOString())
+      .lt("deadline", endOfToday.toISOString())
+      .order("deadline", { ascending: true }),
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("status", "todo")
+      .not("deadline", "is", null)
+      .lt("deadline", startOfToday.toISOString())
+      .order("deadline", { ascending: true })
+      .limit(3),
     supabase.from("study_notes").select("progress"),
+    supabase.from("google_credentials").select("email_address").maybeSingle(),
   ]);
 
   const income = (txMonth ?? [])
@@ -57,16 +86,68 @@ export default async function OverviewPage() {
       ? Math.round(notes.reduce((sum, n) => sum + n.progress, 0) / notes.length)
       : 0;
 
+  // Live Intelligence Feed: gabungan tugas telat, utang jatuh tempo, dan target
+  // tabungan yang keteteran jadi satu stream alert.
+  const feedItems: FeedItem[] = [];
+
+  for (const t of (overdueTasks ?? []) as Task[]) {
+    feedItems.push({
+      id: `task-${t.id}`,
+      tag: "WARN",
+      text: `Tugas "${t.title}" udah telat`,
+      meta: t.deadline ? formatDate(t.deadline) : undefined,
+      href: "/dashboard/kerjaan",
+    });
+  }
+
+  for (const d of unpaidDebts ?? []) {
+    if (d.direction !== "i_owe" || !d.due_date) continue;
+    const days = daysUntil(d.due_date);
+    if (days === null || days > 7) continue;
+    feedItems.push({
+      id: `debt-${d.id}`,
+      tag: days < 0 ? "WARN" : "INFO",
+      text:
+        days < 0
+          ? `Utang ke ${d.party_name} udah lewat jatuh tempo`
+          : `Utang ke ${d.party_name} jatuh tempo ${days === 0 ? "hari ini" : `${days} hari lagi`}`,
+      meta: formatCurrency(Number(d.amount)),
+      href: "/dashboard/keuangan",
+    });
+  }
+
+  for (const g of goals ?? []) {
+    const pct = Math.round((Number(g.current_amount) / Number(g.target_amount)) * 100);
+    const days = daysUntil(g.deadline);
+    if (days === null || days < 0 || days > 30 || pct >= 70) continue;
+    feedItems.push({
+      id: `goal-${g.id}`,
+      tag: "TIP",
+      text: `Target tabungan "${g.name}" baru ${pct}%, deadline ${days} hari lagi`,
+      href: "/dashboard/keuangan",
+    });
+  }
+
+  const voiceEnabled = !!process.env.ELEVENLABS_API_KEY;
+
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
-          Overview
-        </p>
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
-          Ringkasan Sistem
-        </h1>
+      <header className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
+            Overview
+          </p>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+            Ringkasan Sistem
+          </h1>
+        </div>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-mint-glow border border-mint-glow/30 rounded-sm px-2 py-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-mint-glow pulse-dot" />
+          Optimal
+        </span>
       </header>
+
+      <AslanHero />
 
       <OverviewInsight />
 
@@ -97,17 +178,27 @@ export default async function OverviewPage() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
+        <QuickCommands />
+        <StatusIntegrasi gmailEmail={gmailCred?.email_address ?? null} voiceEnabled={voiceEnabled} />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <MissionTimeline tasks={(todayTasks ?? []) as Task[]} />
+        <LiveFeed items={feedItems} />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
         <HudPanel>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display font-semibold text-white tracking-wide">
               Deadline Mendekat
             </h2>
-            <Link
+            <a
               href="/dashboard/kerjaan"
               className="text-xs font-mono text-cyan-glow hover:underline"
             >
               Lihat semua →
-            </Link>
+            </a>
           </div>
           {upcomingTasks && upcomingTasks.length > 0 ? (
             <ul className="space-y-2.5">
@@ -147,12 +238,12 @@ export default async function OverviewPage() {
             <h2 className="font-display font-semibold text-white tracking-wide">
               Target Tabungan
             </h2>
-            <Link
+            <a
               href="/dashboard/keuangan"
               className="text-xs font-mono text-cyan-glow hover:underline"
             >
               Lihat semua →
-            </Link>
+            </a>
           </div>
           {goals && goals.length > 0 ? (
             <ul className="space-y-3.5">
