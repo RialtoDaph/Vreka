@@ -222,36 +222,41 @@ export default function VoiceCallOverlay({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-void/95 backdrop-blur-sm flex flex-col items-center justify-center px-6">
-      <button
-        onClick={handleClose}
-        className="absolute top-5 right-5 text-slate-400 hover:text-white text-sm font-mono uppercase tracking-wider"
-        aria-label="Tutup"
-      >
-        ✕ Tutup
-      </button>
+    <div className="fixed top-5 right-5 z-50 w-[min(92vw,20rem)] rounded-2xl border border-cyan-glow/30 bg-panel/95 backdrop-blur-md shadow-glow p-4 flex flex-col items-center">
+      <div className="w-full flex items-center justify-between mb-3">
+        <span className="text-[11px] font-mono uppercase tracking-[0.3em] text-cyan-glow">
+          Aslan
+        </span>
+        <button
+          onClick={handleClose}
+          className="text-slate-400 hover:text-white text-sm font-mono uppercase tracking-wider"
+          aria-label="Tutup"
+        >
+          ✕
+        </button>
+      </div>
 
-      <div className="w-56 h-56 sm:w-72 sm:h-72 mb-8">
+      <div className="w-28 h-28 sm:w-32 sm:h-32 mb-4">
         <VoiceOrb state={orbStateFromPhase(phase)} />
       </div>
 
-      <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-6">
+      <p className="text-[11px] font-mono uppercase tracking-[0.25em] text-cyan-glow mb-3 text-center">
         {statusLabel[phase]}
       </p>
 
       {errorMsg && (
-        <p className="text-rose-glow text-sm font-mono mb-4 text-center max-w-sm">{errorMsg}</p>
+        <p className="text-rose-glow text-xs font-mono mb-3 text-center">{errorMsg}</p>
       )}
 
-      <div className="max-w-md w-full text-center space-y-3 mb-8 min-h-[4rem]">
+      <div className="w-full text-center space-y-2 mb-4 max-h-32 overflow-y-auto text-sm">
         {userText && (
-          <p className="text-sm text-slate-400">
+          <p className="text-slate-400">
             <span className="text-slate-600">Kamu: </span>
             {userText}
           </p>
         )}
         {assistantText && (
-          <p className="text-sm text-slate-100">
+          <p className="text-slate-100">
             <span className="text-cyan-glow">Aslan: </span>
             {assistantText}
           </p>
