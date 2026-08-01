@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Transaction, TransactionType } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
@@ -133,6 +133,23 @@ export default function TransactionsTab() {
 
   const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
+  const incomeItems = useMemo(
+    () => items.filter((t) => t.type === "income"),
+    [items]
+  );
+  const expenseItems = useMemo(
+    () => items.filter((t) => t.type === "expense"),
+    [items]
+  );
+  const totalIncome = useMemo(
+    () => incomeItems.reduce((sum, t) => sum + Number(t.amount), 0),
+    [incomeItems]
+  );
+  const totalExpense = useMemo(
+    () => expenseItems.reduce((sum, t) => sum + Number(t.amount), 0),
+    [expenseItems]
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -230,55 +247,126 @@ export default function TransactionsTab() {
         </HudPanel>
       )}
 
-      <HudPanel>
-        {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
-        ) : items.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            Belum ada transaksi. Mulai catat di atas.
-          </p>
-        ) : (
-          <ul className="divide-y divide-line/60">
-            {items.map((tx) => (
-              <li
-                key={tx.id}
-                className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm text-slate-200 truncate">
-                    {tx.category}
-                    {tx.description ? (
-                      <span className="text-slate-500"> · {tx.description}</span>
-                    ) : null}
-                  </p>
-                  <p className="text-[11px] font-mono text-slate-600">
-                    {formatDate(tx.occurred_on)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span
-                    className={`font-mono text-sm ${
-                      tx.type === "income" ? "text-mint-glow" : "text-rose-glow"
-                    }`}
-                  >
-                    {tx.type === "income" ? "+" : "-"}
-                    {formatCurrency(Number(tx.amount))}
-                  </span>
-                  <button onClick={() => startEdit(tx)} className={ghostBtnClass}>
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(tx.id)}
-                    className={dangerBtnClass}
-                  >
-                    Hapus
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </HudPanel>
+      <div className="grid lg:grid-cols-2 gap-4 items-start">
+        <TransactionTable
+          title="Pemasukan"
+          tone="mint"
+          items={incomeItems}
+          total={totalIncome}
+          loading={loading}
+          emptyText="Belum ada pemasukan tercatat."
+          onEdit={startEdit}
+          onDelete={handleDelete}
+        />
+        <TransactionTable
+          title="Pengeluaran"
+          tone="rose"
+          items={expenseItems}
+          total={totalExpense}
+          loading={loading}
+          emptyText="Belum ada pengeluaran tercatat."
+          onEdit={startEdit}
+          onDelete={handleDelete}
+        />
+      </div>
     </div>
+  );
+}
+
+function TransactionTable({
+  title,
+  tone,
+  items,
+  total,
+  loading,
+  emptyText,
+  onEdit,
+  onDelete,
+}: {
+  title: string;
+  tone: "mint" | "rose";
+  items: Transaction[];
+  total: number;
+  loading: boolean;
+  emptyText: string;
+  onEdit: (tx: Transaction) => void;
+  onDelete: (id: string) => void;
+}) {
+  const toneClass = tone === "mint" ? "text-mint-glow" : "text-rose-glow";
+
+  return (
+    <HudPanel>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-display font-semibold text-white tracking-wide">
+          {title}
+        </h3>
+        <span className={`font-mono text-sm ${toneClass}`}>
+          {formatCurrency(total)}
+        </span>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-slate-500">Memuat...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-slate-500">{emptyText}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-left text-[11px] font-mono uppercase tracking-wider text-slate-500 border-b border-line">
+                <th className="pb-2 pr-3 font-normal">Tanggal</th>
+                <th className="pb-2 pr-3 font-normal">Kategori</th>
+                <th className="pb-2 pr-3 font-normal">Catatan</th>
+                <th className="pb-2 pr-3 font-normal text-right">Jumlah</th>
+                <th className="pb-2 font-normal text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line/60">
+              {items.map((tx) => (
+                <tr key={tx.id}>
+                  <td className="py-2.5 pr-3 whitespace-nowrap text-[11px] font-mono text-slate-500">
+                    {formatDate(tx.occurred_on)}
+                  </td>
+                  <td className="py-2.5 pr-3 text-slate-200 whitespace-nowrap">
+                    {tx.category}
+                  </td>
+                  <td className="py-2.5 pr-3 text-slate-500 max-w-[180px] truncate">
+                    {tx.description ?? "-"}
+                  </td>
+                  <td className={`py-2.5 pr-3 text-right font-mono whitespace-nowrap ${toneClass}`}>
+                    {formatCurrency(Number(tx.amount))}
+                  </td>
+                  <td className="py-2.5 text-right whitespace-nowrap">
+                    <button onClick={() => onEdit(tx)} className={ghostBtnClass}>
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => onDelete(tx.id)}
+                      className={`${dangerBtnClass} ml-3`}
+                    >
+                      Hapus
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-line">
+                <td
+                  colSpan={3}
+                  className="pt-2.5 text-[11px] font-mono uppercase tracking-wider text-slate-500"
+                >
+                  Total
+                </td>
+                <td className={`pt-2.5 text-right font-mono font-semibold whitespace-nowrap ${toneClass}`}>
+                  {formatCurrency(total)}
+                </td>
+                <td className="pt-2.5" />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </HudPanel>
   );
 }
