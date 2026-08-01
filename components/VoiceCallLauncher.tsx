@@ -8,6 +8,15 @@ const SILENCE_THRESHOLD = 0.02;
 const SILENCE_DURATION_MS = 900;
 const MIN_SPEECH_MS = 400;
 const MAX_RECORD_MS = 20000;
+// Barge-in: shorter confirm window than MIN_SPEECH_MS so cutting in feels
+// immediate, while still ignoring brief clicks/coughs.
+const BARGE_IN_CONFIRM_MS = 300;
+
+const MIC_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
 
 type Phase = "idle" | "listening" | "processing" | "speaking" | "error";
 
@@ -31,10 +40,16 @@ export default function VoiceCallLauncher() {
     };
   }, []);
 
+  function getAudioContextCtor() {
+    return (
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    );
+  }
+
   async function recordUntilSilence(): Promise<Blob | null> {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const AudioContextCtor =
-      window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+    const AudioContextCtor = getAudioContextCtor();
     const audioCtx = new AudioContextCtor();
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
@@ -102,49 +117,125 @@ export default function VoiceCallLauncher() {
     });
   }
 
-  async function playAudioBlob(blob: Blob) {
-    const audio = audioPlayerRef.current;
-    if (!audio) return;
-    const url = URL.createObjectURL(blob);
-    await new Promise<void>((resolve) => {
-      audio.src = url;
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        resolve();
+  // Watches the mic while Aslan's reply is playing. Resolves "interrupted" the
+  // moment the user starts talking (and stops playback right there), or
+  // "finished" once the audio ends naturally.
+  async function watchForBargeIn(audio: HTMLAudioElement): Promise<"interrupted" | "finished"> {
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
+    } catch {
+      return new Promise((resolve) => {
+        audio.onended = () => resolve("finished");
+      });
+    }
+    const AudioContextCtor = getAudioContextCtor();
+    const audioCtx = new AudioContextCtor();
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    const cleanup = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      audioCtx.close().catch(() => {});
+    };
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result: "interrupted" | "finished") => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
       };
-      audio.play().catch(() => resolve());
+
+      audio.onended = () => finish("finished");
+
+      let voiceStart: number | null = null;
+      function tick() {
+        if (settled || stoppedRef.current) {
+          finish("finished");
+          return;
+        }
+        analyser.getByteTimeDomainData(data);
+        let sumSquares = 0;
+        for (let i = 0; i < data.length; i++) {
+          const norm = (data[i] - 128) / 128;
+          sumSquares += norm * norm;
+        }
+        const rms = Math.sqrt(sumSquares / data.length);
+
+        if (rms > SILENCE_THRESHOLD) {
+          if (voiceStart === null) voiceStart = Date.now();
+          else if (Date.now() - voiceStart > BARGE_IN_CONFIRM_MS) {
+            audio.pause();
+            finish("interrupted");
+            return;
+          }
+        } else {
+          voiceStart = null;
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
     });
   }
 
-  async function speak(text: string) {
+  // Plays Aslan's reply while listening for an interruption. If the user
+  // barges in, returns the blob of what they said so the loop can skip
+  // straight to processing it instead of waiting through another silence.
+  async function speakWithBargeIn(text: string): Promise<Blob | null> {
+    const audio = audioPlayerRef.current;
+    if (!audio) return null;
     try {
       const res = await fetch("/api/assistant/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const blob = await res.blob();
-      await playAudioBlob(blob);
+      const url = URL.createObjectURL(blob);
+      audio.src = url;
+      await audio.play().catch(() => {});
+      const result = await watchForBargeIn(audio);
+      URL.revokeObjectURL(url);
+
+      if (result === "interrupted" && !stoppedRef.current) {
+        setPhase("listening");
+        try {
+          return await recordUntilSilence();
+        } catch {
+          return null;
+        }
+      }
+      return null;
     } catch {
-      // gagal ngomong bukan fatal, lanjut aja ke giliran dengerin lagi
+      return null;
     }
   }
 
   async function runLoop() {
+    let pendingBlob: Blob | null = null;
     while (!stoppedRef.current) {
-      setPhase("listening");
-      let blob: Blob | null = null;
-      try {
-        blob = await recordUntilSilence();
-      } catch {
-        setErrorMsg("Nggak bisa akses mikrofon. Izinin dulu akses mic di browser.");
-        setPhase("error");
-        stoppedRef.current = true;
-        return;
+      let blob = pendingBlob;
+      pendingBlob = null;
+
+      if (!blob) {
+        setPhase("listening");
+        try {
+          blob = await recordUntilSilence();
+        } catch {
+          setErrorMsg("Nggak bisa akses mikrofon. Izinin dulu akses mic di browser.");
+          setPhase("error");
+          stoppedRef.current = true;
+          return;
+        }
+        if (stoppedRef.current) break;
+        if (!blob) continue;
       }
-      if (stoppedRef.current) break;
-      if (!blob) continue;
 
       setPhase("processing");
       const form = new FormData();
@@ -170,7 +261,7 @@ export default function VoiceCallLauncher() {
         const reply = res.ok ? (data.message as string) : "Maaf, ada masalah pas mikir.";
         if (stoppedRef.current) break;
         setPhase("speaking");
-        await speak(reply);
+        pendingBlob = await speakWithBargeIn(reply);
       } catch {
         // gagal ngehubungin Aslan, lanjut coba lagi dari listening
       }
