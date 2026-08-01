@@ -3,8 +3,10 @@ import HudPanel from "@/components/HudPanel";
 export default function AslanHero() {
   return (
     <HudPanel glow className="flex flex-col items-center text-center py-10">
-      <div className="aslan-avatar w-40 h-40 sm:w-48 sm:h-48 mb-4">
-        <img src="/aslan.png" alt="Aslan" />
+      <div className="w-40 h-40 sm:w-48 sm:h-48 mb-4">
+        <span className="aslan-avatar">
+          <img src="/aslan.png" alt="Aslan" />
+        </span>
       </div>
       <p className="font-display text-2xl sm:text-3xl font-bold text-white tracking-wide">
         ASLAN AI CORE

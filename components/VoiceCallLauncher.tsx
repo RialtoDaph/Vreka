@@ -225,8 +225,10 @@ export default function VoiceCallLauncher() {
         aria-label={active ? "Hentikan ngobrol sama Aslan" : "Ngobrol sama Aslan"}
         title={active ? "Hentikan ngobrol" : "Ngobrol sama Aslan"}
       >
-        <span className="aslan-avatar w-9 h-9 shrink-0">
-          <img src="/aslan.png" alt="" />
+        <span className="w-9 h-9 shrink-0">
+          <span className="aslan-avatar">
+            <img src="/aslan.png" alt="" />
+          </span>
         </span>
         <span className="min-w-0 text-left">
           <span className="block font-display text-xs font-semibold uppercase tracking-widest text-white">
