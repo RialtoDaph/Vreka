@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import TransactionsTab from "@/components/keuangan/TransactionsTab";
+import RecurringTab from "@/components/keuangan/RecurringTab";
 import DebtsTab from "@/components/keuangan/DebtsTab";
 import SavingsTab from "@/components/keuangan/SavingsTab";
 
 const TABS = [
   { key: "transaksi", label: "Transaksi" },
+  { key: "pos-tetap", label: "Pos Tetap" },
   { key: "utang", label: "Utang / Piutang" },
   { key: "tabungan", label: "Tabungan" },
 ] as const;
@@ -44,6 +46,7 @@ export default function KeuanganPage() {
       </div>
 
       {tab === "transaksi" && <TransactionsTab />}
+      {tab === "pos-tetap" && <RecurringTab />}
       {tab === "utang" && <DebtsTab />}
       {tab === "tabungan" && <SavingsTab />}
     </div>
