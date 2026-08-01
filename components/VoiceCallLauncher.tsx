@@ -206,11 +206,14 @@ export default function VoiceCallLauncher() {
     <div className="fixed top-5 right-5 z-40 flex flex-col items-end gap-2">
       <button
         onClick={handleToggle}
-        className="w-14 h-14 rounded-full"
+        className="relative w-14 h-14 rounded-full"
         aria-label={active ? "Hentikan ngobrol sama Aslan" : "Ngobrol sama Aslan"}
         title={active ? "Hentikan ngobrol" : "Ngobrol sama Aslan"}
       >
         <VoiceOrb state={orbStateFromPhase(phase)} />
+        <span className="absolute inset-[12%] rounded-full overflow-hidden pointer-events-none">
+          <img src="/aslan.png" alt="" className="w-full h-full object-cover" />
+        </span>
       </button>
       {errorMsg && (
         <p className="text-rose-glow text-xs font-mono text-right max-w-[14rem]">{errorMsg}</p>

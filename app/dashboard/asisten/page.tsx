@@ -242,13 +242,20 @@ export default function AsistenPage() {
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
       <header className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
-            Modul 04
-          </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
-            Aslan
-          </h1>
+        <div className="flex items-center gap-3">
+          <img
+            src="/aslan.png"
+            alt=""
+            className="w-11 h-11 rounded-full border border-cyan-glow/40 shadow-glow"
+          />
+          <div>
+            <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
+              Modul 04
+            </p>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+              Aslan
+            </h1>
+          </div>
         </div>
         <div className="flex items-end gap-3">
           {voiceSupported && (
@@ -322,8 +329,15 @@ export default function AsistenPage() {
             messages.map((m) => (
               <div
                 key={m.id}
-                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex items-end gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
+                {m.role !== "user" && (
+                  <img
+                    src="/aslan.png"
+                    alt=""
+                    className="w-7 h-7 rounded-full border border-cyan-glow/40 shrink-0"
+                  />
+                )}
                 <div
                   className={`max-w-[85%] rounded-sm px-3 py-2 text-sm whitespace-pre-wrap border ${
                     m.role === "user"
@@ -337,7 +351,12 @@ export default function AsistenPage() {
             ))
           )}
           {(sending || transcribing) && (
-            <div className="flex justify-start">
+            <div className="flex items-end gap-2 justify-start">
+              <img
+                src="/aslan.png"
+                alt=""
+                className="w-7 h-7 rounded-full border border-cyan-glow/40 shrink-0"
+              />
               <div className="max-w-[85%] rounded-sm px-3 py-2 text-sm border bg-panel2 border-line text-slate-500 font-mono">
                 {transcribing ? "Mentranskrip suara..." : "Mikir..."}
               </div>
