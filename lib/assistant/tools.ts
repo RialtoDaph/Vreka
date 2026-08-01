@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type Anthropic from "@anthropic-ai/sdk";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
+import { getGmailAccessToken } from "@/lib/google/credentials";
+import { listMessages, getMessage, createDraftReply, type ParsedEmail } from "@/lib/google/gmail";
 
 export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
   {
@@ -144,6 +146,41 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
       required: ["query"],
     },
   },
+  {
+    name: "search_email",
+    description:
+      "Cari email di Gmail user. Query pake sintaks pencarian Gmail (misal 'is:unread', 'from:someone@x.com', 'subject:invoice') atau kata kunci bebas. Balikin daftar ringkas (subjek, pengirim, tanggal, cuplikan) dari beberapa email teratas yang cocok. Cuma bisa dipake kalau user udah connect Gmail.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Query pencarian Gmail, kosongin buat email terbaru di inbox." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "read_email",
+    description:
+      "Baca isi lengkap satu email tertentu. Cari pake query yang cocok ke subjek/pengirim/isi (misal 'email dari boss soal meeting'). Kalau ada beberapa yang cocok, bakal dikasih daftar buat diperjelas dulu sebelum baca.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    },
+  },
+  {
+    name: "draft_email_reply",
+    description:
+      "Bikin DRAFT balesan ke satu email tertentu di Gmail — nongol di folder Draft, BUKAN otomatis kekirim. User yang review & kirim sendiri dari Gmail. Cari email yang mau dibales pake query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Kata kunci buat nyari email yang mau dibales." },
+        body: { type: "string", description: "Isi balesan yang mau ditulis." },
+      },
+      required: ["query", "body"],
+    },
+  },
 ];
 
 type FindResult = { error?: string; id?: string; label?: string };
@@ -201,6 +238,32 @@ async function findOneTransaction(
   }
   const m = matches[0];
   return { id: m.id, label: `${m.category}${m.description ? ` (${m.description})` : ""}` };
+}
+
+type EmailFindResult = { error?: string; email?: ParsedEmail; accessToken?: string };
+
+async function findOneEmail(
+  supabase: SupabaseClient,
+  userId: string,
+  query: string
+): Promise<EmailFindResult> {
+  const accessToken = await getGmailAccessToken(supabase, userId);
+  if (!accessToken) {
+    return { error: "Gmail belum di-connect. Suruh user klik \"Connect Gmail\" di halaman Aslan dulu." };
+  }
+  const q = String(query ?? "").trim();
+  const matches = await listMessages(accessToken, q || "in:inbox", 5);
+  if (matches.length === 0) return { error: `Nggak nemu email yang cocok sama "${q}".` };
+  if (matches.length === 1) {
+    const email = await getMessage(accessToken, matches[0].id);
+    return { email, accessToken };
+  }
+  const details = await Promise.all(matches.map((m) => getMessage(accessToken, m.id)));
+  return {
+    error: `Ada ${details.length} email yang cocok: ${details
+      .map((d) => `"${d.subject}" dari ${d.from}`)
+      .join("; ")}. Sebutin lebih spesifik.`,
+  };
 }
 
 export async function executeAssistantTool(
@@ -357,6 +420,57 @@ export async function executeAssistantTool(
         .eq("user_id", userId);
       if (delError) return { ok: false, result: delError.message };
       return { ok: true, result: "Memory dihapus." };
+    }
+
+    case "search_email": {
+      const accessToken = await getGmailAccessToken(supabase, userId);
+      if (!accessToken) {
+        return {
+          ok: false,
+          result: "Gmail belum di-connect. Suruh user klik \"Connect Gmail\" di halaman Aslan dulu.",
+        };
+      }
+      const q = String(input.query ?? "").trim() || "in:inbox";
+      const matches = await listMessages(accessToken, q, 8);
+      if (matches.length === 0) return { ok: true, result: "Nggak ada email yang cocok." };
+      const details = await Promise.all(matches.map((m) => getMessage(accessToken, m.id)));
+      const summary = details
+        .map((d) => `- "${d.subject}" dari ${d.from} (${d.date}): ${d.snippet}`)
+        .join("\n");
+      return { ok: true, result: summary };
+    }
+
+    case "read_email": {
+      const found = await findOneEmail(supabase, userId, String(input.query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const e = found.email!;
+      return {
+        ok: true,
+        result: `Subjek: ${e.subject}\nDari: ${e.from}\nTanggal: ${e.date}\n\n${e.bodyText || e.snippet}`,
+      };
+    }
+
+    case "draft_email_reply": {
+      const found = await findOneEmail(supabase, userId, String(input.query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const e = found.email!;
+      const body = String(input.body ?? "").trim();
+      if (!body) return { ok: false, result: "Isi balesan kosong." };
+      try {
+        await createDraftReply(found.accessToken!, {
+          threadId: e.threadId,
+          to: e.from,
+          subject: e.subject,
+          bodyText: body,
+          inReplyTo: e.messageIdHeader,
+        });
+        return {
+          ok: true,
+          result: `Draft balesan buat "${e.subject}" udah dibikin di Gmail. User tinggal review & kirim sendiri dari sana.`,
+        };
+      } catch (err) {
+        return { ok: false, result: err instanceof Error ? err.message : "Gagal bikin draft." };
+      }
     }
 
     default:

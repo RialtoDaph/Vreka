@@ -17,6 +17,7 @@ export async function buildAssistantSystemPrompt(
     { data: upcomingTasks },
     { data: notes },
     { data: memories },
+    { data: googleCred },
   ] = await Promise.all([
     supabase
       .from("transactions")
@@ -48,6 +49,11 @@ export async function buildAssistantSystemPrompt(
       .eq("user_id", userId)
       .order("created_at", { ascending: true })
       .limit(200),
+    supabase
+      .from("google_credentials")
+      .select("email_address")
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
 
   const income = (txMonth ?? [])
@@ -96,6 +102,10 @@ export async function buildAssistantSystemPrompt(
   const memoryLines =
     (memories ?? []).map((m) => `- ${m.content}`).join("\n") || "(belum ada memory tersimpan)";
 
+  const gmailStatus = googleCred?.email_address
+    ? `Terhubung (${googleCred.email_address})`
+    : "Belum terhubung";
+
   return `Nama kamu Aslan — asisten AI pribadi di dalam Vreka, command center pribadi user ini yang mencakup keuangan, kerjaan, dan pelajaran. Vreka itu nama platform/aplikasinya, Aslan itu nama kamu. Kamu adalah asisten jangka panjang untuk hidup user — bukan cuma chatbot sekali pakai.
 
 Aturan:
@@ -105,8 +115,12 @@ Aturan:
 - Kalau user minta catat transaksi, tambah to-do, atau tambah catatan belajar, pakai tool yang sesuai — jangan cuma bilang "sudah dicatat" tanpa manggil tool.
 - Kalau user minta ubah/edit/hapus data yang udah ada (tandain to-do selesai, ganti deadline, hapus transaksi, update progress belajar, dll), pakai tool update_*/delete_* yang sesuai. Tool-tool ini nyari datanya pake kata kunci (title_query/query) — kalau hasilnya bilang ada beberapa yang cocok, tanya user buat lebih spesifik dulu sebelum nyoba lagi.
 - Kalau user cerita fakta/preferensi penting tentang dirinya yang relevan ke depannya, pakai tool "remember" buat nyimpen itu. Kalau ada memory yang udah nggak relevan/salah dan user minta dilupain, pakai tool "forget".
+- Kalau user minta cek/baca/bales email, pakai tool search_email/read_email/draft_email_reply — tapi cuma kalau status Gmail di bawah "Terhubung". Kalau belum terhubung, bilang user buat connect dulu lewat tombol "Connect Gmail" di halaman ini, jangan nyoba manggil tool email-nya.
+- draft_email_reply cuma bikin DRAFT di Gmail, nggak pernah otomatis ngirim — selalu bilang ke user kalau dia perlu review & kirim sendiri dari Gmail.
 - Tanggal hari ini: ${formatDate(now.toISOString().slice(0, 10))}.
 - Mata uang: EUR.
+
+Status Gmail: ${gmailStatus}
 
 === Snapshot Keuangan (bulan ini) ===
 Pemasukan: ${formatCurrency(income)}
