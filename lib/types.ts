@@ -11,6 +11,25 @@ export type Transaction = {
   created_at: string;
 };
 
+export type RecurringItem = {
+  id: string;
+  user_id: string;
+  type: TransactionType;
+  category: string;
+  name: string;
+  amount: number;
+  created_at: string;
+};
+
+export type RecurringItemCheck = {
+  id: string;
+  user_id: string;
+  recurring_item_id: string;
+  transaction_id: string | null;
+  period: string;
+  created_at: string;
+};
+
 export type DebtDirection = "i_owe" | "owed_to_me";
 export type DebtStatus = "unpaid" | "paid";
 
