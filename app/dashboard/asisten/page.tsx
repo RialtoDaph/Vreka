@@ -32,6 +32,13 @@ export default function AsistenPage() {
   const [gmailLoading, setGmailLoading] = useState(true);
   const [gmailNotice, setGmailNotice] = useState<string | null>(null);
 
+  const [telegramLinked, setTelegramLinked] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState<string | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(true);
+  const [telegramLinking, setTelegramLinking] = useState(false);
+  const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
+  const [telegramError, setTelegramError] = useState<string | null>(null);
+
   useEffect(() => {
     const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
     if (isValidAssistantModel(saved)) setModel(saved);
@@ -70,6 +77,74 @@ export default function AsistenPage() {
     if (!user) return;
     await supabase.from("google_credentials").delete().eq("user_id", user.id);
     setGmailEmail(null);
+  }
+
+  async function loadTelegramStatus() {
+    setTelegramLoading(true);
+    const { data } = await supabase
+      .from("telegram_links")
+      .select("telegram_username, linked_at")
+      .not("linked_at", "is", null)
+      .maybeSingle();
+    setTelegramLinked(!!data?.linked_at);
+    setTelegramUsername(data?.telegram_username ?? null);
+    setTelegramLoading(false);
+  }
+
+  useEffect(() => {
+    loadTelegramStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function pollForTelegramLink() {
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts += 1;
+      const { data } = await supabase
+        .from("telegram_links")
+        .select("telegram_username, linked_at")
+        .not("linked_at", "is", null)
+        .maybeSingle();
+      if (data?.linked_at) {
+        setTelegramLinked(true);
+        setTelegramUsername(data.telegram_username ?? null);
+        setTelegramDeepLink(null);
+        clearInterval(interval);
+      } else if (attempts >= 20) {
+        clearInterval(interval);
+      }
+    }, 3000);
+  }
+
+  async function handleConnectTelegram() {
+    setTelegramLinking(true);
+    setTelegramError(null);
+    try {
+      const res = await fetch("/api/telegram/link", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setTelegramError(data.error ?? "Gagal generate link Telegram.");
+        return;
+      }
+      setTelegramDeepLink(data.deepLink);
+      window.open(data.deepLink, "_blank");
+      pollForTelegramLink();
+    } catch {
+      setTelegramError("Gagal generate link Telegram.");
+    } finally {
+      setTelegramLinking(false);
+    }
+  }
+
+  async function handleDisconnectTelegram() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("telegram_links").delete().eq("user_id", user.id);
+    setTelegramLinked(false);
+    setTelegramUsername(null);
+    setTelegramDeepLink(null);
   }
 
   function handleModelChange(value: string) {
@@ -312,6 +387,42 @@ export default function AsistenPage() {
               <a href="/api/google/oauth/start" className={primaryBtnClass}>
                 Connect Gmail
               </a>
+            ))}
+        </div>
+      </HudPanel>
+
+      <HudPanel className="text-sm">
+        {telegramError && (
+          <p className="text-xs font-mono text-rose-glow mb-2">{telegramError}</p>
+        )}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
+              Telegram
+            </p>
+            <p className="text-slate-300 truncate">
+              {telegramLoading
+                ? "Memuat..."
+                : telegramLinked
+                  ? `Terhubung${telegramUsername ? `: @${telegramUsername}` : ""}`
+                  : telegramDeepLink
+                    ? "Buka Telegram, tekan Start di bot-nya buat nyelesain koneksi..."
+                    : "Belum terhubung — chat Aslan langsung dari Telegram."}
+            </p>
+          </div>
+          {!telegramLoading &&
+            (telegramLinked ? (
+              <button onClick={handleDisconnectTelegram} className={ghostBtnClass}>
+                Disconnect
+              </button>
+            ) : (
+              <button
+                onClick={handleConnectTelegram}
+                disabled={telegramLinking}
+                className={primaryBtnClass}
+              >
+                {telegramLinking ? "Memuat..." : "Connect Telegram"}
+              </button>
             ))}
         </div>
       </HudPanel>

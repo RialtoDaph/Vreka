@@ -56,6 +56,30 @@ pernah auto-kirim) pas diminta lewat chat, plus dapet ringkasan email belum
 dibaca otomatis sekali sehari (`vercel.json` — jadwal `0 7 * * *` UTC; di
 Vercel Hobby plan, cron cuma bisa jalan maksimal sekali sehari).
 
+## Telegram (opsional — biar bisa chat Aslan langsung dari Telegram)
+
+1. Buka Telegram, chat **@BotFather** → `/newbot` → ikutin instruksinya (kasih
+   nama tampilan, terus username unik yang harus diakhiri `bot`, misal
+   `AslanVrekaBot`). BotFather bakal balesin sebuah **HTTP API token**.
+2. Set di Vercel:
+   - `TELEGRAM_BOT_TOKEN` — token dari BotFather.
+   - `TELEGRAM_BOT_USERNAME` — username bot-nya (tanpa `@`).
+   - `TELEGRAM_WEBHOOK_SECRET` — string acak bebas bikinan kamu sendiri
+     (bukan dari Telegram), dipakai buat mastiin webhook request beneran
+     dari Telegram, bukan orang lain.
+3. `SUPABASE_SERVICE_ROLE_KEY` juga wajib di-set (lihat bagian Gmail di atas
+   kalau belum) — dipakai buat balesin chat dari Telegram karena nggak ada
+   sesi login Supabase di situ.
+4. Redeploy, lalu — sambil login ke Vreka di browser — buka
+   `https://<domain-produksi-vreka-kamu>/api/telegram/setup` sekali buat
+   ndaftarin webhook-nya ke Telegram. Aman dipanggil berkali-kali.
+5. Buka halaman **Aslan** → klik **Connect Telegram** → bakal kebuka Telegram
+   dan otomatis nyambungin akun Telegram kamu ke akun Vreka kamu.
+
+Setelah connect, chat teks apa aja ke bot-nya bakal langsung dibales Aslan,
+dengan akses yang sama kayak di dashboard (nyatet transaksi, nambah to-do,
+liat kondisi keuangan, dll).
+
 ## Modul
 
 - **Keuangan** — transaksi (pemasukan/pengeluaran), utang/piutang, target tabungan
@@ -63,7 +87,8 @@ Vercel Hobby plan, cron cuma bisa jalan maksimal sekali sehari).
 - **Pelajaran** — catatan + progress tracker
 - **Aslan** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi
   keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan lewat
-  chat, nyimpen memory jangka panjang soal kamu, punya mode ngobrol pakai suara
-  (push-to-talk, lewat ElevenLabs) kalau `ELEVENLABS_API_KEY` di-set, dan kalau
+  chat, nyimpen memory jangka panjang soal kamu, punya mode telepon hands-free
+  dengan barge-in (lewat ElevenLabs) kalau `ELEVENLABS_API_KEY` di-set, kalau
   Gmail di-connect bisa cari/baca email, bikin draft balesan, plus ringkasan
-  email belum dibaca otomatis sekali sehari
+  email belum dibaca otomatis sekali sehari, dan kalau Telegram di-connect bisa
+  diajak chat langsung dari Telegram
