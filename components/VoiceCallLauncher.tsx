@@ -5,7 +5,7 @@ import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
 const SILENCE_THRESHOLD = 0.02;
-const SILENCE_DURATION_MS = 1200;
+const SILENCE_DURATION_MS = 900;
 const MIN_SPEECH_MS = 400;
 const MAX_RECORD_MS = 20000;
 

@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest, after } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { buildAssistantSystemPrompt } from "@/lib/assistant/context";
@@ -8,6 +8,14 @@ import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/
 export const dynamic = "force-dynamic";
 
 const MAX_TOOL_ITERATIONS = 5;
+
+// Tool schemas never change between requests, so caching them (breakpoint on
+// the last one covers the whole array) is a reliable, free latency win.
+const CACHED_TOOLS: Anthropic.Tool[] = ASSISTANT_TOOLS.map((tool, i) =>
+  i === ASSISTANT_TOOLS.length - 1
+    ? { ...tool, cache_control: { type: "ephemeral" } }
+    : tool
+);
 
 function textFromContent(content: Anthropic.ContentBlock[]): string {
   return content
@@ -52,28 +60,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await supabase.from("assistant_messages").insert({
-    user_id: user.id,
-    role: "user",
-    content: userMessage,
-  });
-
-  const { data: history } = await supabase
-    .from("assistant_messages")
-    .select("role, content")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(30);
+  const [{ data: history }, systemPrompt] = await Promise.all([
+    supabase
+      .from("assistant_messages")
+      .select("role, content")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    buildAssistantSystemPrompt(supabase, user.id),
+  ]);
 
   const orderedHistory = (history ?? []).slice().reverse();
 
   const anthropic = new Anthropic({ apiKey });
-  const systemPrompt = await buildAssistantSystemPrompt(supabase, user.id);
 
-  const messages: Anthropic.MessageParam[] = orderedHistory.map((m) => ({
-    role: m.role === "assistant" ? "assistant" : "user",
-    content: m.content,
-  }));
+  const messages: Anthropic.MessageParam[] = [
+    ...orderedHistory.map((m) => ({
+      role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      content: m.content,
+    })),
+    { role: "user", content: userMessage },
+  ];
 
   let finalText = "";
 
@@ -81,9 +88,9 @@ export async function POST(request: NextRequest) {
     const response = await anthropic.messages.create({
       model,
       max_tokens: 2048,
-      system: systemPrompt,
+      system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages,
-      tools: ASSISTANT_TOOLS,
+      tools: CACHED_TOOLS,
       ...modelRequestExtras(model),
     });
 
@@ -126,10 +133,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await supabase.from("assistant_messages").insert({
-    user_id: user.id,
-    role: "assistant",
-    content: finalText,
+  after(async () => {
+    await supabase.from("assistant_messages").insert({
+      user_id: user.id,
+      role: "user",
+      content: userMessage,
+    });
+    await supabase.from("assistant_messages").insert({
+      user_id: user.id,
+      role: "assistant",
+      content: finalText,
+    });
   });
 
   return NextResponse.json({ message: finalText });
