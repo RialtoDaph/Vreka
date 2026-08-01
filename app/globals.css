@@ -82,8 +82,16 @@ body {
   animation: pulse-glow 2.4s ease-in-out infinite;
 }
 
-/* Voice orb — layered blurred blobs + a rotating ring, no WebGL needed */
-@keyframes orb-rotate {
+/* Aslan avatar button — just the lion image with a state-driven glow ring */
+@keyframes aslan-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(75, 232, 255, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 9px rgba(75, 232, 255, 0);
+  }
+}
+@keyframes aslan-spin {
   from {
     transform: rotate(0deg);
   }
@@ -91,135 +99,68 @@ body {
     transform: rotate(360deg);
   }
 }
-@keyframes orb-rotate-reverse {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(-360deg);
-  }
-}
-@keyframes orb-breathe {
+@keyframes aslan-talk {
   0%,
   100% {
-    transform: translate(-50%, -50%) scale(0.92);
+    transform: scale(1);
   }
   50% {
-    transform: translate(-50%, -50%) scale(1.08);
-  }
-}
-@keyframes orb-morph {
-  0%,
-  100% {
-    border-radius: 42% 58% 65% 35% / 45% 40% 60% 55%;
-  }
-  33% {
-    border-radius: 60% 40% 45% 55% / 55% 60% 40% 45%;
-  }
-  66% {
-    border-radius: 48% 52% 38% 62% / 62% 45% 55% 38%;
+    transform: scale(1.07);
   }
 }
 
-.voice-orb {
+.aslan-avatar {
   position: relative;
+  display: block;
   width: 100%;
   height: 100%;
-}
-
-.orb-ring {
-  position: absolute;
-  inset: 0;
   border-radius: 9999px;
-  border: 1px solid rgba(75, 232, 255, 0.25);
-  background: conic-gradient(from 0deg, transparent 0%, rgba(75, 232, 255, 0.4) 12%, transparent 28%);
-  animation: orb-rotate 20s linear infinite;
-  transition: animation-duration 0.4s ease, opacity 0.4s ease;
 }
-
-.orb-layer {
-  position: absolute;
-  inset: 8%;
-  border-radius: 46% 54% 62% 38% / 48% 42% 58% 52%;
-  filter: blur(18px);
-  mix-blend-mode: screen;
-  animation: orb-morph 9s ease-in-out infinite;
-  transition: opacity 0.4s ease;
-}
-.orb-layer-1 {
-  background: radial-gradient(circle at 35% 35%, rgba(75, 232, 255, 0.85), transparent 65%);
-}
-.orb-layer-2 {
-  inset: 16%;
-  background: radial-gradient(circle at 65% 40%, rgba(75, 255, 176, 0.6), transparent 65%);
-  animation: orb-morph 11s ease-in-out infinite, orb-rotate 16s linear infinite;
-}
-.orb-layer-3 {
-  inset: 22%;
-  background: radial-gradient(circle at 50% 60%, rgba(255, 180, 84, 0.35), transparent 70%);
-  animation: orb-morph 13s ease-in-out infinite, orb-rotate-reverse 22s linear infinite;
-}
-.orb-core {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 14%;
-  height: 14%;
-  transform: translate(-50%, -50%);
+.aslan-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
   border-radius: 9999px;
-  background: radial-gradient(circle, #ffffff, rgba(75, 232, 255, 0.6) 60%, transparent 100%);
-  filter: blur(1px);
-  animation: orb-breathe 4s ease-in-out infinite;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+.aslan-avatar::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 2px solid rgba(75, 232, 255, 0.35);
+  transition: border-color 0.3s ease, opacity 0.3s ease;
 }
 
-[data-orb-state="idle"] .orb-ring {
-  animation-duration: 26s;
-  opacity: 0.45;
-}
-[data-orb-state="idle"] .orb-layer {
-  opacity: 0.55;
+[data-phase="listening"] .aslan-avatar::after {
+  border-color: rgba(75, 232, 255, 0.8);
+  animation: aslan-pulse-ring 1.4s ease-out infinite;
 }
 
-[data-orb-state="listening"] .orb-ring {
-  animation-duration: 8s;
-  opacity: 0.9;
-}
-[data-orb-state="listening"] .orb-layer {
-  opacity: 0.9;
-}
-[data-orb-state="listening"] .orb-core {
-  animation-duration: 1s;
+[data-phase="processing"] .aslan-avatar::after {
+  border-color: rgba(255, 180, 84, 0.85);
+  border-top-color: transparent;
+  animation: aslan-spin 0.8s linear infinite;
 }
 
-[data-orb-state="thinking"] .orb-ring {
-  animation-duration: 3s;
-  opacity: 1;
+[data-phase="speaking"] .aslan-avatar::after {
+  border-color: rgba(75, 255, 176, 0.85);
+  animation: aslan-pulse-ring 0.7s ease-out infinite;
 }
-[data-orb-state="thinking"] .orb-layer {
-  opacity: 0.85;
-  filter: blur(14px);
-}
-[data-orb-state="thinking"] .orb-core {
-  animation-duration: 0.7s;
+[data-phase="speaking"] .aslan-avatar img {
+  animation: aslan-talk 0.55s ease-in-out infinite;
 }
 
-[data-orb-state="speaking"] .orb-ring {
-  animation-duration: 2.2s;
-  opacity: 1;
-}
-[data-orb-state="speaking"] .orb-layer {
-  opacity: 1;
-}
-[data-orb-state="speaking"] .orb-core {
-  animation-duration: 0.45s;
+[data-phase="error"] .aslan-avatar::after {
+  border-color: rgba(255, 90, 120, 0.8);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .scanline::after,
   .pulse-dot,
-  .orb-ring,
-  .orb-layer,
-  .orb-core {
+  .aslan-avatar::after,
+  .aslan-avatar img {
     animation: none !important;
   }
 }

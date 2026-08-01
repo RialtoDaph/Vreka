@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import VoiceOrb, { type OrbState } from "@/components/VoiceOrb";
 import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
@@ -31,13 +30,6 @@ export default function VoiceCallLauncher() {
       stoppedRef.current = true;
     };
   }, []);
-
-  function orbStateFromPhase(p: Phase): OrbState {
-    if (p === "listening") return "listening";
-    if (p === "processing") return "thinking";
-    if (p === "speaking") return "speaking";
-    return "idle";
-  }
 
   async function recordUntilSilence(): Promise<Blob | null> {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -206,13 +198,13 @@ export default function VoiceCallLauncher() {
     <div className="fixed top-5 right-5 z-40 flex flex-col items-end gap-2">
       <button
         onClick={handleToggle}
-        className="relative w-14 h-14 rounded-full"
+        data-phase={phase}
+        className="w-14 h-14"
         aria-label={active ? "Hentikan ngobrol sama Aslan" : "Ngobrol sama Aslan"}
         title={active ? "Hentikan ngobrol" : "Ngobrol sama Aslan"}
       >
-        <VoiceOrb state={orbStateFromPhase(phase)} />
-        <span className="absolute inset-[12%] rounded-full overflow-hidden pointer-events-none">
-          <img src="/aslan.png" alt="" className="w-full h-full object-cover" />
+        <span className="aslan-avatar">
+          <img src="/aslan.png" alt="" />
         </span>
       </button>
       {errorMsg && (
