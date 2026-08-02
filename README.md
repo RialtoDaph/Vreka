@@ -11,6 +11,18 @@ Dibangun dengan Next.js (App Router) + Supabase + Tailwind CSS.
 2. `npm install`
 3. `npm run dev`
 
+## Development
+
+- `npm run lint` — ESLint (flat config, `eslint-config-next`).
+- `npm run typecheck` — `tsc --noEmit`.
+- `npm run test` — Vitest, unit test buat logic murni (`lib/format.ts`,
+  `lib/categories.ts`, dst). Ditambah bertahap seiring modul baru masuk.
+- CI (`.github/workflows/ci.yml`) jalanin ketiganya di tiap push/PR.
+- `supabase/migrations/` — snapshot skema DB versioned sebagai SQL, biar
+  reproducible di project Supabase baru (bukan buat di-apply ulang ke project
+  produksi yang udah jalan — tabelnya udah ada di sana). Perubahan skema
+  berikutnya ditambah sebagai file migration baru bernomor urut.
+
 ## Deploy
 
 Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
