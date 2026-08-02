@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Chakra_Petch, Rajdhani, JetBrains_Mono } from "next/font/google";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const chakra = Chakra_Petch({
@@ -23,6 +24,11 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Vreka",
   description: "Personal command center — keuangan, kerjaan, pelajaran.",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Vreka" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#05080d",
 };
 
 export default function RootLayout({
@@ -33,6 +39,7 @@ export default function RootLayout({
   return (
     <html lang="id" className={`${chakra.variable} ${rajdhani.variable} ${jetbrains.variable}`}>
       <body className="bg-void text-slate-200 font-body min-h-screen">
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>

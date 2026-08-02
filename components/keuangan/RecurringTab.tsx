@@ -27,6 +27,8 @@ export default function RecurringTab() {
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [amount, setAmount] = useState("");
+  const [autoPost, setAutoPost] = useState(false);
+  const [dayOfMonth, setDayOfMonth] = useState("1");
 
   const period = currentPeriod();
 
@@ -37,6 +39,8 @@ export default function RecurringTab() {
     setCategory(EXPENSE_CATEGORIES[0]);
     setCategoryTouched(false);
     setAmount("");
+    setAutoPost(false);
+    setDayOfMonth("1");
   }
 
   function toggleForm() {
@@ -58,6 +62,8 @@ export default function RecurringTab() {
     setCategory(item.category);
     setCategoryTouched(true);
     setAmount(String(item.amount).replace(".", ","));
+    setAutoPost(item.auto_post);
+    setDayOfMonth(String(item.day_of_month ?? 1));
     setShowForm(true);
   }
 
@@ -81,9 +87,18 @@ export default function RecurringTab() {
     e.preventDefault();
     const parsed = parseAmount(amount);
     if (!name.trim() || !amount || !Number.isFinite(parsed) || parsed <= 0) return;
+    const day = Number(dayOfMonth);
+    if (autoPost && (!Number.isInteger(day) || day < 1 || day > 31)) return;
     setSaving(true);
 
-    const payload = { type, category, name: name.trim(), amount: parsed };
+    const payload = {
+      type,
+      category,
+      name: name.trim(),
+      amount: parsed,
+      auto_post: autoPost,
+      day_of_month: autoPost ? day : null,
+    };
 
     if (editingId) {
       await supabase.from("recurring_items").update(payload).eq("id", editingId);
@@ -237,6 +252,32 @@ export default function RecurringTab() {
               </div>
             </div>
 
+            <div>
+              <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={autoPost}
+                  onChange={(e) => setAutoPost(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-cyan-glow"
+                />
+                Auto-post tiap bulan (nggak perlu dicentang manual)
+              </label>
+              {autoPost && (
+                <div className="mt-2.5 max-w-[10rem]">
+                  <label className={labelClass}>Tanggal tiap bulan</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    required
+                    value={dayOfMonth}
+                    onChange={(e) => setDayOfMonth(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              )}
+            </div>
+
             <button type="submit" disabled={saving} className={primaryBtnClass}>
               {saving ? "Menyimpan..." : editingId ? "Update Pos Tetap" : "Simpan Pos Tetap"}
             </button>
@@ -343,7 +384,12 @@ function RecurringSection({
                   >
                     {item.name}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-600">{item.category}</p>
+                  <p className="text-[11px] font-mono text-slate-600">
+                    {item.category}
+                    {item.auto_post && (
+                      <span className="text-cyan-glow"> · ⚡ auto tgl {item.day_of_month}</span>
+                    )}
+                  </p>
                 </div>
                 <span
                   className={`font-mono text-sm shrink-0 ${toneClass} ${

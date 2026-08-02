@@ -9,6 +9,7 @@ export type Transaction = {
   description: string | null;
   occurred_on: string;
   created_at: string;
+  receipt_path: string | null;
 };
 
 export type RecurringItem = {
@@ -19,6 +20,8 @@ export type RecurringItem = {
   name: string;
   amount: number;
   created_at: string;
+  auto_post: boolean;
+  day_of_month: number | null;
 };
 
 export type RecurringItemCheck = {
@@ -55,7 +58,15 @@ export type SavingsGoal = {
   created_at: string;
 };
 
-export type TaskStatus = "todo" | "done";
+export type Budget = {
+  id: string;
+  user_id: string;
+  category: string;
+  monthly_limit: number;
+  created_at: string;
+};
+
+export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "medium" | "high";
 
 export type Task = {
@@ -66,6 +77,31 @@ export type Task = {
   deadline: string | null;
   status: TaskStatus;
   priority: TaskPriority;
+  created_at: string;
+  project: string | null;
+};
+
+export type TaskSubtask = {
+  id: string;
+  user_id: string;
+  task_id: string;
+  title: string;
+  done: boolean;
+  created_at: string;
+};
+
+export type Habit = {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+};
+
+export type HabitCheck = {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  period: string;
   created_at: string;
 };
 
@@ -80,6 +116,32 @@ export type StudyNote = {
   updated_at: string;
 };
 
+export type StudySession = {
+  id: string;
+  user_id: string;
+  note_id: string;
+  minutes: number;
+  created_at: string;
+};
+
+export type StudyResource = {
+  id: string;
+  user_id: string;
+  note_id: string;
+  label: string;
+  url: string;
+  created_at: string;
+};
+
+export type JournalEntry = {
+  id: string;
+  user_id: string;
+  entry_date: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AssistantRole = "user" | "assistant";
 
 export type AssistantMessage = {
@@ -87,5 +149,24 @@ export type AssistantMessage = {
   user_id: string;
   role: AssistantRole;
   content: string;
+  created_at: string;
+};
+
+export type PushSubscriptionRow = {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string;
+};
+
+export type AssistantAuditLog = {
+  id: string;
+  user_id: string;
+  tool_name: string;
+  input: Record<string, unknown>;
+  result_ok: boolean;
+  result_summary: string | null;
   created_at: string;
 };

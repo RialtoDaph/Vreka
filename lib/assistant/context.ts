@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { computeStreak } from "@/lib/habits";
 
 export async function buildAssistantSystemPrompt(
   supabase: SupabaseClient,
@@ -12,10 +13,14 @@ export async function buildAssistantSystemPrompt(
 
   const [
     { data: txMonth },
+    { data: expenseByCategoryMonth },
+    { data: budgets },
     { data: unpaidDebts },
     { data: goals },
     { data: upcomingTasks },
     { data: notes },
+    { data: habits },
+    { data: habitChecks },
     { data: memories },
     { data: googleCred },
   ] = await Promise.all([
@@ -24,6 +29,13 @@ export async function buildAssistantSystemPrompt(
       .select("type, amount")
       .eq("user_id", userId)
       .gte("occurred_on", firstDayOfMonth),
+    supabase
+      .from("transactions")
+      .select("category, amount")
+      .eq("user_id", userId)
+      .eq("type", "expense")
+      .gte("occurred_on", firstDayOfMonth),
+    supabase.from("budgets").select("*").eq("user_id", userId),
     supabase.from("debts").select("*").eq("user_id", userId).eq("status", "unpaid"),
     supabase
       .from("savings_goals")
@@ -34,7 +46,7 @@ export async function buildAssistantSystemPrompt(
       .from("tasks")
       .select("*")
       .eq("user_id", userId)
-      .eq("status", "todo")
+      .neq("status", "done")
       .order("deadline", { ascending: true, nullsFirst: false })
       .limit(8),
     supabase
@@ -43,6 +55,8 @@ export async function buildAssistantSystemPrompt(
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(10),
+    supabase.from("habits").select("id, title").eq("user_id", userId),
+    supabase.from("habit_checks").select("habit_id, period").eq("user_id", userId),
     supabase
       .from("assistant_memories")
       .select("content")
@@ -51,7 +65,7 @@ export async function buildAssistantSystemPrompt(
       .limit(200),
     supabase
       .from("google_credentials")
-      .select("email_address")
+      .select("email_address, scope")
       .eq("user_id", userId)
       .maybeSingle(),
   ]);
@@ -69,6 +83,19 @@ export async function buildAssistantSystemPrompt(
   const owedToMe = (unpaidDebts ?? [])
     .filter((d) => d.direction === "owed_to_me")
     .reduce((sum, d) => sum + Number(d.amount), 0);
+
+  const spentByCategory = new Map<string, number>();
+  for (const t of expenseByCategoryMonth ?? []) {
+    spentByCategory.set(t.category, (spentByCategory.get(t.category) ?? 0) + Number(t.amount));
+  }
+  const budgetLines =
+    (budgets ?? [])
+      .map((b) => {
+        const used = spentByCategory.get(b.category) ?? 0;
+        const pct = Math.round((used / Number(b.monthly_limit)) * 100);
+        return `- ${b.category}: ${formatCurrency(used)} / ${formatCurrency(Number(b.monthly_limit))} (${pct}%)${pct >= 100 ? " — KEBOBOLAN" : ""}`;
+      })
+      .join("\n") || "(belum ada anggaran diset)";
 
   const goalsLines =
     (goals ?? [])
@@ -90,7 +117,7 @@ export async function buildAssistantSystemPrompt(
     (upcomingTasks ?? [])
       .map(
         (t) =>
-          `- [${t.priority}] ${t.title}${t.deadline ? ` (deadline ${formatDate(t.deadline)})` : ""}`
+          `- [${t.priority}]${t.status === "in_progress" ? " [sedang dikerjain]" : ""} ${t.title}${t.deadline ? ` (deadline ${formatDate(t.deadline)})` : ""}`
       )
       .join("\n") || "(nggak ada to-do aktif)";
 
@@ -99,12 +126,33 @@ export async function buildAssistantSystemPrompt(
       .map((n) => `- ${n.title} (${n.category ?? "Umum"}) — progress ${n.progress}%`)
       .join("\n") || "(belum ada catatan belajar)";
 
+  const today = now.toISOString().slice(0, 10);
+  const checksByHabit = new Map<string, Set<string>>();
+  for (const c of habitChecks ?? []) {
+    if (!checksByHabit.has(c.habit_id)) checksByHabit.set(c.habit_id, new Set());
+    checksByHabit.get(c.habit_id)!.add(c.period);
+  }
+  const habitLines =
+    (habits ?? [])
+      .map((h) => {
+        const periods = checksByHabit.get(h.id) ?? new Set<string>();
+        const streak = computeStreak(periods);
+        const doneToday = periods.has(today);
+        return `- ${h.title}: ${doneToday ? "udah dicentang hari ini" : "belum dicentang hari ini"}${streak > 0 ? `, streak ${streak} hari` : ""}`;
+      })
+      .join("\n") || "(belum ada kebiasaan yang dilacak)";
+
   const memoryLines =
     (memories ?? []).map((m) => `- ${m.content}`).join("\n") || "(belum ada memory tersimpan)";
 
   const gmailStatus = googleCred?.email_address
     ? `Terhubung (${googleCred.email_address})`
     : "Belum terhubung";
+  const calendarStatus = googleCred?.scope?.includes("calendar")
+    ? "Terhubung"
+    : googleCred?.email_address
+      ? "Belum di-grant (user connect Gmail sebelum fitur Calendar ada — perlu disconnect & connect ulang)"
+      : "Belum terhubung";
 
   return `Nama kamu Aslan — asisten AI pribadi di dalam Vreka, command center pribadi user ini yang mencakup keuangan, kerjaan, dan pelajaran. Vreka itu nama platform/aplikasinya, Aslan itu nama kamu. Kamu adalah asisten jangka panjang untuk hidup user — bukan cuma chatbot sekali pakai.
 
@@ -115,12 +163,17 @@ Aturan:
 - Kalau user minta catat transaksi, tambah to-do, atau tambah catatan belajar, pakai tool yang sesuai — jangan cuma bilang "sudah dicatat" tanpa manggil tool.
 - Kalau user minta ubah/edit/hapus data yang udah ada (tandain to-do selesai, ganti deadline, hapus transaksi, update progress belajar, dll), pakai tool update_*/delete_* yang sesuai. Tool-tool ini nyari datanya pake kata kunci (title_query/query) — kalau hasilnya bilang ada beberapa yang cocok, tanya user buat lebih spesifik dulu sebelum nyoba lagi.
 - Kalau user cerita fakta/preferensi penting tentang dirinya yang relevan ke depannya, pakai tool "remember" buat nyimpen itu. Kalau ada memory yang udah nggak relevan/salah dan user minta dilupain, pakai tool "forget".
+- Kalau user minta set/ubah anggaran bulanan buat kategori pengeluaran tertentu, pakai tool "set_budget". Kalau minta hapus anggaran, pakai "delete_budget". Kalau ada anggaran yang statusnya KEBOBOLAN di snapshot bawah, boleh diingetin ke user secara natural pas relevan (bukan tiap-tiap balasan).
+- Kalau user bilang udah ngelakuin suatu kebiasaan yang dilacak (misal "udah olahraga nih"), pakai tool "toggle_habit" buat centang kebiasaan itu hari ini.
 - Kalau user minta cek/baca/bales email, pakai tool search_email/read_email/draft_email_reply — tapi cuma kalau status Gmail di bawah "Terhubung". Kalau belum terhubung, bilang user buat connect dulu lewat tombol "Connect Gmail" di halaman ini, jangan nyoba manggil tool email-nya.
 - draft_email_reply cuma bikin DRAFT di Gmail, nggak pernah otomatis ngirim — selalu bilang ke user kalau dia perlu review & kirim sendiri dari Gmail.
+- Kalau user nanya jadwal atau minta cek kalender, pakai tool "check_calendar" — tapi cuma kalau status Calendar di bawah "Terhubung". Kalau minta dibikinin/dijadwalin event, pakai "add_calendar_event". Kalau status Calendar "Belum di-grant", bilang user buat disconnect & connect ulang Gmail dulu.
+- Kalau user cerita sesuatu yang keliatan kayak refleksi/cerita hari ini (bukan sekadar fakta yang perlu diinget jangka panjang — itu tugasnya "remember"), pakai tool "add_journal_entry" buat nyatet ke jurnal harian.
 - Tanggal hari ini: ${formatDate(now.toISOString().slice(0, 10))}.
 - Mata uang: EUR.
 
 Status Gmail: ${gmailStatus}
+Status Google Calendar: ${calendarStatus}
 
 === Snapshot Keuangan (bulan ini) ===
 Pemasukan: ${formatCurrency(income)}
@@ -135,11 +188,17 @@ ${debtLines}
 Target tabungan:
 ${goalsLines}
 
+Anggaran bulan ini (kategori: terpakai / batas):
+${budgetLines}
+
 === Kerjaan (to-do aktif, maks 8) ===
 ${taskLines}
 
 === Pelajaran (catatan terbaru) ===
 ${noteLines}
+
+=== Kebiasaan ===
+${habitLines}
 
 === Memory tersimpan tentang user ===
 ${memoryLines}`;

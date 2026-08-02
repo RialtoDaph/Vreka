@@ -68,6 +68,13 @@ export async function runAssistantChat(
   ];
 
   let finalText = "";
+  const auditRows: Array<{
+    user_id: string;
+    tool_name: string;
+    input: Record<string, unknown>;
+    result_ok: boolean;
+    result_summary: string;
+  }> = [];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     const response = await anthropic.messages.create({
@@ -97,17 +104,20 @@ export async function runAssistantChat(
 
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const toolUse of toolUseBlocks) {
-      const { ok, result } = await executeAssistantTool(
-        supabase,
-        userId,
-        toolUse.name,
-        (toolUse.input as Record<string, unknown>) ?? {}
-      );
+      const input = (toolUse.input as Record<string, unknown>) ?? {};
+      const { ok, result } = await executeAssistantTool(supabase, userId, toolUse.name, input);
       toolResults.push({
         type: "tool_result",
         tool_use_id: toolUse.id,
         content: result,
         is_error: !ok,
+      });
+      auditRows.push({
+        user_id: userId,
+        tool_name: toolUse.name,
+        input,
+        result_ok: ok,
+        result_summary: result.slice(0, 500),
       });
     }
 
@@ -129,6 +139,9 @@ export async function runAssistantChat(
       role: "assistant",
       content: finalText,
     });
+    if (auditRows.length > 0) {
+      await supabase.from("assistant_audit_log").insert(auditRows);
+    }
   });
 
   return finalText;

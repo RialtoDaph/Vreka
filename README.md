@@ -11,6 +11,18 @@ Dibangun dengan Next.js (App Router) + Supabase + Tailwind CSS.
 2. `npm install`
 3. `npm run dev`
 
+## Development
+
+- `npm run lint` — ESLint (flat config, `eslint-config-next`).
+- `npm run typecheck` — `tsc --noEmit`.
+- `npm run test` — Vitest, unit test buat logic murni (`lib/format.ts`,
+  `lib/categories.ts`, dst). Ditambah bertahap seiring modul baru masuk.
+- CI (`.github/workflows/ci.yml`) jalanin ketiganya di tiap push/PR.
+- `supabase/migrations/` — snapshot skema DB versioned sebagai SQL, biar
+  reproducible di project Supabase baru (bukan buat di-apply ulang ke project
+  produksi yang udah jalan — tabelnya udah ada di sana). Perubahan skema
+  berikutnya ditambah sebagai file migration baru bernomor urut.
+
 ## Deploy
 
 Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
@@ -25,14 +37,18 @@ domain produksi, bukan `http://localhost:3000` bawaannya, dan `/auth/callback`
 harus masuk daftar Redirect URLs — kalau nggak, link konfirmasi email bakal
 nembak localhost.
 
-## Gmail (opsional — biar Aslan bisa cek/bales email)
+## Gmail & Google Calendar (opsional — biar Aslan bisa cek/bales email dan liat/bikin jadwal)
+
+Satu koneksi Google yang sama dipake buat Gmail dan Calendar (satu tombol
+**Connect Gmail**, satu baris di tabel `google_credentials`).
 
 1. **Google Cloud Console** (console.cloud.google.com):
    - Bikin project baru.
-   - APIs & Services → Library → enable **Gmail API**.
+   - APIs & Services → Library → enable **Gmail API** dan **Google Calendar API**.
    - APIs & Services → OAuth consent screen → User type **External**, tambahin
-     scope `gmail.readonly` + `gmail.compose`, dan tambahin akun Gmail kamu
-     sendiri sebagai **Test user** (biar nggak perlu proses verifikasi Google).
+     scope `gmail.readonly` + `gmail.compose` + `calendar.readonly` +
+     `calendar.events`, dan tambahin akun Gmail kamu sendiri sebagai
+     **Test user** (biar nggak perlu proses verifikasi Google).
    - APIs & Services → Credentials → Create Credentials → **OAuth client ID**,
      tipe **Web application**. Authorized redirect URI-nya:
      ```
@@ -48,13 +64,18 @@ nembak localhost.
    pernah expose ke client.
 4. Set `CRON_SECRET` di Vercel (string acak bebas) — Vercel otomatis kirim ini
    sebagai header pas motoran cron job-nya, dipakai buat mastiin cuma Vercel
-   yang bisa manggil endpoint digest email.
+   yang bisa manggil endpoint cron harian.
 5. Redeploy, lalu buka halaman **Aslan** → klik **Connect Gmail**.
 
 Setelah connect, Aslan bisa cari/baca email dan bikin **draft balesan** (nggak
-pernah auto-kirim) pas diminta lewat chat, plus dapet ringkasan email belum
-dibaca otomatis sekali sehari (`vercel.json` — jadwal `0 7 * * *` UTC; di
-Vercel Hobby plan, cron cuma bisa jalan maksimal sekali sehari).
+pernah auto-kirim), liat jadwal dan bikinin event di Google Calendar pas
+diminta lewat chat, plus dapet ringkasan email belum dibaca otomatis sekali
+sehari (`vercel.json` — jadwal `0 7 * * *` UTC; di Vercel Hobby plan, cron
+cuma bisa jalan maksimal sekali sehari).
+
+**Udah connect Gmail sebelum fitur Calendar ini ada?** Refresh token lama
+cuma punya izin Gmail — disconnect dulu (tombol di halaman Aslan) terus
+connect ulang biar izin Calendar-nya ikut ke-grant.
 
 ## Telegram (opsional — biar bisa chat Aslan langsung dari Telegram)
 
@@ -78,17 +99,64 @@ Vercel Hobby plan, cron cuma bisa jalan maksimal sekali sehari).
 
 Setelah connect, chat teks apa aja ke bot-nya bakal langsung dibales Aslan,
 dengan akses yang sama kayak di dashboard (nyatet transaksi, nambah to-do,
-liat kondisi keuangan, dll).
+liat kondisi keuangan, dll), plus dapet **morning briefing** otomatis sekali
+sehari (saldo, tugas due/telat hari ini, anggaran yang mepet, kebiasaan yang
+belum dicentang, dan jadwal Calendar kalau udah connect) — jadwalnya nebeng
+di cron yang sama dengan digest email (`/api/cron/daily-digest`, `0 7 * * *` UTC).
+
+## PWA & Push Notification (opsional — biar Vreka bisa di-install di HP dan ngirim notifikasi)
+
+Vreka udah installable sebagai PWA out of the box (manifest + service worker),
+nggak perlu setup tambahan buat itu — buka di HP, browser bakal nawarin
+"Add to Home Screen" / "Install app". Push notification-nya yang perlu
+di-setup:
+
+1. Generate VAPID key pair (sekali aja, key-nya nggak terikat akun/layanan
+   luar apa pun): `npx web-push generate-vapid-keys`.
+2. Set di Vercel:
+   - `VAPID_PUBLIC_KEY` dan `VAPID_PRIVATE_KEY` — dari langkah 1.
+   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — sama persis dengan `VAPID_PUBLIC_KEY`
+     (browser butuh versi public-nya buat subscribe, makanya di-duplikat ke
+     env var `NEXT_PUBLIC_`).
+   - `VAPID_SUBJECT` — `mailto:email-kamu@contoh.com` (syarat protokol VAPID,
+     bukan dipakai buat ngirim email).
+3. Redeploy, lalu buka halaman **Aslan** → klik **Aktifkan** di bagian Push
+   Notification, izinin notifikasi pas diminta browser.
+
+Setelah aktif, dapet notifikasi ringkasan pagi bareng jadwal cron yang sama
+(saldo, jumlah anggaran mepet, tugas due/telat).
 
 ## Modul
 
-- **Keuangan** — transaksi (pemasukan/pengeluaran), utang/piutang, target tabungan
-- **Kerjaan** — to-do dengan deadline & prioritas
-- **Pelajaran** — catatan + progress tracker
+- **Keuangan** — transaksi (pemasukan/pengeluaran), pos tetap (manual atau
+  auto-post tanggal tertentu tiap bulan lewat cron harian), utang/piutang,
+  target tabungan, anggaran bulanan per kategori, dan tab Analitik (grafik
+  tren & breakdown kategori)
+- **Kerjaan** — to-do dengan deadline & prioritas, papan Kanban (To-do/In
+  Progress/Selesai) plus sub-task per to-do, tag project buat filter, dan
+  pelacak kebiasaan harian (streak)
+- **Pelajaran** — catatan + progress tracker, mode kuis (Aslan bikin soal
+  pilihan ganda dari isi catatan buat self-test, skornya bisa langsung
+  diangkat jadi progress), timer sesi belajar, dan lampiran resource (link)
+  per catatan
+- **Kalender** — tampilan bulanan yang gabungin deadline to-do, jatuh tempo
+  utang, deadline target tabungan, dan (kalau Google Calendar di-connect)
+  jadwal Calendar, semua dalam satu grid
+- **Jurnal** — catatan harian freeform dengan prompt refleksi yang beda tiap
+  hari, satu entry per hari
 - **Aslan** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi
   keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan lewat
   chat, nyimpen memory jangka panjang soal kamu, punya mode telepon hands-free
   dengan barge-in (lewat ElevenLabs) kalau `ELEVENLABS_API_KEY` di-set, kalau
-  Gmail di-connect bisa cari/baca email, bikin draft balesan, plus ringkasan
-  email belum dibaca otomatis sekali sehari, dan kalau Telegram di-connect bisa
-  diajak chat langsung dari Telegram
+  Gmail di-connect bisa cari/baca email, bikin draft balesan, liat/bikin event
+  Google Calendar, plus ringkasan email belum dibaca otomatis sekali sehari,
+  kalau Telegram di-connect bisa diajak chat langsung dari Telegram dan dapet
+  morning briefing harian, tiap aksi yang diambil Aslan (nyatet transaksi,
+  ubah data, dst) tercatat di log Aktivitas buat transparansi, dan ada tombol
+  buat export semua data kamu jadi satu file JSON
+
+Plus **Command Palette** (`⌘K` / `Ctrl+K`) buat lompat cepat ke modul mana
+aja dari mana aja di dashboard, dan **2FA** (autentikasi dua faktor) yang bisa
+diaktifin dari halaman Aslan — scan QR code pakai app authenticator (Google
+Authenticator, Authy, dll), abis itu login butuh kode 6 digit juga. Bawaan
+Supabase Auth, nggak perlu setup tambahan di luar app ini.
