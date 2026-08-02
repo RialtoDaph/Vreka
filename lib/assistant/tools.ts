@@ -278,6 +278,18 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
       required: ["summary", "start", "end"],
     },
   },
+  {
+    name: "add_journal_entry",
+    description:
+      "Tambah catatan ke jurnal harian user. Kalau udah ada catatan hari ini, ini nambahin ke catatan yang ada (bukan nimpa).",
+    input_schema: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "Isi catatan yang mau ditambahin." },
+      },
+      required: ["content"],
+    },
+  },
 ];
 
 type FindResult = { error?: string; id?: string; label?: string };
@@ -704,6 +716,27 @@ export async function executeAssistantTool(
       } catch (err) {
         return { ok: false, result: err instanceof Error ? err.message : "Gagal bikin event." };
       }
+    }
+
+    case "add_journal_entry": {
+      const content = String(input.content ?? "").trim();
+      if (!content) return { ok: false, result: "content kosong." };
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: existing } = await supabase
+        .from("journal_entries")
+        .select("id, content")
+        .eq("user_id", userId)
+        .eq("entry_date", today)
+        .maybeSingle();
+      const newContent = existing?.content ? `${existing.content}\n\n${content}` : content;
+      const { error } = await supabase
+        .from("journal_entries")
+        .upsert(
+          { user_id: userId, entry_date: today, content: newContent, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,entry_date" }
+        );
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: "Catatan jurnal hari ini diupdate." };
     }
 
     default:

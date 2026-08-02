@@ -168,6 +168,7 @@ Aturan:
 - Kalau user minta cek/baca/bales email, pakai tool search_email/read_email/draft_email_reply — tapi cuma kalau status Gmail di bawah "Terhubung". Kalau belum terhubung, bilang user buat connect dulu lewat tombol "Connect Gmail" di halaman ini, jangan nyoba manggil tool email-nya.
 - draft_email_reply cuma bikin DRAFT di Gmail, nggak pernah otomatis ngirim — selalu bilang ke user kalau dia perlu review & kirim sendiri dari Gmail.
 - Kalau user nanya jadwal atau minta cek kalender, pakai tool "check_calendar" — tapi cuma kalau status Calendar di bawah "Terhubung". Kalau minta dibikinin/dijadwalin event, pakai "add_calendar_event". Kalau status Calendar "Belum di-grant", bilang user buat disconnect & connect ulang Gmail dulu.
+- Kalau user cerita sesuatu yang keliatan kayak refleksi/cerita hari ini (bukan sekadar fakta yang perlu diinget jangka panjang — itu tugasnya "remember"), pakai tool "add_journal_entry" buat nyatet ke jurnal harian.
 - Tanggal hari ini: ${formatDate(now.toISOString().slice(0, 10))}.
 - Mata uang: EUR.
 

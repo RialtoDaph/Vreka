@@ -117,6 +117,11 @@ di cron yang sama dengan digest email (`/api/cron/daily-digest`, `0 7 * * *` UTC
   pilihan ganda dari isi catatan buat self-test, skornya bisa langsung
   diangkat jadi progress), timer sesi belajar, dan lampiran resource (link)
   per catatan
+- **Kalender** — tampilan bulanan yang gabungin deadline to-do, jatuh tempo
+  utang, deadline target tabungan, dan (kalau Google Calendar di-connect)
+  jadwal Calendar, semua dalam satu grid
+- **Jurnal** — catatan harian freeform dengan prompt refleksi yang beda tiap
+  hari, satu entry per hari
 - **Aslan** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi
   keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan lewat
   chat, nyimpen memory jangka panjang soal kamu, punya mode telepon hands-free
