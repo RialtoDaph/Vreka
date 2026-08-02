@@ -8,6 +8,7 @@ import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
 import PushNotifications from "@/components/asisten/PushNotifications";
+import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
@@ -436,6 +437,10 @@ export default function AsistenPage() {
 
       <HudPanel className="text-sm">
         <DataExport />
+      </HudPanel>
+
+      <HudPanel className="text-sm">
+        <TwoFactorAuth />
       </HudPanel>
 
       <ActivityLog />

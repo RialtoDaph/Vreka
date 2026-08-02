@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveAuthRedirect } from "@/lib/mfaGate";
 
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request: { headers: request.headers } });
@@ -24,20 +25,22 @@ export async function proxy(request: NextRequest) {
 
   const { data } = await supabase.auth.getUser();
   const isAuthed = !!data.user;
-  const pathname = request.nextUrl.pathname;
 
-  const isAuthRoute = pathname.startsWith("/login");
-  const isProtectedRoute = pathname.startsWith("/dashboard");
-
-  if (!isAuthed && isProtectedRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+  let aal = null;
+  if (isAuthed) {
+    const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    aal = aalData;
   }
 
-  if (isAuthed && isAuthRoute) {
+  const redirectTo = resolveAuthRedirect({
+    isAuthed,
+    pathname: request.nextUrl.pathname,
+    aal,
+  });
+
+  if (redirectTo) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = redirectTo;
     return NextResponse.redirect(url);
   }
 
@@ -45,5 +48,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login"],
+  matcher: ["/dashboard/:path*", "/login", "/mfa"],
 };

@@ -156,4 +156,7 @@ Setelah aktif, dapet notifikasi ringkasan pagi bareng jadwal cron yang sama
   buat export semua data kamu jadi satu file JSON
 
 Plus **Command Palette** (`⌘K` / `Ctrl+K`) buat lompat cepat ke modul mana
-aja dari mana aja di dashboard.
+aja dari mana aja di dashboard, dan **2FA** (autentikasi dua faktor) yang bisa
+diaktifin dari halaman Aslan — scan QR code pakai app authenticator (Google
+Authenticator, Authy, dll), abis itu login butuh kode 6 digit juga. Bawaan
+Supabase Auth, nggak perlu setup tambahan di luar app ini.
