@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { refreshAccessToken, listMessages, getMessage } from "@/lib/google/gmail";
 import { listUpcomingEvents } from "@/lib/google/calendar";
 import { sendTelegramMessage } from "@/lib/telegram/bot";
+import { sendPushToUser } from "@/lib/push";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
       if (!link.chat_id) continue;
       try {
         const briefing = await buildMorningBriefing(admin, link.user_id);
-        await sendTelegramMessage(link.chat_id, briefing);
+        await sendTelegramMessage(link.chat_id, briefing.text);
         results.push({ user_id: link.user_id, status: "morning briefing sent" });
       } catch (err) {
         results.push({
@@ -106,10 +107,37 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    const { data: pushRows } = await admin.from("push_subscriptions").select("user_id");
+    const userIds = Array.from(new Set((pushRows ?? []).map((p) => p.user_id)));
+
+    for (const userId of userIds) {
+      try {
+        const briefing = await buildMorningBriefing(admin, userId);
+        const { sent } = await sendPushToUser(admin, userId, {
+          title: "🌅 Ringkasan Pagi",
+          body: briefing.pushBody,
+          url: "/dashboard",
+        });
+        results.push({
+          user_id: userId,
+          status: sent > 0 ? `push sent to ${sent} device(s)` : "push: no active subscription",
+        });
+      } catch (err) {
+        results.push({
+          user_id: userId,
+          status: `push error: ${err instanceof Error ? err.message : "unknown"}`,
+        });
+      }
+    }
+  }
+
   return NextResponse.json({ results });
 }
 
-async function buildMorningBriefing(admin: SupabaseClient, userId: string): Promise<string> {
+type Briefing = { text: string; pushBody: string };
+
+async function buildMorningBriefing(admin: SupabaseClient, userId: string): Promise<Briefing> {
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   const startOfToday = new Date(now);
@@ -211,5 +239,10 @@ async function buildMorningBriefing(admin: SupabaseClient, userId: string): Prom
     }
   }
 
-  return lines.join("\n");
+  const pushParts: string[] = [`Saldo ${formatCurrency(income - expense)}`];
+  if (budgetAlerts.length > 0) pushParts.push(`${budgetAlerts.length} anggaran mepet`);
+  if (dueTasks && dueTasks.length > 0) pushParts.push(`${dueTasks.length} tugas due`);
+  if (overdueTasks && overdueTasks.length > 0) pushParts.push(`${overdueTasks.length} tugas telat`);
+
+  return { text: lines.join("\n"), pushBody: pushParts.join(" · ") };
 }

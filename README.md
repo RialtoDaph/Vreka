@@ -104,6 +104,28 @@ sehari (saldo, tugas due/telat hari ini, anggaran yang mepet, kebiasaan yang
 belum dicentang, dan jadwal Calendar kalau udah connect) — jadwalnya nebeng
 di cron yang sama dengan digest email (`/api/cron/daily-digest`, `0 7 * * *` UTC).
 
+## PWA & Push Notification (opsional — biar Vreka bisa di-install di HP dan ngirim notifikasi)
+
+Vreka udah installable sebagai PWA out of the box (manifest + service worker),
+nggak perlu setup tambahan buat itu — buka di HP, browser bakal nawarin
+"Add to Home Screen" / "Install app". Push notification-nya yang perlu
+di-setup:
+
+1. Generate VAPID key pair (sekali aja, key-nya nggak terikat akun/layanan
+   luar apa pun): `npx web-push generate-vapid-keys`.
+2. Set di Vercel:
+   - `VAPID_PUBLIC_KEY` dan `VAPID_PRIVATE_KEY` — dari langkah 1.
+   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — sama persis dengan `VAPID_PUBLIC_KEY`
+     (browser butuh versi public-nya buat subscribe, makanya di-duplikat ke
+     env var `NEXT_PUBLIC_`).
+   - `VAPID_SUBJECT` — `mailto:email-kamu@contoh.com` (syarat protokol VAPID,
+     bukan dipakai buat ngirim email).
+3. Redeploy, lalu buka halaman **Aslan** → klik **Aktifkan** di bagian Push
+   Notification, izinin notifikasi pas diminta browser.
+
+Setelah aktif, dapet notifikasi ringkasan pagi bareng jadwal cron yang sama
+(saldo, jumlah anggaran mepet, tugas due/telat).
+
 ## Modul
 
 - **Keuangan** — transaksi (pemasukan/pengeluaran), pos tetap (manual atau
@@ -129,5 +151,9 @@ di cron yang sama dengan digest email (`/api/cron/daily-digest`, `0 7 * * *` UTC
   Gmail di-connect bisa cari/baca email, bikin draft balesan, liat/bikin event
   Google Calendar, plus ringkasan email belum dibaca otomatis sekali sehari,
   kalau Telegram di-connect bisa diajak chat langsung dari Telegram dan dapet
-  morning briefing harian, dan tiap aksi yang diambil Aslan (nyatet transaksi,
-  ubah data, dst) tercatat di log Aktivitas (halaman Aslan) buat transparansi
+  morning briefing harian, tiap aksi yang diambil Aslan (nyatet transaksi,
+  ubah data, dst) tercatat di log Aktivitas buat transparansi, dan ada tombol
+  buat export semua data kamu jadi satu file JSON
+
+Plus **Command Palette** (`⌘K` / `Ctrl+K`) buat lompat cepat ke modul mana
+aja dari mana aja di dashboard.

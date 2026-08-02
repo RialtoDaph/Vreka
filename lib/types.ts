@@ -152,6 +152,15 @@ export type AssistantMessage = {
   created_at: string;
 };
 
+export type PushSubscriptionRow = {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string;
+};
+
 export type AssistantAuditLog = {
   id: string;
   user_id: string;

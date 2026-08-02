@@ -64,6 +64,17 @@ function mockGoogle() {
   }));
 }
 
+function mockPush(sendResult: { sent: number; removed: number } = { sent: 1, removed: 0 }) {
+  const calls: Array<{ userId: string; payload: unknown }> = [];
+  vi.doMock("@/lib/push", () => ({
+    sendPushToUser: vi.fn((_admin: unknown, userId: string, payload: unknown) => {
+      calls.push({ userId, payload });
+      return Promise.resolve(sendResult);
+    }),
+  }));
+  return calls;
+}
+
 beforeEach(() => {
   vi.stubEnv("CRON_SECRET", "test-secret");
 });
@@ -166,5 +177,53 @@ describe("GET /api/cron/daily-digest", () => {
     expect(body.results).toEqual([
       { user_id: "user-1", status: "briefing error: Telegram down" },
     ]);
+  });
+
+  it("sends a push notification with a compact summary to each user with an active subscription", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    vi.stubEnv("VAPID_PUBLIC_KEY", "pub");
+    vi.stubEnv("VAPID_PRIVATE_KEY", "priv");
+    mockGoogle();
+    const pushCalls = mockPush({ sent: 1, removed: 0 });
+
+    mockAdmin({
+      push_subscriptions: [{ data: [{ user_id: "user-1" }] }],
+      transactions: [{ data: [{ type: "income", category: "Gaji", amount: 1000 }] }],
+      budgets: [{ data: [] }],
+      tasks: [{ data: [{ title: "Due", priority: "high" }] }, { data: [] }],
+      habits: [{ data: [] }],
+      habit_checks: [{ data: [] }],
+      google_credentials: [{ data: null }],
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(req("test-secret"));
+    const body = await res.json();
+
+    expect(body.results).toEqual([{ user_id: "user-1", status: "push sent to 1 device(s)" }]);
+    expect(pushCalls).toHaveLength(1);
+    expect(pushCalls[0].userId).toBe("user-1");
+    expect(pushCalls[0].payload).toMatchObject({
+      title: "🌅 Ringkasan Pagi",
+      body: expect.stringContaining("1 tugas due"),
+      url: "/dashboard",
+    });
+  });
+
+  it("skips the push section entirely when VAPID keys aren't configured", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    mockGoogle();
+    const pushCalls = mockPush();
+
+    mockAdmin({ push_subscriptions: [{ data: [{ user_id: "user-1" }] }] });
+
+    const { GET } = await import("./route");
+    const res = await GET(req("test-secret"));
+    const body = await res.json();
+
+    expect(body.results).toEqual([]);
+    expect(pushCalls).toHaveLength(0);
   });
 });

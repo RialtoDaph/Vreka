@@ -6,6 +6,8 @@ import { AssistantMessage } from "@/lib/types";
 import { ASSISTANT_MODELS, DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
+import DataExport from "@/components/asisten/DataExport";
+import PushNotifications from "@/components/asisten/PushNotifications";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
@@ -426,6 +428,14 @@ export default function AsistenPage() {
               </button>
             ))}
         </div>
+      </HudPanel>
+
+      <HudPanel className="text-sm">
+        <PushNotifications />
+      </HudPanel>
+
+      <HudPanel className="text-sm">
+        <DataExport />
       </HudPanel>
 
       <ActivityLog />
