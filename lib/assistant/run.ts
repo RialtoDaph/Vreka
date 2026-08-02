@@ -76,71 +76,89 @@ export async function runAssistantChat(
     result_summary: string;
   }> = [];
 
-  for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const response = await anthropic.messages.create({
-      model,
-      max_tokens: 2048,
-      system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-      messages,
-      tools: CACHED_TOOLS,
-      ...modelRequestExtras(model),
-    });
-
-    if (response.stop_reason === "refusal") {
-      finalText = "Maaf, aku nggak bisa bantu yang itu.";
-      break;
-    }
-
-    if (response.stop_reason !== "tool_use") {
-      finalText = textFromContent(response.content) || "(nggak ada respons)";
-      break;
-    }
-
-    messages.push({ role: "assistant", content: response.content });
-
-    const toolUseBlocks = response.content.filter(
-      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
-    );
-
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-    for (const toolUse of toolUseBlocks) {
-      const input = (toolUse.input as Record<string, unknown>) ?? {};
-      const { ok, result } = await executeAssistantTool(supabase, userId, toolUse.name, input);
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: toolUse.id,
-        content: result,
-        is_error: !ok,
+  try {
+    for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+      const response = await anthropic.messages.create({
+        model,
+        max_tokens: 2048,
+        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+        messages,
+        tools: CACHED_TOOLS,
+        ...modelRequestExtras(model),
       });
-      auditRows.push({
-        user_id: userId,
-        tool_name: toolUse.name,
-        input,
-        result_ok: ok,
-        result_summary: result.slice(0, 500),
-      });
-    }
 
-    messages.push({ role: "user", content: toolResults });
+      if (response.stop_reason === "refusal") {
+        finalText = "Maaf, aku nggak bisa bantu yang itu.";
+        break;
+      }
 
-    if (i === MAX_TOOL_ITERATIONS - 1) {
-      finalText = textFromContent(response.content) || "Selesai.";
+      if (response.stop_reason !== "tool_use") {
+        finalText = textFromContent(response.content) || "(nggak ada respons)";
+        break;
+      }
+
+      messages.push({ role: "assistant", content: response.content });
+
+      const toolUseBlocks = response.content.filter(
+        (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+      );
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const toolUse of toolUseBlocks) {
+        const input = (toolUse.input as Record<string, unknown>) ?? {};
+        const { ok, result } = await executeAssistantTool(supabase, userId, toolUse.name, input);
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: result,
+          is_error: !ok,
+        });
+        auditRows.push({
+          user_id: userId,
+          tool_name: toolUse.name,
+          input,
+          result_ok: ok,
+          result_summary: result.slice(0, 500),
+        });
+      }
+
+      messages.push({ role: "user", content: toolResults });
+
+      if (i === MAX_TOOL_ITERATIONS - 1) {
+        finalText = textFromContent(response.content) || "Selesai.";
+      }
     }
+  } catch (err) {
+    // A tool call (e.g. a revoked Google token mid-loop) or the Claude API
+    // call itself can throw. Fall back to a friendly reply instead of
+    // letting it crash the route -- and critically, `auditRows` from any
+    // tool calls that already succeeded earlier in this same loop are kept
+    // and still persisted below, instead of vanishing from the Aktivitas
+    // log along with the crash.
+    console.error("Aslan: tool loop gagal di tengah jalan:", err);
+    finalText =
+      "Aduh, ada gangguan pas mroses ini. Coba lagi sebentar lagi -- kalau baru connect Gmail/Calendar, coba disconnect & connect ulang dari halaman ini.";
   }
 
   after(async () => {
-    await supabase.from("assistant_messages").insert({
-      user_id: userId,
-      role: "user",
-      content: userMessage,
-    });
-    await supabase.from("assistant_messages").insert({
-      user_id: userId,
-      role: "assistant",
-      content: finalText,
-    });
-    if (auditRows.length > 0) {
-      await supabase.from("assistant_audit_log").insert(auditRows);
+    try {
+      await supabase.from("assistant_messages").insert({
+        user_id: userId,
+        role: "user",
+        content: userMessage,
+      });
+      await supabase.from("assistant_messages").insert({
+        user_id: userId,
+        role: "assistant",
+        content: finalText,
+      });
+      if (auditRows.length > 0) {
+        await supabase.from("assistant_audit_log").insert(auditRows);
+      }
+    } catch (err) {
+      // Persistence failing here would otherwise silently drop this turn's
+      // audit trail even though the underlying tool mutations succeeded.
+      console.error("Aslan: gagal simpan riwayat chat / audit log:", err);
     }
   });
 

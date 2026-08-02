@@ -12,3 +12,6 @@ export const ghostBtnClass =
 
 export const dangerBtnClass =
   "text-rose-glow/70 hover:text-rose-glow text-xs font-mono transition-colors";
+
+export const errorBannerClass =
+  "text-xs text-rose-glow bg-rose-glow/10 border border-rose-glow/30 rounded-sm px-3 py-2";

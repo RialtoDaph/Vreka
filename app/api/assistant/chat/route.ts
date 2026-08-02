@@ -30,7 +30,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const finalText = await runAssistantChat(supabase, user.id, userMessage, model, apiKey);
-
-  return NextResponse.json({ message: finalText });
+  try {
+    const finalText = await runAssistantChat(supabase, user.id, userMessage, model, apiKey);
+    return NextResponse.json({ message: finalText });
+  } catch (err) {
+    console.error("POST /api/assistant/chat gagal:", err);
+    return NextResponse.json(
+      { error: "Aslan lagi gangguan. Coba lagi sebentar lagi." },
+      { status: 500 }
+    );
+  }
 }

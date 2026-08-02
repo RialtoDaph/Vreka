@@ -6,7 +6,7 @@ import { Habit, HabitCheck } from "@/lib/types";
 import { computeStreak } from "@/lib/habits";
 import { todayKey } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import { inputClass, ghostBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 export default function HabitsPanel() {
   const supabase = createClient();
@@ -15,6 +15,7 @@ export default function HabitsPanel() {
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
   const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -41,6 +42,7 @@ export default function HabitsPanel() {
     const title = newTitle.trim();
     if (!title) return;
     setAdding(true);
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -48,44 +50,64 @@ export default function HabitsPanel() {
       setAdding(false);
       return;
     }
-    const { data } = await supabase
+    const { data, error: insertError } = await supabase
       .from("habits")
       .insert({ user_id: user.id, title })
       .select("*")
       .single();
-    if (data) setHabits((prev) => [...prev, data]);
+    if (insertError || !data) {
+      setError("Gagal tambah kebiasaan. Coba lagi.");
+      setAdding(false);
+      return;
+    }
+    setHabits((prev) => [...prev, data]);
     setNewTitle("");
     setAdding(false);
   }
 
   async function toggleToday(habit: Habit) {
+    setError(null);
     const today = todayKey();
+    const previous = checksByHabit;
     const existing = (checksByHabit[habit.id] ?? []).find((c) => c.period === today);
     if (existing) {
       setChecksByHabit((prev) => ({
         ...prev,
         [habit.id]: (prev[habit.id] ?? []).filter((c) => c.id !== existing.id),
       }));
-      await supabase.from("habit_checks").delete().eq("id", existing.id);
+      const { error: deleteError } = await supabase.from("habit_checks").delete().eq("id", existing.id);
+      if (deleteError) {
+        setChecksByHabit(previous);
+        setError("Gagal batal-centang. Coba lagi.");
+      }
     } else {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase
+      const { data, error: insertError } = await supabase
         .from("habit_checks")
         .insert({ user_id: user.id, habit_id: habit.id, period: today })
         .select("*")
         .single();
-      if (data) {
-        setChecksByHabit((prev) => ({ ...prev, [habit.id]: [...(prev[habit.id] ?? []), data] }));
+      if (insertError || !data) {
+        setError("Gagal centang kebiasaan. Coba lagi.");
+        return;
       }
+      setChecksByHabit((prev) => ({ ...prev, [habit.id]: [...(prev[habit.id] ?? []), data] }));
     }
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("habits").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus kebiasaan ini? Riwayat streak-nya ikut hilang.")) return;
+    setError(null);
+    const previous = habits;
     setHabits((prev) => prev.filter((h) => h.id !== id));
+    const { error: deleteError } = await supabase.from("habits").delete().eq("id", id);
+    if (deleteError) {
+      setHabits(previous);
+      setError("Gagal hapus kebiasaan. Coba lagi.");
+    }
   }
 
   return (
@@ -93,6 +115,8 @@ export default function HabitsPanel() {
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-display font-semibold text-white tracking-wide">Kebiasaan</h2>
       </div>
+
+      {error && <p className={`${errorBannerClass} mb-3`}>{error}</p>}
 
       <form onSubmit={handleAdd} className="flex gap-2 mb-4">
         <input

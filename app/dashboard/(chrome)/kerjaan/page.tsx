@@ -6,7 +6,14 @@ import { Task, TaskPriority, TaskStatus, TaskSubtask } from "@/lib/types";
 import { formatDateTime, daysUntil } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
 import HabitsPanel from "@/components/kerjaan/HabitsPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
   low: "Rendah",
@@ -35,6 +42,7 @@ export default function KerjaanPage() {
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [subtaskInput, setSubtaskInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -70,12 +78,16 @@ export default function KerjaanPage() {
     e.preventDefault();
     if (!title) return;
     setSaving(true);
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setSaving(false);
+      return;
+    }
 
-    await supabase.from("tasks").insert({
+    const { error: saveError } = await supabase.from("tasks").insert({
       user_id: user.id,
       title,
       description: description || null,
@@ -91,6 +103,12 @@ export default function KerjaanPage() {
       project: project.trim() || null,
     });
 
+    if (saveError) {
+      setError("Gagal simpan to-do. Coba lagi.");
+      setSaving(false);
+      return;
+    }
+
     setTitle("");
     setDescription("");
     setDeadline("");
@@ -102,39 +120,59 @@ export default function KerjaanPage() {
   }
 
   async function updateStatus(task: Task, status: TaskStatus) {
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.map((t) => (t.id === task.id ? { ...t, status } : t)));
-    await supabase.from("tasks").update({ status }).eq("id", task.id);
+    const { error: updateError } = await supabase.from("tasks").update({ status }).eq("id", task.id);
+    if (updateError) {
+      setItems(previous);
+      setError("Gagal update status. Coba lagi.");
+    }
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("tasks").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus to-do ini? Sub-task-nya ikut kehapus.")) return;
+    setError(null);
+    const previousItems = items;
+    const previousSubtasks = subtasksByTask;
     setItems((prev) => prev.filter((i) => i.id !== id));
     setSubtasksByTask((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
     });
+    const { error: deleteError } = await supabase.from("tasks").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previousItems);
+      setSubtasksByTask(previousSubtasks);
+      setError("Gagal hapus to-do. Coba lagi.");
+    }
   }
 
   async function handleAddSubtask(taskId: string) {
     const subtaskTitle = subtaskInput.trim();
     if (!subtaskTitle) return;
     setSubtaskInput("");
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase
+    const { data, error: insertError } = await supabase
       .from("task_subtasks")
       .insert({ user_id: user.id, task_id: taskId, title: subtaskTitle })
       .select("*")
       .single();
-    if (data) {
-      setSubtasksByTask((prev) => ({ ...prev, [taskId]: [...(prev[taskId] ?? []), data] }));
+    if (insertError || !data) {
+      setError("Gagal tambah sub-task. Coba lagi.");
+      return;
     }
+    setSubtasksByTask((prev) => ({ ...prev, [taskId]: [...(prev[taskId] ?? []), data] }));
   }
 
   async function toggleSubtask(subtask: TaskSubtask) {
+    setError(null);
+    const previous = subtasksByTask;
     const done = !subtask.done;
     setSubtasksByTask((prev) => ({
       ...prev,
@@ -142,15 +180,28 @@ export default function KerjaanPage() {
         s.id === subtask.id ? { ...s, done } : s
       ),
     }));
-    await supabase.from("task_subtasks").update({ done }).eq("id", subtask.id);
+    const { error: updateError } = await supabase
+      .from("task_subtasks")
+      .update({ done })
+      .eq("id", subtask.id);
+    if (updateError) {
+      setSubtasksByTask(previous);
+      setError("Gagal update sub-task. Coba lagi.");
+    }
   }
 
   async function deleteSubtask(subtask: TaskSubtask) {
+    setError(null);
+    const previous = subtasksByTask;
     setSubtasksByTask((prev) => ({
       ...prev,
       [subtask.task_id]: (prev[subtask.task_id] ?? []).filter((s) => s.id !== subtask.id),
     }));
-    await supabase.from("task_subtasks").delete().eq("id", subtask.id);
+    const { error: deleteError } = await supabase.from("task_subtasks").delete().eq("id", subtask.id);
+    if (deleteError) {
+      setSubtasksByTask(previous);
+      setError("Gagal hapus sub-task. Coba lagi.");
+    }
   }
 
   const projects = Array.from(new Set(items.map((t) => t.project).filter((p): p is string => !!p))).sort();
@@ -170,6 +221,8 @@ export default function KerjaanPage() {
           {showForm ? "Batal" : "+ To-do Baru"}
         </button>
       </header>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>

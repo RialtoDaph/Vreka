@@ -7,7 +7,14 @@ import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
 import { downloadCsv } from "@/lib/csv";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 export default function TransactionsTab() {
   const supabase = createClient();
@@ -15,6 +22,7 @@ export default function TransactionsTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [exportMonth, setExportMonth] = useState(new Date().toISOString().slice(0, 7));
   const [exporting, setExporting] = useState(false);
@@ -160,8 +168,12 @@ export default function TransactionsTab() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseAmount(amount);
-    if (!amount || !Number.isFinite(parsed) || parsed <= 0) return;
+    if (!amount || !Number.isFinite(parsed) || parsed <= 0) {
+      setError("Nominal nggak valid. Cek lagi formatnya (misal 50.000).");
+      return;
+    }
     setSaving(true);
+    setError(null);
 
     const {
       data: { user },
@@ -172,6 +184,7 @@ export default function TransactionsTab() {
     }
 
     let receiptPath = existingReceiptPath;
+    let uploadWarning: string | null = null;
     if (receiptFile) {
       setReceiptUploading(true);
       const ext = receiptFile.name.split(".").pop() || "jpg";
@@ -180,7 +193,11 @@ export default function TransactionsTab() {
         .from("receipts")
         .upload(path, receiptFile);
       setReceiptUploading(false);
-      if (!uploadError) receiptPath = path;
+      if (uploadError) {
+        uploadWarning = "Struk gagal diupload, tapi transaksinya tetap disimpan.";
+      } else {
+        receiptPath = path;
+      }
     }
 
     const payload = {
@@ -192,12 +209,17 @@ export default function TransactionsTab() {
       receipt_path: receiptPath,
     };
 
-    if (editingId) {
-      await supabase.from("transactions").update(payload).eq("id", editingId);
-    } else {
-      await supabase.from("transactions").insert({ user_id: user.id, ...payload });
+    const { error: saveError } = editingId
+      ? await supabase.from("transactions").update(payload).eq("id", editingId)
+      : await supabase.from("transactions").insert({ user_id: user.id, ...payload });
+
+    if (saveError) {
+      setError("Gagal simpan transaksi. Coba lagi.");
+      setSaving(false);
+      return;
     }
 
+    setError(uploadWarning);
     resetForm();
     setSaving(false);
     setShowForm(false);
@@ -205,8 +227,15 @@ export default function TransactionsTab() {
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("transactions").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus transaksi ini?")) return;
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
+    const { error: deleteError } = await supabase.from("transactions").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previous);
+      setError("Gagal hapus transaksi. Coba lagi.");
+    }
   }
 
   async function handleExport() {
@@ -267,6 +296,8 @@ export default function TransactionsTab() {
           {showForm ? "Batal" : "+ Catat Transaksi"}
         </button>
       </div>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>

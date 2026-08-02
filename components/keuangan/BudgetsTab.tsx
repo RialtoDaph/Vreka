@@ -7,7 +7,14 @@ import { formatCurrency, parseAmount } from "@/lib/format";
 import { localDateKey } from "@/lib/date";
 import { EXPENSE_CATEGORIES } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 export default function BudgetsTab() {
   const supabase = createClient();
@@ -17,6 +24,7 @@ export default function BudgetsTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [monthlyLimit, setMonthlyLimit] = useState("");
@@ -70,24 +78,36 @@ export default function BudgetsTab() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseAmount(monthlyLimit);
-    if (!monthlyLimit || !Number.isFinite(parsed) || parsed <= 0) return;
+    if (!monthlyLimit || !Number.isFinite(parsed) || parsed <= 0) {
+      setError("Batas bulanan nggak valid. Cek lagi formatnya (misal 500.000).");
+      return;
+    }
     setSaving(true);
+    setError(null);
 
-    if (editingId) {
-      await supabase.from("budgets").update({ monthly_limit: parsed }).eq("id", editingId);
-    } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      // Satu kategori cuma boleh punya satu anggaran (unique constraint),
-      // jadi kalau user pilih kategori yang udah ada, ini efektifnya update.
-      await supabase
-        .from("budgets")
-        .upsert(
-          { user_id: user.id, category, monthly_limit: parsed },
-          { onConflict: "user_id,category" }
-        );
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSaving(false);
+      return;
+    }
+
+    // Satu kategori cuma boleh punya satu anggaran (unique constraint), jadi
+    // kalau user pilih kategori yang udah ada, upsert ini efektifnya update.
+    const { error: saveError } = editingId
+      ? await supabase.from("budgets").update({ monthly_limit: parsed }).eq("id", editingId)
+      : await supabase
+          .from("budgets")
+          .upsert(
+            { user_id: user.id, category, monthly_limit: parsed },
+            { onConflict: "user_id,category" }
+          );
+
+    if (saveError) {
+      setError("Gagal simpan anggaran. Coba lagi.");
+      setSaving(false);
+      return;
     }
 
     resetForm();
@@ -97,8 +117,15 @@ export default function BudgetsTab() {
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("budgets").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus anggaran ini?")) return;
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
+    const { error: deleteError } = await supabase.from("budgets").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previous);
+      setError("Gagal hapus. Coba lagi.");
+    }
   }
 
   const budgetedCategories = new Set(items.map((b) => b.category));
@@ -117,6 +144,8 @@ export default function BudgetsTab() {
           {showForm ? "Batal" : "+ Anggaran Baru"}
         </button>
       </div>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>

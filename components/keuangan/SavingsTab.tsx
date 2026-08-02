@@ -5,7 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { SavingsGoal } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 export default function SavingsTab() {
   const supabase = createClient();
@@ -16,6 +23,7 @@ export default function SavingsTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addFundId, setAddFundId] = useState<string | null>(null);
   const [addFundValue, setAddFundValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -63,8 +71,20 @@ export default function SavingsTab() {
     e.preventDefault();
     const parsedTarget = parseAmount(target);
     const parsedCurrent = current ? parseAmount(current) : 0;
-    if (!name || !target || !Number.isFinite(parsedTarget) || parsedTarget <= 0) return;
+    if (!name || !target || !Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+      setError("Nama atau target nggak valid. Cek lagi formatnya (misal 10.000.000).");
+      return;
+    }
     setSaving(true);
+    setError(null);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       name,
@@ -73,14 +93,14 @@ export default function SavingsTab() {
       deadline: deadline || null,
     };
 
-    if (editingId) {
-      await supabase.from("savings_goals").update(payload).eq("id", editingId);
-    } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      await supabase.from("savings_goals").insert({ user_id: user.id, ...payload });
+    const { error: saveError } = editingId
+      ? await supabase.from("savings_goals").update(payload).eq("id", editingId)
+      : await supabase.from("savings_goals").insert({ user_id: user.id, ...payload });
+
+    if (saveError) {
+      setError("Gagal simpan target tabungan. Coba lagi.");
+      setSaving(false);
+      return;
     }
 
     resetForm();
@@ -91,19 +111,34 @@ export default function SavingsTab() {
 
   async function handleAddFund(goal: SavingsGoal) {
     const add = parseAmount(addFundValue);
-    if (!Number.isFinite(add) || !add) return;
-    await supabase
+    if (!Number.isFinite(add) || !add) {
+      setError("Nominal dana nggak valid.");
+      return;
+    }
+    setError(null);
+    const { error: updateError } = await supabase
       .from("savings_goals")
       .update({ current_amount: Number(goal.current_amount) + add })
       .eq("id", goal.id);
+    if (updateError) {
+      setError("Gagal tambah dana. Coba lagi.");
+      return;
+    }
     setAddFundId(null);
     setAddFundValue("");
     load();
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("savings_goals").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus target tabungan ini?")) return;
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
+    const { error: deleteError } = await supabase.from("savings_goals").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previous);
+      setError("Gagal hapus. Coba lagi.");
+    }
   }
 
   return (
@@ -113,6 +148,8 @@ export default function SavingsTab() {
           {showForm ? "Batal" : "+ Target Baru"}
         </button>
       </div>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>
