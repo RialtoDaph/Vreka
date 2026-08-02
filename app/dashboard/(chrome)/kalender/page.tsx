@@ -136,19 +136,53 @@ export default function KalenderPage() {
     setShowAddEvent(true);
   }
 
+  // Builds a Date from separate "YYYY-MM-DD" + "HH:mm" fields using the
+  // multi-arg Date constructor (interpreted in the browser's local
+  // timezone), instead of parsing a combined string -- parsing is what was
+  // silently producing UTC-ambiguous datetimes before.
+  function localDateTime(dateStr: string, timeStr: string): Date {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const [hh, mm] = timeStr.split(":").map(Number);
+    return new Date(y, m - 1, d, hh, mm, 0, 0);
+  }
+
+  // Google Calendar wants an explicit UTC offset on the dateTime string;
+  // without one it's ambiguous which timezone the event is actually in.
+  function toIsoWithLocalOffset(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const offsetMin = -d.getTimezoneOffset();
+    const sign = offsetMin >= 0 ? "+" : "-";
+    const offH = pad(Math.floor(Math.abs(offsetMin) / 60));
+    const offM = pad(Math.abs(offsetMin) % 60);
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}:00${sign}${offH}:${offM}`
+    );
+  }
+
+  // An end clock-time at or before the start clock-time means the event
+  // crosses midnight (e.g. a 22:30-10:00 overnight flight), not a 0/negative
+  // duration -- roll the end over to the next day instead of sending Google
+  // a request it rejects as "timeRangeEmpty".
+  const crossesMidnight = eventEnd <= eventStart;
+
   async function handleCreateEvent(e: React.FormEvent) {
     e.preventDefault();
     if (!eventTitle.trim()) return;
     setEventSaving(true);
     setEventError(null);
     try {
+      const startDt = localDateTime(eventDate, eventStart);
+      const endDt = localDateTime(eventDate, eventEnd);
+      if (crossesMidnight) endDt.setDate(endDt.getDate() + 1);
+
       const res = await fetch("/api/google/calendar/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           summary: eventTitle.trim(),
-          start: `${eventDate}T${eventStart}:00`,
-          end: `${eventDate}T${eventEnd}:00`,
+          start: toIsoWithLocalOffset(startDt),
+          end: toIsoWithLocalOffset(endDt),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -305,6 +339,12 @@ export default function KalenderPage() {
                 className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
               />
             </div>
+            {crossesMidnight && (
+              <p className="text-[11px] text-amber-glow">
+                Jam selesai lebih awal dari jam mulai — dianggap berakhir keesokan harinya (event lewat
+                tengah malam).
+              </p>
+            )}
             <p className="text-[11px] text-slate-600">
               Event dibuat langsung di Google Calendar kamu — pastiin udah connect di halaman Aslan.
             </p>
