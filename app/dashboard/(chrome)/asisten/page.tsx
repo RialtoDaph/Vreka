@@ -19,6 +19,7 @@ export default function AsistenPage() {
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [awaitingFirstChunk, setAwaitingFirstChunk] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -214,6 +215,7 @@ export default function AsistenPage() {
 
     setError(null);
     setSending(true);
+    setAwaitingFirstChunk(true);
     setMessages((prev) => [
       ...prev,
       {
@@ -225,34 +227,61 @@ export default function AsistenPage() {
       },
     ]);
 
+    const assistantId = `assistant-${Date.now()}`;
+    let assistantText = "";
+    let started = false;
+
     try {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, model }),
       });
-      const data = await res.json();
+
       if (!res.ok) {
-        setError(data.error ?? "Gagal menghubungi asisten.");
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "Gagal menghubungi asisten.");
         return;
       }
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-${Date.now()}`,
-          user_id: "",
-          role: "assistant",
-          content: data.message,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-      if (voiceMode && data.message) {
-        await speakText(data.message);
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("Response tanpa body.");
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (!chunk) continue;
+        assistantText += chunk;
+        if (!started) {
+          started = true;
+          setAwaitingFirstChunk(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: assistantId,
+              user_id: "",
+              role: "assistant",
+              content: assistantText,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+        } else {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: assistantText } : m))
+          );
+        }
+      }
+
+      if (voiceMode && assistantText) {
+        await speakText(assistantText);
       }
     } catch {
       setError("Gagal menghubungi asisten. Coba lagi.");
     } finally {
       setSending(false);
+      setAwaitingFirstChunk(false);
     }
   }
 
@@ -479,7 +508,7 @@ export default function AsistenPage() {
               </div>
             ))
           )}
-          {(sending || transcribing) && (
+          {((sending && awaitingFirstChunk) || transcribing) && (
             <div className="flex items-end gap-2 justify-start">
               <img
                 src="/aslan.png"

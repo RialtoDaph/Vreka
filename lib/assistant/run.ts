@@ -14,34 +14,29 @@ const CACHED_TOOLS: Anthropic.Tool[] = ASSISTANT_TOOLS.map((tool, i) =>
     : tool
 );
 
-function textFromContent(content: Anthropic.ContentBlock[]): string {
-  return content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
-}
-
-// Haiku 4.5 doesn't support adaptive thinking or the effort parameter — sending
-// either returns a 400. Opus 5 / Sonnet 5 support both.
+// Haiku 4.5 doesn't support the effort parameter — sending it returns a 400.
+// Opus 5 / Sonnet 5 do. Adaptive thinking is left off on purpose: it made
+// Aslan noticeably slower to start replying without a clear quality win for
+// the kind of short, tool-driven turns this assistant mostly handles.
 function modelRequestExtras(model: string) {
   if (model === "claude-haiku-4-5") return {};
-  return {
-    thinking: { type: "adaptive" as const },
-    output_config: { effort: "low" as const },
-  };
+  return { output_config: { effort: "low" as const } };
 }
 
 // Shared by the web chat route and the Telegram webhook — runs one turn of
 // the tool-use loop against a user's data and returns Aslan's final reply.
 // Persists both the user and assistant messages after returning (via
-// next/server's after()), so callers don't wait on the DB write.
+// next/server's after()), so callers don't wait on the DB write. When
+// onDelta is given, text is forwarded to it as it streams in from Anthropic
+// (across every tool-loop iteration) so callers can render it live instead
+// of waiting for the whole multi-turn loop to finish.
 export async function runAssistantChat(
   supabase: SupabaseClient,
   userId: string,
   userMessage: string,
   model: string,
-  apiKey: string
+  apiKey: string,
+  onDelta?: (delta: string) => void
 ): Promise<string> {
   const [{ data: history }, systemPrompt] = await Promise.all([
     supabase
@@ -78,7 +73,7 @@ export async function runAssistantChat(
 
   try {
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      const response = await anthropic.messages.create({
+      const stream = anthropic.messages.stream({
         model,
         max_tokens: 2048,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
@@ -86,6 +81,11 @@ export async function runAssistantChat(
         tools: CACHED_TOOLS,
         ...modelRequestExtras(model),
       });
+      stream.on("text", (delta) => {
+        finalText += delta;
+        onDelta?.(delta);
+      });
+      const response = await stream.finalMessage();
 
       if (response.stop_reason === "refusal") {
         finalText = "Maaf, aku nggak bisa bantu yang itu.";
@@ -93,7 +93,7 @@ export async function runAssistantChat(
       }
 
       if (response.stop_reason !== "tool_use") {
-        finalText = textFromContent(response.content) || "(nggak ada respons)";
+        if (!finalText) finalText = "(nggak ada respons)";
         break;
       }
 
@@ -124,20 +124,24 @@ export async function runAssistantChat(
 
       messages.push({ role: "user", content: toolResults });
 
-      if (i === MAX_TOOL_ITERATIONS - 1) {
-        finalText = textFromContent(response.content) || "Selesai.";
+      if (i === MAX_TOOL_ITERATIONS - 1 && !finalText) {
+        finalText = "Selesai.";
       }
     }
   } catch (err) {
     // A tool call (e.g. a revoked Google token mid-loop) or the Claude API
-    // call itself can throw. Fall back to a friendly reply instead of
-    // letting it crash the route -- and critically, `auditRows` from any
-    // tool calls that already succeeded earlier in this same loop are kept
-    // and still persisted below, instead of vanishing from the Aktivitas
-    // log along with the crash.
+    // call itself can throw. `finalText`/`onDelta` may already carry text
+    // streamed before the failure (can't un-send what the client already
+    // received), so append rather than overwrite -- and critically,
+    // `auditRows` from any tool calls that already succeeded earlier in
+    // this same loop are kept and still persisted below, instead of
+    // vanishing from the Aktivitas log along with the crash.
     console.error("Aslan: tool loop gagal di tengah jalan:", err);
-    finalText =
-      "Aduh, ada gangguan pas mroses ini. Coba lagi sebentar lagi -- kalau baru connect Gmail/Calendar, coba disconnect & connect ulang dari halaman ini.";
+    const fallback = finalText
+      ? "\n\n(Ada gangguan pas lanjutin ini -- coba lagi sebentar lagi.)"
+      : "Aduh, ada gangguan pas mroses ini. Coba lagi sebentar lagi -- kalau baru connect Gmail/Calendar, coba disconnect & connect ulang dari halaman ini.";
+    finalText += fallback;
+    onDelta?.(fallback);
   }
 
   after(async () => {

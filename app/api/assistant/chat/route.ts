@@ -30,14 +30,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  try {
-    const finalText = await runAssistantChat(supabase, user.id, userMessage, model, apiKey);
-    return NextResponse.json({ message: finalText });
-  } catch (err) {
-    console.error("POST /api/assistant/chat gagal:", err);
-    return NextResponse.json(
-      { error: "Aslan lagi gangguan. Coba lagi sebentar lagi." },
-      { status: 500 }
-    );
-  }
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        await runAssistantChat(supabase, user.id, userMessage, model, apiKey, (delta) => {
+          controller.enqueue(encoder.encode(delta));
+        });
+      } catch (err) {
+        // runAssistantChat already catches errors from inside its own tool
+        // loop and streams a friendly fallback through onDelta -- this only
+        // fires for something that throws outside that (e.g. the initial
+        // history/system-prompt fetch), so it's rare, but silently eating
+        // it here would erase the only server-side trace of why a reply
+        // never showed up.
+        console.error("POST /api/assistant/chat gagal:", err);
+        controller.enqueue(encoder.encode("Maaf, ada masalah pas mikir. Coba lagi ya."));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
