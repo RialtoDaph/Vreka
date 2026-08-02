@@ -33,6 +33,20 @@ function parseEvent(raw: GoogleCalendarEventRaw): CalendarEvent {
   };
 }
 
+// Google's error body is JSON like `{ error: { message, errors: [...] } }` --
+// callers otherwise end up dumping that raw JSON straight into UI-facing
+// error text, so pull out just the human-readable message when we can.
+function extractGoogleErrorMessage(bodyText: string): string {
+  try {
+    const parsed = JSON.parse(bodyText);
+    const message = parsed?.error?.message;
+    if (typeof message === "string" && message.trim()) return message;
+  } catch {
+    // not JSON -- fall through to raw text
+  }
+  return bodyText;
+}
+
 export async function listUpcomingEvents(
   accessToken: string,
   opts: { maxResults?: number; timeMin?: Date; timeMax?: Date } = {}
@@ -51,7 +65,7 @@ export async function listUpcomingEvents(
   if (!res.ok) {
     const body = await res.text();
     console.error(`Google Calendar: gagal ambil event (status ${res.status}): ${body}`);
-    throw new Error(`Gagal ambil event kalender: ${body}`);
+    throw new Error(extractGoogleErrorMessage(body));
   }
   const data = await res.json();
   return ((data.items ?? []) as GoogleCalendarEventRaw[]).map(parseEvent);
@@ -77,7 +91,7 @@ export async function createEvent(
   if (!res.ok) {
     const body = await res.text();
     console.error(`Google Calendar: gagal bikin event (status ${res.status}): ${body}`);
-    throw new Error(`Gagal bikin event kalender: ${body}`);
+    throw new Error(extractGoogleErrorMessage(body));
   }
   return parseEvent((await res.json()) as GoogleCalendarEventRaw);
 }
