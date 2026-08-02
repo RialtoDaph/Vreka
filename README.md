@@ -94,7 +94,10 @@ liat kondisi keuangan, dll).
 
 ## Modul
 
-- **Keuangan** — transaksi (pemasukan/pengeluaran), utang/piutang, target tabungan
+- **Keuangan** — transaksi (pemasukan/pengeluaran), pos tetap (manual atau
+  auto-post tanggal tertentu tiap bulan lewat cron harian), utang/piutang,
+  target tabungan, anggaran bulanan per kategori, dan tab Analitik (grafik
+  tren & breakdown kategori)
 - **Kerjaan** — to-do dengan deadline & prioritas
 - **Pelajaran** — catatan + progress tracker
 - **Aslan** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi

@@ -19,6 +19,8 @@ export type RecurringItem = {
   name: string;
   amount: number;
   created_at: string;
+  auto_post: boolean;
+  day_of_month: number | null;
 };
 
 export type RecurringItemCheck = {

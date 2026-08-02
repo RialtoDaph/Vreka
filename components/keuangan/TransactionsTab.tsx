@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Transaction, TransactionType } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
+import { downloadCsv } from "@/lib/csv";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
 
@@ -15,6 +16,8 @@ export default function TransactionsTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [exportMonth, setExportMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [exporting, setExporting] = useState(false);
 
   const [type, setType] = useState<TransactionType>("expense");
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
@@ -131,11 +134,53 @@ export default function TransactionsTab() {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
 
+  async function handleExport() {
+    setExporting(true);
+    const [y, m] = exportMonth.split("-").map(Number);
+    const firstDay = `${exportMonth}-01`;
+    const lastDay = new Date(y, m, 0).toISOString().slice(0, 10);
+    const { data } = await supabase
+      .from("transactions")
+      .select("*")
+      .gte("occurred_on", firstDay)
+      .lte("occurred_on", lastDay)
+      .order("occurred_on", { ascending: true });
+    const rows = (data ?? []) as Transaction[];
+    const income = rows.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
+    const expense = rows.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+
+    downloadCsv(`vreka-transaksi-${exportMonth}.csv`, [
+      ["Laporan Keuangan", exportMonth],
+      ["Total Pemasukan", income],
+      ["Total Pengeluaran", expense],
+      ["Saldo", income - expense],
+      [],
+      ["Tanggal", "Tipe", "Kategori", "Catatan", "Jumlah"],
+      ...rows.map((t) => [
+        t.occurred_on,
+        t.type === "income" ? "Pemasukan" : "Pengeluaran",
+        t.category,
+        t.description ?? "",
+        Number(t.amount),
+      ]),
+    ]);
+    setExporting(false);
+  }
+
   const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end items-center gap-2 flex-wrap">
+        <input
+          type="month"
+          value={exportMonth}
+          onChange={(e) => setExportMonth(e.target.value)}
+          className={`${inputClass} w-auto`}
+        />
+        <button onClick={handleExport} disabled={exporting} className={ghostBtnClass}>
+          {exporting ? "Export..." : "Export CSV"}
+        </button>
         <button onClick={toggleForm} className={primaryBtnClass}>
           {showForm ? "Batal" : "+ Catat Transaksi"}
         </button>
