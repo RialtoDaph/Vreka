@@ -5,6 +5,7 @@ import { getGmailAccessToken, getCalendarAccessToken } from "@/lib/google/creden
 import { listMessages, getMessage, createDraftReply, type ParsedEmail } from "@/lib/google/gmail";
 import { listUpcomingEvents, createEvent } from "@/lib/google/calendar";
 import { formatDateTime } from "@/lib/format";
+import { searchAll } from "@/lib/search";
 
 // Email content comes from whoever sent the email, not the user -- a
 // crafted "instruction" buried in a subject/body shouldn't be able to
@@ -302,6 +303,18 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         content: { type: "string", description: "Isi catatan yang mau ditambahin." },
       },
       required: ["content"],
+    },
+  },
+  {
+    name: "search_records",
+    description:
+      "Cari histori data user sendiri (transaksi, to-do, catatan belajar, jurnal, dan memory yang tersimpan) pake kata kunci. Pakai ini kalau user nanya soal sesuatu yang spesifik dari masa lalu (misal 'kapan terakhir aku beli laptop', 'catatan belajar soal kalkulus', 'transaksi bulan lalu kategori makan') yang belum tentu ada di konteks percakapan sekarang.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Kata kunci pencarian." },
+      },
+      required: ["query"],
     },
   },
 ];
@@ -755,6 +768,26 @@ export async function executeAssistantTool(
         );
       if (error) return { ok: false, result: error.message };
       return { ok: true, result: "Catatan jurnal hari ini diupdate." };
+    }
+
+    case "search_records": {
+      const q = String(input.query ?? "").trim();
+      if (!q) return { ok: false, result: "query kosong." };
+      const results = await searchAll(supabase, userId, q, 5);
+      if (results.length === 0) return { ok: true, result: `Nggak nemu apa-apa buat "${q}".` };
+      const labels: Record<string, string> = {
+        transaction: "Transaksi",
+        task: "To-do",
+        note: "Catatan belajar",
+        journal: "Jurnal",
+        memory: "Memory",
+      };
+      return {
+        ok: true,
+        result: results
+          .map((r) => `- [${labels[r.source]}] ${r.title} — ${r.snippet}`)
+          .join("\n"),
+      };
     }
 
     default:
