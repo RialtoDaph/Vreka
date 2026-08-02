@@ -39,7 +39,7 @@ describe("JurnalPage", () => {
 
     const textarea = (await screen.findByPlaceholderText("Tulis apa aja...")) as HTMLTextAreaElement;
     expect(textarea.value).toBe("Hari ini produktif banget.");
-    expect(screen.getByText("Update Catatan Hari Ini")).toBeInTheDocument();
+    expect(screen.getByText("Update Catatan")).toBeInTheDocument();
   });
 
   it("shows past entries but excludes today's from the history list", async () => {
@@ -73,7 +73,7 @@ describe("JurnalPage", () => {
     const { default: JurnalPage } = await import("./page");
     render(<JurnalPage />);
 
-    const button = await screen.findByText("Simpan Catatan Hari Ini");
+    const button = await screen.findByText("Simpan Catatan");
     expect(button).toBeDisabled();
   });
 });

@@ -44,6 +44,8 @@ export default function AsistenPage() {
   const [telegramDeepLink, setTelegramDeepLink] = useState<string | null>(null);
   const [telegramError, setTelegramError] = useState<string | null>(null);
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   useEffect(() => {
     const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
     if (isValidAssistantModel(saved)) setModel(saved);
@@ -58,6 +60,9 @@ export default function AsistenPage() {
     else if (gmailConnected === "connected") setGmailNotice("Gmail berhasil terhubung.");
     if (gmailError || gmailConnected) {
       window.history.replaceState(null, "", window.location.pathname);
+      // Redirect balik dari Google OAuth reload halaman ini dari nol, jadi
+      // section Pengaturan perlu dibuka otomatis biar notice-nya keliatan.
+      setSettingsOpen(true);
     }
   }, []);
 
@@ -394,86 +399,6 @@ export default function AsistenPage() {
         </div>
       </header>
 
-      <HudPanel className="text-sm">
-        {gmailNotice && (
-          <p className="text-xs font-mono text-cyan-glow mb-2">{gmailNotice}</p>
-        )}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
-              Gmail
-            </p>
-            <p className="text-slate-300 truncate">
-              {gmailLoading
-                ? "Memuat..."
-                : gmailEmail
-                  ? `Terhubung: ${gmailEmail}`
-                  : "Belum terhubung — Aslan belum bisa cek/bales email kamu."}
-            </p>
-          </div>
-          {!gmailLoading &&
-            (gmailEmail ? (
-              <button onClick={handleDisconnectGmail} className={ghostBtnClass}>
-                Disconnect
-              </button>
-            ) : (
-              <a href="/api/google/oauth/start" className={primaryBtnClass}>
-                Connect Gmail
-              </a>
-            ))}
-        </div>
-      </HudPanel>
-
-      <HudPanel className="text-sm">
-        {telegramError && (
-          <p className="text-xs font-mono text-rose-glow mb-2">{telegramError}</p>
-        )}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
-              Telegram
-            </p>
-            <p className="text-slate-300 truncate">
-              {telegramLoading
-                ? "Memuat..."
-                : telegramLinked
-                  ? `Terhubung${telegramUsername ? `: @${telegramUsername}` : ""}`
-                  : telegramDeepLink
-                    ? "Buka Telegram, tekan Start di bot-nya buat nyelesain koneksi..."
-                    : "Belum terhubung — chat Aslan langsung dari Telegram."}
-            </p>
-          </div>
-          {!telegramLoading &&
-            (telegramLinked ? (
-              <button onClick={handleDisconnectTelegram} className={ghostBtnClass}>
-                Disconnect
-              </button>
-            ) : (
-              <button
-                onClick={handleConnectTelegram}
-                disabled={telegramLinking}
-                className={primaryBtnClass}
-              >
-                {telegramLinking ? "Memuat..." : "Connect Telegram"}
-              </button>
-            ))}
-        </div>
-      </HudPanel>
-
-      <HudPanel className="text-sm">
-        <PushNotifications />
-      </HudPanel>
-
-      <HudPanel className="text-sm">
-        <DataExport />
-      </HudPanel>
-
-      <HudPanel className="text-sm">
-        <TwoFactorAuth />
-      </HudPanel>
-
-      <ActivityLog />
-
       <HudPanel className="flex-1 flex flex-col min-h-0" as="section">
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {loading ? (
@@ -573,6 +498,99 @@ export default function AsistenPage() {
           </form>
         )}
       </HudPanel>
+
+      <div>
+        <button
+          onClick={() => setSettingsOpen((o) => !o)}
+          className="text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-300"
+        >
+          {settingsOpen ? "▾" : "▸"} Pengaturan & Integrasi
+        </button>
+        {settingsOpen && (
+          <HudPanel className="text-sm mt-2">
+            <div className="divide-y divide-line/60">
+              <div className="py-3 first:pt-0">
+                {gmailNotice && (
+                  <p className="text-xs font-mono text-cyan-glow mb-2">{gmailNotice}</p>
+                )}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
+                      Gmail & Google Calendar
+                    </p>
+                    <p className="text-slate-300 truncate">
+                      {gmailLoading
+                        ? "Memuat..."
+                        : gmailEmail
+                          ? `Terhubung: ${gmailEmail}`
+                          : "Belum terhubung — Aslan belum bisa cek/bales email atau baca/bikin event Calendar kamu."}
+                    </p>
+                  </div>
+                  {!gmailLoading &&
+                    (gmailEmail ? (
+                      <button onClick={handleDisconnectGmail} className={ghostBtnClass}>
+                        Disconnect
+                      </button>
+                    ) : (
+                      <a href="/api/google/oauth/start" className={primaryBtnClass}>
+                        Connect Gmail & Calendar
+                      </a>
+                    ))}
+                </div>
+              </div>
+
+              <div className="py-3">
+                {telegramError && (
+                  <p className="text-xs font-mono text-rose-glow mb-2">{telegramError}</p>
+                )}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
+                      Telegram
+                    </p>
+                    <p className="text-slate-300 truncate">
+                      {telegramLoading
+                        ? "Memuat..."
+                        : telegramLinked
+                          ? `Terhubung${telegramUsername ? `: @${telegramUsername}` : ""}`
+                          : telegramDeepLink
+                            ? "Buka Telegram, tekan Start di bot-nya buat nyelesain koneksi..."
+                            : "Belum terhubung — chat Aslan langsung dari Telegram."}
+                    </p>
+                  </div>
+                  {!telegramLoading &&
+                    (telegramLinked ? (
+                      <button onClick={handleDisconnectTelegram} className={ghostBtnClass}>
+                        Disconnect
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleConnectTelegram}
+                        disabled={telegramLinking}
+                        className={primaryBtnClass}
+                      >
+                        {telegramLinking ? "Memuat..." : "Connect Telegram"}
+                      </button>
+                    ))}
+                </div>
+              </div>
+
+              <div className="py-3">
+                <PushNotifications />
+              </div>
+
+              <div className="py-3">
+                <DataExport />
+              </div>
+
+              <div className="py-3 last:pb-0">
+                <TwoFactorAuth />
+              </div>
+            </div>
+          </HudPanel>
+        )}
+        {settingsOpen && <ActivityLog />}
+      </div>
     </div>
   );
 }

@@ -15,13 +15,17 @@ export default function JurnalPage() {
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const today = todayKey();
-  const prompt = useMemo(() => promptForDate(new Date()), []);
-  const todayEntry = entries.find((e) => e.entry_date === today);
-  const pastEntries = entries.filter((e) => e.entry_date !== today);
+  const [selectedDate, setSelectedDate] = useState(today);
+
+  const selectedEntry = entries.find((e) => e.entry_date === selectedDate);
+  const otherEntries = entries.filter((e) => e.entry_date !== selectedDate);
+  const prompt = useMemo(
+    () => promptForDate(new Date(`${selectedDate}T00:00:00`)),
+    [selectedDate]
+  );
 
   async function load() {
     setLoading(true);
@@ -40,6 +44,17 @@ export default function JurnalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function handleDateChange(date: string) {
+    setSelectedDate(date);
+    setContent(entries.find((e) => e.entry_date === date)?.content ?? "");
+  }
+
+  // Also used to jump into an existing entry from the list below to edit it.
+  function handleEditEntry(entry: JournalEntry) {
+    setSelectedDate(entry.entry_date);
+    setContent(entry.content);
+  }
+
   async function handleSave() {
     if (!content.trim()) return;
     setSaving(true);
@@ -54,7 +69,12 @@ export default function JurnalPage() {
     const { data, error: saveError } = await supabase
       .from("journal_entries")
       .upsert(
-        { user_id: user.id, entry_date: today, content: content.trim(), updated_at: new Date().toISOString() },
+        {
+          user_id: user.id,
+          entry_date: selectedDate,
+          content: content.trim(),
+          updated_at: new Date().toISOString(),
+        },
         { onConflict: "user_id,entry_date" }
       )
       .select("*")
@@ -65,8 +85,8 @@ export default function JurnalPage() {
       return;
     }
     setEntries((prev) => {
-      const withoutToday = prev.filter((e) => e.entry_date !== today);
-      return [data, ...withoutToday].sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1));
+      const withoutDate = prev.filter((e) => e.entry_date !== selectedDate);
+      return [data, ...withoutDate].sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1));
     });
     setSaving(false);
   }
@@ -82,7 +102,7 @@ export default function JurnalPage() {
       setError("Gagal hapus catatan. Coba lagi.");
       return;
     }
-    if (id === todayEntry?.id) setContent("");
+    if (id === selectedEntry?.id) setContent("");
   }
 
   return (
@@ -99,9 +119,28 @@ export default function JurnalPage() {
       {error && <p className={errorBannerClass}>{error}</p>}
 
       <HudPanel glow>
-        <p className="text-xs font-mono uppercase tracking-wider text-slate-500 mb-1.5">
-          {formatDate(today)}
-        </p>
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-1.5">
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={selectedDate}
+              max={today}
+              onChange={(e) => e.target.value && handleDateChange(e.target.value)}
+              className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+            />
+            {selectedDate !== today && (
+              <button
+                onClick={() => handleDateChange(today)}
+                className="text-[11px] font-mono uppercase tracking-wider text-cyan-glow/80 hover:text-cyan-glow"
+              >
+                Hari ini
+              </button>
+            )}
+          </div>
+          <p className="text-xs font-mono uppercase tracking-wider text-slate-500">
+            {formatDate(selectedDate)}
+          </p>
+        </div>
         <p className="text-sm text-cyan-glow/90 italic mb-3">{prompt}</p>
         <textarea
           value={content}
@@ -111,7 +150,7 @@ export default function JurnalPage() {
         />
         <div className="flex justify-end mt-3">
           <button onClick={handleSave} disabled={saving || !content.trim()} className={primaryBtnClass}>
-            {saving ? "Menyimpan..." : todayEntry ? "Update Catatan Hari Ini" : "Simpan Catatan Hari Ini"}
+            {saving ? "Menyimpan..." : selectedEntry ? "Update Catatan" : "Simpan Catatan"}
           </button>
         </div>
       </HudPanel>
@@ -120,33 +159,28 @@ export default function JurnalPage() {
         <HudPanel>
           <p className="text-sm text-slate-500">Memuat...</p>
         </HudPanel>
-      ) : pastEntries.length === 0 ? (
+      ) : otherEntries.length === 0 ? (
         <HudPanel>
           <p className="text-sm text-slate-500">Belum ada catatan sebelumnya.</p>
         </HudPanel>
       ) : (
         <div className="space-y-3">
-          {pastEntries.map((entry) => {
-            const expanded = expandedId === entry.id;
-            return (
-              <HudPanel key={entry.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    onClick={() => setExpandedId(expanded ? null : entry.id)}
-                    className="text-left flex-1 min-w-0"
-                  >
-                    <p className="text-xs font-mono text-cyan-glow/80">{formatDate(entry.entry_date)}</p>
-                    <p className={`text-sm text-slate-400 ${expanded ? "whitespace-pre-wrap" : "truncate"}`}>
-                      {entry.content}
-                    </p>
-                  </button>
-                  <button onClick={() => handleDelete(entry.id)} className={dangerBtnClass}>
-                    Hapus
-                  </button>
-                </div>
-              </HudPanel>
-            );
-          })}
+          {otherEntries.map((entry) => (
+            <HudPanel key={entry.id}>
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  onClick={() => handleEditEntry(entry)}
+                  className="text-left flex-1 min-w-0"
+                >
+                  <p className="text-xs font-mono text-cyan-glow/80">{formatDate(entry.entry_date)}</p>
+                  <p className="text-sm text-slate-400 truncate">{entry.content}</p>
+                </button>
+                <button onClick={() => handleDelete(entry.id)} className={dangerBtnClass}>
+                  Hapus
+                </button>
+              </div>
+            </HudPanel>
+          ))}
         </div>
       )}
     </div>
