@@ -33,7 +33,15 @@ export async function POST(request: NextRequest) {
       modelId: STT_MODEL_ID,
       file: audio,
     });
-    return NextResponse.json({ text: "text" in result ? result.text : "" });
+    if (!("text" in result)) {
+      return NextResponse.json({ text: "" });
+    }
+    // ElevenLabs still returns *some* text for near-silent/noise-only clips —
+    // it just doesn't have a real language to detect, so languageProbability
+    // comes back low. Treat those as "nothing said" instead of trusting the
+    // transcript, so background noise doesn't get relayed to Aslan as speech.
+    const confident = result.languageProbability >= 0.5;
+    return NextResponse.json({ text: confident ? result.text : "" });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Gagal transkrip suara." },

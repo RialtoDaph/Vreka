@@ -8,7 +8,12 @@ const SILENCE_THRESHOLD = 0.02;
 const SILENCE_DURATION_MS = 900;
 const MIN_SPEECH_MS = 400;
 const MAX_RECORD_MS = 20000;
-// Barge-in: shorter confirm window than MIN_SPEECH_MS so cutting in feels
+// Require the mic level to stay above SILENCE_THRESHOLD for this long before
+// treating it as the start of real speech — a single loud sample (a click, a
+// keyboard tap, a cough) used to be enough to arm the recorder, which is why
+// it kept "hearing" things that were never said.
+const SPEECH_CONFIRM_MS = 250;
+// Barge-in: shorter confirm window than SPEECH_CONFIRM_MS so cutting in feels
 // immediate, while still ignoring brief clicks/coughs.
 const BARGE_IN_CONFIRM_MS = 300;
 
@@ -100,6 +105,7 @@ export function useVoiceAssistant() {
       recorder.start();
       const startedAt = Date.now();
       let silenceStart: number | null = null;
+      let voiceStart: number | null = null;
       let hasSpoken = false;
 
       function tick() {
@@ -117,13 +123,21 @@ export function useVoiceAssistant() {
         const elapsed = Date.now() - startedAt;
 
         if (rms > SILENCE_THRESHOLD) {
-          hasSpoken = true;
           silenceStart = null;
-        } else if (hasSpoken && elapsed > MIN_SPEECH_MS) {
-          if (silenceStart === null) silenceStart = Date.now();
-          else if (Date.now() - silenceStart > SILENCE_DURATION_MS) {
-            recorder.stop();
-            return;
+          if (!hasSpoken) {
+            if (voiceStart === null) voiceStart = Date.now();
+            else if (Date.now() - voiceStart > SPEECH_CONFIRM_MS) hasSpoken = true;
+          }
+        } else {
+          // Dropped back below the threshold before the confirm window
+          // elapsed — that was a blip, not the start of speech.
+          voiceStart = null;
+          if (hasSpoken && elapsed > MIN_SPEECH_MS) {
+            if (silenceStart === null) silenceStart = Date.now();
+            else if (Date.now() - silenceStart > SILENCE_DURATION_MS) {
+              recorder.stop();
+              return;
+            }
           }
         }
 
