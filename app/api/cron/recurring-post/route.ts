@@ -37,24 +37,38 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ results: [] });
   }
 
-  const { data: existingChecks, error: checksError } = await admin
-    .from("recurring_item_checks")
-    .select("recurring_item_id")
-    .eq("period", period)
-    .in(
-      "recurring_item_id",
-      dueItems.map((i) => i.id)
-    );
-  if (checksError) {
-    return NextResponse.json({ error: checksError.message }, { status: 500 });
-  }
-  const alreadyChecked = new Set((existingChecks ?? []).map((c) => c.recurring_item_id));
-
   const results: Array<{ item_id: string; name: string; status: string }> = [];
 
   for (const item of dueItems) {
-    if (alreadyChecked.has(item.id)) {
-      results.push({ item_id: item.id, name: item.name, status: "skip: already posted this period" });
+    // Claim this (item, period) slot *before* posting anything, by relying
+    // on the DB's unique(recurring_item_id, period) constraint rather than
+    // a separate "already checked?" read -- a read-then-insert here raced
+    // with this same cron overlapping itself (retry, manual re-trigger) or
+    // with a manual check-off in RecurringTab: both could pass the read
+    // before either had inserted, producing two real transactions for the
+    // same period. An insert either wins the race atomically or fails with
+    // a unique-violation, so at most one transaction ever gets posted per
+    // (item, period) no matter how many callers try at once.
+    const { data: check, error: claimError } = await admin
+      .from("recurring_item_checks")
+      .insert({
+        user_id: item.user_id,
+        recurring_item_id: item.id,
+        transaction_id: null,
+        period,
+      })
+      .select("id")
+      .single();
+
+    if (claimError || !check) {
+      const alreadyPosted = claimError?.code === "23505"; // unique_violation
+      results.push({
+        item_id: item.id,
+        name: item.name,
+        status: alreadyPosted
+          ? "skip: already posted this period"
+          : `error: ${claimError?.message ?? "unknown"}`,
+      });
       continue;
     }
 
@@ -72,21 +86,22 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (txError || !tx) {
-      results.push({ item_id: item.id, name: item.name, status: `error: ${txError?.message}` });
+      // Release the claim so a later run can retry this period instead of
+      // permanently skipping it over a transient insert failure.
+      await admin.from("recurring_item_checks").delete().eq("id", check.id);
+      results.push({ item_id: item.id, name: item.name, status: `error: ${txError?.message ?? "unknown"}` });
       continue;
     }
 
-    const { error: checkError } = await admin.from("recurring_item_checks").insert({
-      user_id: item.user_id,
-      recurring_item_id: item.id,
-      transaction_id: tx.id,
-      period,
-    });
+    const { error: linkError } = await admin
+      .from("recurring_item_checks")
+      .update({ transaction_id: tx.id })
+      .eq("id", check.id);
 
     results.push({
       item_id: item.id,
       name: item.name,
-      status: checkError ? `error: ${checkError.message}` : "posted",
+      status: linkError ? `posted, but link failed: ${linkError.message}` : "posted",
     });
   }
 

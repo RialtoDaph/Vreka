@@ -12,13 +12,21 @@ function req(secret?: string) {
 
 type AdminMockConfig = {
   dueItems?: Array<Record<string, unknown>>;
-  existingChecks?: Array<{ recurring_item_id: string }>;
+  // Item IDs that should fail the atomic check-claim insert with a
+  // unique-violation, simulating "already posted this period".
+  alreadyClaimedItemIds?: string[];
   txInsertResult?: { data: { id: string } | null; error: { message: string } | null };
 };
 
-function mockAdmin({ dueItems = [], existingChecks = [], txInsertResult }: AdminMockConfig) {
+function mockAdmin({
+  dueItems = [],
+  alreadyClaimedItemIds = [],
+  txInsertResult,
+}: AdminMockConfig) {
   const insertedTransactions: unknown[] = [];
-  const insertedChecks: unknown[] = [];
+  const insertedChecks: Array<{ user_id: string; recurring_item_id: string; transaction_id: string | null; period: string }> = [];
+  const deletedCheckIds: string[] = [];
+  const updatedChecks: Array<{ id: string; transaction_id: string }> = [];
 
   vi.doMock("@/lib/supabase/admin", () => ({
     createAdminClient: () => ({
@@ -34,15 +42,38 @@ function mockAdmin({ dueItems = [], existingChecks = [], txInsertResult }: Admin
         }
         if (table === "recurring_item_checks") {
           return {
-            select: () => ({
-              eq: () => ({
-                in: () => Promise.resolve({ data: existingChecks, error: null }),
+            insert: (payload: { recurring_item_id: string }) => ({
+              select: () => ({
+                single: () => {
+                  if (alreadyClaimedItemIds.includes(payload.recurring_item_id)) {
+                    return Promise.resolve({
+                      data: null,
+                      error: { message: "duplicate key value violates unique constraint", code: "23505" },
+                    });
+                  }
+                  const id = `check-${payload.recurring_item_id}`;
+                  insertedChecks.push({
+                    user_id: payload.recurring_item_id === "item-1" ? "user-1" : "unknown",
+                    recurring_item_id: payload.recurring_item_id,
+                    transaction_id: null,
+                    period: PERIOD,
+                  } as never);
+                  return Promise.resolve({ data: { id }, error: null });
+                },
               }),
             }),
-            insert: (payload: unknown) => {
-              insertedChecks.push(payload);
-              return Promise.resolve({ error: null });
-            },
+            update: (payload: { transaction_id: string }) => ({
+              eq: (_col: string, id: string) => {
+                updatedChecks.push({ id, transaction_id: payload.transaction_id });
+                return Promise.resolve({ error: null });
+              },
+            }),
+            delete: () => ({
+              eq: (_col: string, id: string) => {
+                deletedCheckIds.push(id);
+                return Promise.resolve({ error: null });
+              },
+            }),
           };
         }
         if (table === "transactions") {
@@ -62,7 +93,7 @@ function mockAdmin({ dueItems = [], existingChecks = [], txInsertResult }: Admin
     }),
   }));
 
-  return { insertedTransactions, insertedChecks };
+  return { insertedTransactions, insertedChecks, deletedCheckIds, updatedChecks };
 }
 
 beforeEach(() => {
@@ -93,8 +124,8 @@ describe("GET /api/cron/recurring-post", () => {
     expect(res.status).toBe(401);
   });
 
-  it("posts a transaction for a due item that hasn't been checked this period", async () => {
-    const { insertedTransactions, insertedChecks } = mockAdmin({
+  it("claims the period, posts the transaction, then links it back to the check", async () => {
+    const { insertedTransactions, updatedChecks } = mockAdmin({
       dueItems: [
         {
           id: "item-1",
@@ -107,7 +138,6 @@ describe("GET /api/cron/recurring-post", () => {
           auto_post: true,
         },
       ],
-      existingChecks: [],
     });
     const { GET } = await import("./route");
     const res = await GET(req("test-secret"));
@@ -125,12 +155,10 @@ describe("GET /api/cron/recurring-post", () => {
         occurred_on: new Date().toISOString().slice(0, 10),
       },
     ]);
-    expect(insertedChecks).toEqual([
-      { user_id: "user-1", recurring_item_id: "item-1", transaction_id: "tx-1", period: PERIOD },
-    ]);
+    expect(updatedChecks).toEqual([{ id: "check-item-1", transaction_id: "tx-1" }]);
   });
 
-  it("skips a due item that's already been posted this period, without inserting a duplicate", async () => {
+  it("skips a due item whose period-claim loses to a unique-violation, without inserting a duplicate transaction", async () => {
     const { insertedTransactions } = mockAdmin({
       dueItems: [
         {
@@ -144,7 +172,7 @@ describe("GET /api/cron/recurring-post", () => {
           auto_post: true,
         },
       ],
-      existingChecks: [{ recurring_item_id: "item-1" }],
+      alreadyClaimedItemIds: ["item-1"],
     });
     const { GET } = await import("./route");
     const res = await GET(req("test-secret"));
@@ -156,7 +184,33 @@ describe("GET /api/cron/recurring-post", () => {
     expect(insertedTransactions).toEqual([]);
   });
 
-  it("returns an empty result set without querying checks when nothing is due today", async () => {
+  it("releases the claim when the transaction insert fails, so a later run can retry", async () => {
+    const { deletedCheckIds } = mockAdmin({
+      dueItems: [
+        {
+          id: "item-1",
+          user_id: "user-1",
+          type: "expense",
+          category: "Tagihan",
+          name: "Internet",
+          amount: 45,
+          day_of_month: TODAY_DAY,
+          auto_post: true,
+        },
+      ],
+      txInsertResult: { data: null, error: { message: "insert failed" } },
+    });
+    const { GET } = await import("./route");
+    const res = await GET(req("test-secret"));
+    const body = await res.json();
+
+    expect(body.results).toEqual([
+      { item_id: "item-1", name: "Internet", status: "error: insert failed" },
+    ]);
+    expect(deletedCheckIds).toEqual(["check-item-1"]);
+  });
+
+  it("returns an empty result set when nothing is due today", async () => {
     mockAdmin({ dueItems: [] });
     const { GET } = await import("./route");
     const res = await GET(req("test-secret"));

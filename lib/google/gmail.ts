@@ -27,7 +27,9 @@ export async function exchangeCodeForTokens(code: string, redirectUri: string) {
     }),
   });
   if (!res.ok) {
-    throw new Error(`Gagal tukar code jadi token: ${await res.text()}`);
+    const body = await res.text();
+    console.error(`Google: gagal tukar code jadi token (status ${res.status}): ${body}`);
+    throw new Error(`Gagal tukar code jadi token: ${body}`);
   }
   return (await res.json()) as {
     access_token: string;
@@ -50,7 +52,13 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
     }),
   });
   if (!res.ok) {
-    throw new Error(`Gagal refresh token Google: ${await res.text()}`);
+    const body = await res.text();
+    // The routine failure mode here is a revoked/expired refresh token
+    // (user disconnected the app from their Google account, or Google
+    // force-expired it) -- log it so that's visible somewhere other than
+    // whatever caller's error message the user happens to see.
+    console.error(`Google: gagal refresh access token (status ${res.status}): ${body}`);
+    throw new Error(`Gagal refresh token Google: ${body}`);
   }
   const data = (await res.json()) as { access_token: string };
   return data.access_token;
@@ -60,7 +68,11 @@ export async function getProfile(accessToken: string): Promise<{ emailAddress: s
   const res = await fetch(`${GMAIL_API}/profile`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`Gagal ambil profil Gmail: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Google: gagal ambil profil Gmail (status ${res.status}): ${body}`);
+    throw new Error(`Gagal ambil profil Gmail: ${body}`);
+  }
   return res.json();
 }
 
@@ -125,7 +137,11 @@ export async function listMessages(
   const res = await fetch(`${GMAIL_API}/messages?${params.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`Gagal list email: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Google: gagal list email (status ${res.status}): ${body}`);
+    throw new Error(`Gagal list email: ${body}`);
+  }
   const data = await res.json();
   return data.messages ?? [];
 }
@@ -134,7 +150,11 @@ export async function getMessage(accessToken: string, id: string): Promise<Parse
   const res = await fetch(`${GMAIL_API}/messages/${id}?format=full`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`Gagal ambil email: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Google: gagal ambil email ${id} (status ${res.status}): ${body}`);
+    throw new Error(`Gagal ambil email: ${body}`);
+  }
   const data = await res.json();
   const headers: GmailHeader[] = data.payload?.headers ?? [];
   return {
@@ -181,5 +201,9 @@ export async function createDraftReply(
     },
     body: JSON.stringify({ message: { raw, threadId: params.threadId } }),
   });
-  if (!res.ok) throw new Error(`Gagal bikin draft: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Google: gagal bikin draft balasan (status ${res.status}): ${body}`);
+    throw new Error(`Gagal bikin draft: ${body}`);
+  }
 }

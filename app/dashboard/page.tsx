@@ -53,14 +53,18 @@ export default async function OverviewPage() {
   let calendarEvents: CalendarEvent[] = [];
   let calendarConnected = false;
   if (user) {
-    const cred = await getCalendarAccessToken(supabase, user.id);
-    if ("accessToken" in cred) {
-      calendarConnected = true;
-      try {
+    try {
+      const cred = await getCalendarAccessToken(supabase, user.id);
+      if ("accessToken" in cred) {
+        calendarConnected = true;
         calendarEvents = await listUpcomingEvents(cred.accessToken, { maxResults: 8 });
-      } catch {
-        // Kalender hub just shows "Terhubung" with no events on failure.
       }
+    } catch (err) {
+      // A revoked/expired refresh token throws out of getCalendarAccessToken
+      // (not one of its designed { error } responses) -- without this, that
+      // used to crash the whole Memory Map page load instead of just
+      // leaving the calendar widget showing "belum terhubung".
+      console.error("Dashboard: gagal ambil data Google Calendar:", err);
     }
   }
 

@@ -44,6 +44,8 @@ export async function sendPushToUser(
       if (statusCode === 404 || statusCode === 410) {
         await supabase.from("push_subscriptions").delete().eq("id", sub.id);
         removed++;
+      } else {
+        console.error(`Push notification gagal (user ${userId}, subscription ${sub.id}):`, err);
       }
     }
   }

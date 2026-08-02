@@ -48,7 +48,11 @@ export async function listUpcomingEvents(
   const res = await fetch(`${CALENDAR_API}/calendars/primary/events?${params.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`Gagal ambil event kalender: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Google Calendar: gagal ambil event (status ${res.status}): ${body}`);
+    throw new Error(`Gagal ambil event kalender: ${body}`);
+  }
   const data = await res.json();
   return ((data.items ?? []) as GoogleCalendarEventRaw[]).map(parseEvent);
 }
@@ -70,6 +74,10 @@ export async function createEvent(
       end: { dateTime: params.endIso },
     }),
   });
-  if (!res.ok) throw new Error(`Gagal bikin event kalender: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Google Calendar: gagal bikin event (status ${res.status}): ${body}`);
+    throw new Error(`Gagal bikin event kalender: ${body}`);
+  }
   return parseEvent((await res.json()) as GoogleCalendarEventRaw);
 }
