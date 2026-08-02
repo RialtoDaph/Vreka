@@ -624,12 +624,11 @@ export default function MemoryMap({ data }: Props) {
             style={{ borderColor: `${voiceStyle.color}4d` }}
           />
           <span className="absolute inset-0 rounded-full voice-dial-ring" />
-          <span
-            className="relative font-display font-bold tracking-[0.15em] text-[15px]"
-            style={{ color: voiceStyle.color }}
-          >
-            A.S.L.A.N
-          </span>
+          <img
+            src="/aslan.png"
+            alt=""
+            className="relative w-[100px] h-[100px] rounded-full object-cover border border-cyan-glow/40 shadow-glow"
+          />
         </button>
         <p
           className="font-mono text-[9.5px] uppercase tracking-[0.15em] flex items-center gap-1.5"

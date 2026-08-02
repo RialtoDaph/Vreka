@@ -14,14 +14,6 @@ const CACHED_TOOLS: Anthropic.Tool[] = ASSISTANT_TOOLS.map((tool, i) =>
     : tool
 );
 
-function textFromContent(content: Anthropic.ContentBlock[]): string {
-  return content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("\n")
-    .trim();
-}
-
 // Haiku 4.5 doesn't support adaptive thinking or the effort parameter — sending
 // either returns a 400. Opus 5 / Sonnet 5 support both.
 function modelRequestExtras(model: string) {
@@ -35,13 +27,17 @@ function modelRequestExtras(model: string) {
 // Shared by the web chat route and the Telegram webhook — runs one turn of
 // the tool-use loop against a user's data and returns Aslan's final reply.
 // Persists both the user and assistant messages after returning (via
-// next/server's after()), so callers don't wait on the DB write.
+// next/server's after()), so callers don't wait on the DB write. When
+// onDelta is given, text is forwarded to it as it streams in from Anthropic
+// (across every tool-loop iteration) so callers can render it live instead
+// of waiting for the whole multi-turn loop to finish.
 export async function runAssistantChat(
   supabase: SupabaseClient,
   userId: string,
   userMessage: string,
   model: string,
-  apiKey: string
+  apiKey: string,
+  onDelta?: (delta: string) => void
 ): Promise<string> {
   const [{ data: history }, systemPrompt] = await Promise.all([
     supabase
@@ -77,7 +73,7 @@ export async function runAssistantChat(
   }> = [];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const response = await anthropic.messages.create({
+    const stream = anthropic.messages.stream({
       model,
       max_tokens: 2048,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
@@ -85,6 +81,11 @@ export async function runAssistantChat(
       tools: CACHED_TOOLS,
       ...modelRequestExtras(model),
     });
+    stream.on("text", (delta) => {
+      finalText += delta;
+      onDelta?.(delta);
+    });
+    const response = await stream.finalMessage();
 
     if (response.stop_reason === "refusal") {
       finalText = "Maaf, aku nggak bisa bantu yang itu.";
@@ -92,7 +93,7 @@ export async function runAssistantChat(
     }
 
     if (response.stop_reason !== "tool_use") {
-      finalText = textFromContent(response.content) || "(nggak ada respons)";
+      if (!finalText) finalText = "(nggak ada respons)";
       break;
     }
 
@@ -123,8 +124,8 @@ export async function runAssistantChat(
 
     messages.push({ role: "user", content: toolResults });
 
-    if (i === MAX_TOOL_ITERATIONS - 1) {
-      finalText = textFromContent(response.content) || "Selesai.";
+    if (i === MAX_TOOL_ITERATIONS - 1 && !finalText) {
+      finalText = "Selesai.";
     }
   }
 
