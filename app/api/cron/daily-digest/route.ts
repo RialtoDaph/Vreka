@@ -16,8 +16,12 @@ export const maxDuration = 60;
 // registering a second Vercel Cron entry, since Hobby-plan projects only get
 // a couple of cron slots and this app already spends one on recurring-post.
 export async function GET(request: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Explicit `!cronSecret` check so a deployment that forgot to set
+  // CRON_SECRET fails closed instead of the expected value silently
+  // becoming the literal string "Bearer undefined".
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

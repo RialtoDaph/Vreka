@@ -94,6 +94,17 @@ describe("GET /api/cron/daily-digest", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects requests when CRON_SECRET is unset, even with header 'Bearer undefined'", async () => {
+    // Regression: `authHeader !== \`Bearer ${process.env.CRON_SECRET}\`` used
+    // to make an unset secret literally match the string "Bearer undefined".
+    vi.stubEnv("CRON_SECRET", "");
+    mockAdmin({});
+    mockGoogle();
+    const { GET } = await import("./route");
+    const res = await GET(req("undefined"));
+    expect(res.status).toBe(401);
+  });
+
   it("does nothing when neither ANTHROPIC_API_KEY nor TELEGRAM_BOT_TOKEN is configured", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "");

@@ -83,6 +83,16 @@ describe("GET /api/cron/recurring-post", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects requests when CRON_SECRET is unset, even with header 'Bearer undefined'", async () => {
+    // Regression: `authHeader !== \`Bearer ${process.env.CRON_SECRET}\`` used
+    // to make an unset secret literally match the string "Bearer undefined".
+    vi.stubEnv("CRON_SECRET", "");
+    mockAdmin({});
+    const { GET } = await import("./route");
+    const res = await GET(req("undefined"));
+    expect(res.status).toBe(401);
+  });
+
   it("posts a transaction for a due item that hasn't been checked this period", async () => {
     const { insertedTransactions, insertedChecks } = mockAdmin({
       dueItems: [

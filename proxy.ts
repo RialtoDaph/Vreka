@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { resolveAuthRedirect } from "@/lib/mfaGate";
+import { isMfaGatedApiRoute, needsMfaChallenge, resolveAuthRedirect } from "@/lib/mfaGate";
 
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request: { headers: request.headers } });
@@ -32,9 +32,21 @@ export async function proxy(request: NextRequest) {
     aal = aalData;
   }
 
+  const pathname = request.nextUrl.pathname;
+
+  // Session-cookie-authenticated API routes get the same aal2 gate as
+  // dashboard pages, so a cookie stuck at aal1 (2FA enrolled but this
+  // session hasn't cleared the challenge yet) can't reach them directly and
+  // skip the second factor entirely. Not a redirect target like the page
+  // routes below -- these are fetch()/webhook-style callers, so a 401 JSON
+  // body is what the caller can actually act on.
+  if (isAuthed && needsMfaChallenge(aal) && isMfaGatedApiRoute(pathname)) {
+    return NextResponse.json({ error: "Verifikasi 2FA dulu sebelum lanjut." }, { status: 401 });
+  }
+
   const redirectTo = resolveAuthRedirect({
     isAuthed,
-    pathname: request.nextUrl.pathname,
+    pathname,
     aal,
   });
 
@@ -48,5 +60,14 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login", "/mfa"],
+  matcher: [
+    "/dashboard/:path*",
+    "/login",
+    "/mfa",
+    "/api/assistant/:path*",
+    "/api/google/:path*",
+    "/api/push/:path*",
+    "/api/telegram/link",
+    "/api/telegram/setup",
+  ],
 };

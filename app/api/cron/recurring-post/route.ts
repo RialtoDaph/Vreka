@@ -9,8 +9,12 @@ export const maxDuration = 30;
 // transaksinya otomatis — kecuali periode ini udah ke-check (manual atau
 // dari run cron sebelumnya), biar nggak dobel.
 export async function GET(request: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Explicit `!cronSecret` check so a deployment that forgot to set
+  // CRON_SECRET fails closed instead of the expected value silently
+  // becoming the literal string "Bearer undefined".
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

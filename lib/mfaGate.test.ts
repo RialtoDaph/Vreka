@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { needsMfaChallenge, resolveAuthRedirect } from "./mfaGate";
+import { isMfaGatedApiRoute, needsMfaChallenge, resolveAuthRedirect } from "./mfaGate";
 
 const NO_MFA = { currentLevel: "aal1", nextLevel: "aal1" };
 const NEEDS_CHALLENGE = { currentLevel: "aal1", nextLevel: "aal2" };
@@ -78,5 +78,31 @@ describe("resolveAuthRedirect", () => {
     expect(resolveAuthRedirect({ isAuthed: true, pathname: "/mfa", aal: CHALLENGE_CLEARED })).toBe(
       "/dashboard"
     );
+  });
+});
+
+describe("isMfaGatedApiRoute", () => {
+  it("gates session-cookie-authenticated API routes", () => {
+    expect(isMfaGatedApiRoute("/api/assistant/chat")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/assistant/scan-receipt")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/google/oauth/start")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/google/oauth/callback")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/google/calendar/list")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/push/subscribe")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/push/unsubscribe")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/telegram/link")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/telegram/setup")).toBe(true);
+  });
+
+  it("never gates secret/webhook-authenticated routes -- they have no user session to check", () => {
+    expect(isMfaGatedApiRoute("/api/cron/daily-digest")).toBe(false);
+    expect(isMfaGatedApiRoute("/api/cron/recurring-post")).toBe(false);
+    expect(isMfaGatedApiRoute("/api/telegram/webhook")).toBe(false);
+  });
+
+  it("does not gate unrelated paths", () => {
+    expect(isMfaGatedApiRoute("/dashboard/keuangan")).toBe(false);
+    expect(isMfaGatedApiRoute("/auth/callback")).toBe(false);
+    expect(isMfaGatedApiRoute("/")).toBe(false);
   });
 });
