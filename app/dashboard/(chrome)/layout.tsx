@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Sidebar from "@/components/Sidebar";
 import SignOutButton from "@/components/SignOutButton";
-import VoiceCallLauncher from "@/components/VoiceCallLauncher";
 import CommandPalette from "@/components/CommandPalette";
 
 export default async function DashboardLayout({
@@ -44,7 +43,6 @@ export default async function DashboardLayout({
       <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-28 max-w-6xl mx-auto w-full">
         {children}
       </main>
-      <VoiceCallLauncher />
       <CommandPalette />
     </div>
   );
