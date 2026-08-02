@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 type Command = { label: string; href: string; icon: string; keywords?: string };
 
 const COMMANDS: Command[] = [
-  { label: "Overview", href: "/dashboard", icon: "◈" },
+  { label: "Memory Map", href: "/dashboard", icon: "◈", keywords: "overview ringkasan graph" },
   {
     label: "Keuangan",
     href: "/dashboard/keuangan",

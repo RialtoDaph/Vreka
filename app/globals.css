@@ -156,11 +156,41 @@ body {
   border-color: rgba(255, 90, 120, 0.8);
 }
 
+/* Memory Map 3D graph — node labels projected from three.js world space */
+.g3d-label {
+  position: absolute;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #e6f4f8;
+  text-shadow:
+    0 0 8px rgba(5, 8, 13, 0.9),
+    0 0 3px rgba(5, 8, 13, 1);
+  pointer-events: none;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+.spin-slow-fwd {
+  animation: aslan-spin 14s linear infinite;
+}
+.spin-slow-rev {
+  animation: aslan-spin 20s linear infinite reverse;
+}
+.voice-dial-ring {
+  animation: aslan-pulse-ring 1.6s ease-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .scanline::after,
   .pulse-dot,
   .aslan-avatar::after,
-  .aslan-avatar img {
+  .aslan-avatar img,
+  .spin-slow-fwd,
+  .spin-slow-rev,
+  .voice-dial-ring {
     animation: none !important;
   }
 }

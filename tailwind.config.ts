@@ -21,6 +21,9 @@ const config: Config = {
         mint: {
           glow: "#4bffb0",
         },
+        violet: {
+          glow: "#b98bff",
+        },
       },
       fontFamily: {
         display: ["var(--font-chakra)", "sans-serif"],
