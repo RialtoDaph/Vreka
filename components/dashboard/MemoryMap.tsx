@@ -438,11 +438,36 @@ export default function MemoryMap({ data }: Props) {
     }
     window.addEventListener("resize", onResize);
 
+    let fitAnim = 0;
+    function animateOrbitTo(targetTheta: number, targetPhi: number, targetRadius: number, duration = 450) {
+      if (fitAnim) cancelAnimationFrame(fitAnim);
+      const startTheta = orbit.theta;
+      const startPhi = orbit.phi;
+      const startRadius = orbit.radius;
+      const start = performance.now();
+      function step(now: number) {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        orbit.theta = startTheta + (targetTheta - startTheta) * eased;
+        orbit.phi = startPhi + (targetPhi - startPhi) * eased;
+        orbit.radius = startRadius + (targetRadius - startRadius) * eased;
+        applyCamera();
+        fitAnim = t < 1 ? requestAnimationFrame(step) : 0;
+      }
+      fitAnim = requestAnimationFrame(step);
+    }
+
+    // Frames the camera around the nodes' actual current spread instead of a
+    // fixed constant, so "Fit" still does something visible even when nodes
+    // have drifted or the camera is already at the default orbit.
     function fitView() {
-      orbit.theta = INITIAL_ORBIT.theta;
-      orbit.phi = INITIAL_ORBIT.phi;
-      orbit.radius = INITIAL_ORBIT.radius;
-      applyCamera();
+      let maxDist = 0;
+      for (const p of Object.values(physics)) {
+        const dist = Math.hypot(p.x, p.y, p.z);
+        if (dist > maxDist) maxDist = dist;
+      }
+      const targetRadius = Math.max(140, Math.min(650, maxDist * 2.6 + 90));
+      animateOrbitTo(INITIAL_ORBIT.theta, INITIAL_ORBIT.phi, targetRadius);
     }
     sceneApiRef.current = { fitView };
 
@@ -476,6 +501,7 @@ export default function MemoryMap({ data }: Props) {
 
     return () => {
       cancelAnimationFrame(raf);
+      if (fitAnim) cancelAnimationFrame(fitAnim);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
@@ -538,7 +564,7 @@ export default function MemoryMap({ data }: Props) {
           </span>
           <div>
             <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0 flex items-center gap-1.5">
-              ASLAN
+              VREKA
               <span className="text-slate-400 text-[10px]">{navOpen ? "▲" : "▼"}</span>
             </p>
             <p className="font-mono text-[8px] tracking-[0.15em] text-slate-400 m-0">

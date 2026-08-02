@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { buildMonthGrid, dateKey, isSameMonth } from "@/lib/calendarGrid";
 import HudPanel from "@/components/HudPanel";
-import { ghostBtnClass } from "@/lib/ui";
+import { ghostBtnClass, primaryBtnClass, inputClass, errorBannerClass } from "@/lib/ui";
 
 type CalItemType = "task" | "debt" | "goal" | "calendar";
 
@@ -35,79 +35,88 @@ export default function KalenderPage() {
   const [loading, setLoading] = useState(true);
   const [calendarConnected, setCalendarConnected] = useState(false);
 
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventDate, setEventDate] = useState(() => dateKey(new Date()));
+  const [eventStart, setEventStart] = useState("09:00");
+  const [eventEnd, setEventEnd] = useState("10:00");
+  const [eventSaving, setEventSaving] = useState(false);
+  const [eventError, setEventError] = useState<string | null>(null);
+
   const grid = useMemo(() => buildMonthGrid(visibleMonth), [visibleMonth]);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const gridStart = grid[0];
-      const gridEnd = grid[41];
-      const gridEndExclusive = new Date(gridEnd);
-      gridEndExclusive.setDate(gridEndExclusive.getDate() + 1);
+  async function loadItems() {
+    setLoading(true);
+    const gridStart = grid[0];
+    const gridEnd = grid[41];
+    const gridEndExclusive = new Date(gridEnd);
+    gridEndExclusive.setDate(gridEndExclusive.getDate() + 1);
 
-      const [{ data: tasks }, { data: debts }, { data: goals }, calendarRes] = await Promise.all([
-        supabase
-          .from("tasks")
-          .select("title, deadline")
-          .not("deadline", "is", null)
-          .gte("deadline", gridStart.toISOString())
-          .lt("deadline", gridEndExclusive.toISOString()),
-        supabase
-          .from("debts")
-          .select("party_name, direction, due_date")
-          .eq("status", "unpaid")
-          .not("due_date", "is", null)
-          .gte("due_date", dateKey(gridStart))
-          .lte("due_date", dateKey(gridEnd)),
-        supabase
-          .from("savings_goals")
-          .select("name, deadline")
-          .not("deadline", "is", null)
-          .gte("deadline", dateKey(gridStart))
-          .lte("deadline", dateKey(gridEnd)),
-        fetch(
-          `/api/google/calendar/list?from=${gridStart.toISOString()}&to=${gridEndExclusive.toISOString()}`
-        )
-          .then((r) => r.json())
-          .catch(() => ({ connected: false, events: [] })),
-      ]);
+    const [{ data: tasks }, { data: debts }, { data: goals }, calendarRes] = await Promise.all([
+      supabase
+        .from("tasks")
+        .select("title, deadline")
+        .not("deadline", "is", null)
+        .gte("deadline", gridStart.toISOString())
+        .lt("deadline", gridEndExclusive.toISOString()),
+      supabase
+        .from("debts")
+        .select("party_name, direction, due_date")
+        .eq("status", "unpaid")
+        .not("due_date", "is", null)
+        .gte("due_date", dateKey(gridStart))
+        .lte("due_date", dateKey(gridEnd)),
+      supabase
+        .from("savings_goals")
+        .select("name, deadline")
+        .not("deadline", "is", null)
+        .gte("deadline", dateKey(gridStart))
+        .lte("deadline", dateKey(gridEnd)),
+      fetch(
+        `/api/google/calendar/list?from=${gridStart.toISOString()}&to=${gridEndExclusive.toISOString()}`
+      )
+        .then((r) => r.json())
+        .catch(() => ({ connected: false, events: [] })),
+    ]);
 
-      const map: Record<string, CalItem[]> = {};
-      function push(key: string, item: CalItem) {
-        (map[key] ??= []).push(item);
-      }
-
-      for (const t of tasks ?? []) {
-        if (!t.deadline) continue;
-        push(dateKey(new Date(t.deadline)), { type: "task", label: t.title, href: "/dashboard/kerjaan" });
-      }
-      for (const d of debts ?? []) {
-        if (!d.due_date) continue;
-        push(d.due_date, {
-          type: "debt",
-          label: `${d.direction === "i_owe" ? "Bayar" : "Tagih"} ${d.party_name}`,
-          href: "/dashboard/keuangan",
-        });
-      }
-      for (const g of goals ?? []) {
-        if (!g.deadline) continue;
-        push(g.deadline, { type: "goal", label: g.name, href: "/dashboard/keuangan" });
-      }
-      setCalendarConnected(!!calendarRes.connected);
-      for (const e of calendarRes.events ?? []) {
-        if (!e.start) continue;
-        push(dateKey(new Date(e.start)), {
-          type: "calendar",
-          label: e.summary,
-          meta: e.location || undefined,
-          href: "/dashboard/asisten",
-        });
-      }
-
-      setItemsByDay(map);
-      setLoading(false);
+    const map: Record<string, CalItem[]> = {};
+    function push(key: string, item: CalItem) {
+      (map[key] ??= []).push(item);
     }
-    load();
+
+    for (const t of tasks ?? []) {
+      if (!t.deadline) continue;
+      push(dateKey(new Date(t.deadline)), { type: "task", label: t.title, href: "/dashboard/kerjaan" });
+    }
+    for (const d of debts ?? []) {
+      if (!d.due_date) continue;
+      push(d.due_date, {
+        type: "debt",
+        label: `${d.direction === "i_owe" ? "Bayar" : "Tagih"} ${d.party_name}`,
+        href: "/dashboard/keuangan",
+      });
+    }
+    for (const g of goals ?? []) {
+      if (!g.deadline) continue;
+      push(g.deadline, { type: "goal", label: g.name, href: "/dashboard/keuangan" });
+    }
+    setCalendarConnected(!!calendarRes.connected);
+    for (const e of calendarRes.events ?? []) {
+      if (!e.start) continue;
+      push(dateKey(new Date(e.start)), {
+        type: "calendar",
+        label: e.summary,
+        meta: e.location || undefined,
+        href: "/dashboard/asisten",
+      });
+    }
+
+    setItemsByDay(map);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleMonth]);
 
@@ -116,6 +125,48 @@ export default function KalenderPage() {
 
   function shiftMonth(delta: number) {
     setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
+  }
+
+  function openAddEvent(day?: Date) {
+    setEventTitle("");
+    setEventDate(dateKey(day ?? selectedDay));
+    setEventStart("09:00");
+    setEventEnd("10:00");
+    setEventError(null);
+    setShowAddEvent(true);
+  }
+
+  async function handleCreateEvent(e: React.FormEvent) {
+    e.preventDefault();
+    if (!eventTitle.trim()) return;
+    setEventSaving(true);
+    setEventError(null);
+    try {
+      const res = await fetch("/api/google/calendar/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: eventTitle.trim(),
+          start: `${eventDate}T${eventStart}:00`,
+          end: `${eventDate}T${eventEnd}:00`,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEventError(
+          res.status === 409
+            ? "Google Calendar belum di-connect. Connect dulu di halaman Aslan."
+            : (data.error ?? "Gagal bikin event.")
+        );
+        return;
+      }
+      setShowAddEvent(false);
+      await loadItems();
+    } catch {
+      setEventError("Gagal bikin event. Coba lagi.");
+    } finally {
+      setEventSaving(false);
+    }
   }
 
   return (
@@ -145,6 +196,9 @@ export default function KalenderPage() {
           </button>
           <button onClick={() => shiftMonth(1)} className={ghostBtnClass}>
             Bulan Depan →
+          </button>
+          <button onClick={() => openAddEvent()} className={primaryBtnClass}>
+            + Tambah Event
           </button>
         </div>
       </header>
@@ -202,11 +256,73 @@ export default function KalenderPage() {
       </HudPanel>
 
       <HudPanel>
-        <h2 className="font-display font-semibold text-white tracking-wide mb-3">
-          {new Intl.DateTimeFormat("id-ID", { weekday: "long", day: "2-digit", month: "long" }).format(
-            selectedDay
-          )}
-        </h2>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="font-display font-semibold text-white tracking-wide">
+            {new Intl.DateTimeFormat("id-ID", { weekday: "long", day: "2-digit", month: "long" }).format(
+              selectedDay
+            )}
+          </h2>
+          <button
+            onClick={() => openAddEvent(selectedDay)}
+            className="text-xs font-mono uppercase tracking-wider text-cyan-glow/80 hover:text-cyan-glow"
+          >
+            + Tambah
+          </button>
+        </div>
+
+        {showAddEvent && (
+          <form
+            onSubmit={handleCreateEvent}
+            className="mb-4 p-3 border border-line rounded-sm bg-panel2/60 space-y-2.5"
+          >
+            {eventError && <p className={errorBannerClass}>{eventError}</p>}
+            <input
+              type="text"
+              value={eventTitle}
+              onChange={(e) => setEventTitle(e.target.value)}
+              placeholder="Judul event..."
+              className={inputClass}
+              autoFocus
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="date"
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+                className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+              />
+              <input
+                type="time"
+                value={eventStart}
+                onChange={(e) => setEventStart(e.target.value)}
+                className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+              />
+              <span className="text-xs text-slate-500">s/d</span>
+              <input
+                type="time"
+                value={eventEnd}
+                onChange={(e) => setEventEnd(e.target.value)}
+                className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+              />
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Event dibuat langsung di Google Calendar kamu — pastiin udah connect di halaman Aslan.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowAddEvent(false)} className={ghostBtnClass}>
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={eventSaving || !eventTitle.trim()}
+                className={primaryBtnClass}
+              >
+                {eventSaving ? "Menyimpan..." : "Simpan Event"}
+              </button>
+            </div>
+          </form>
+        )}
+
         {loading ? (
           <p className="text-sm text-slate-500">Memuat...</p>
         ) : selectedItems.length === 0 ? (
@@ -226,8 +342,12 @@ export default function KalenderPage() {
         )}
         {!calendarConnected && (
           <p className="text-[11px] text-slate-600 mt-3">
-            Google Calendar belum di-connect — cuma nampilin tugas/utang/tabungan. Connect di halaman
-            Aslan buat gabungin jadwal Calendar juga.
+            Google Calendar belum di-connect — cuma nampilin tugas/utang/tabungan, dan event baru belum
+            bisa disimpan. Connect di bagian{" "}
+            <a href="/dashboard/asisten" className="text-cyan-glow/80 hover:text-cyan-glow hover:underline">
+              Pengaturan &amp; Integrasi di halaman Aslan
+            </a>
+            .
           </p>
         )}
       </HudPanel>
