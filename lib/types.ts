@@ -78,6 +78,7 @@ export type Task = {
   status: TaskStatus;
   priority: TaskPriority;
   created_at: string;
+  project: string | null;
 };
 
 export type TaskSubtask = {
@@ -86,6 +87,21 @@ export type TaskSubtask = {
   task_id: string;
   title: string;
   done: boolean;
+  created_at: string;
+};
+
+export type Habit = {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+};
+
+export type HabitCheck = {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  period: string;
   created_at: string;
 };
 
@@ -98,6 +114,23 @@ export type StudyNote = {
   progress: number;
   created_at: string;
   updated_at: string;
+};
+
+export type StudySession = {
+  id: string;
+  user_id: string;
+  note_id: string;
+  minutes: number;
+  created_at: string;
+};
+
+export type StudyResource = {
+  id: string;
+  user_id: string;
+  note_id: string;
+  label: string;
+  url: string;
+  created_at: string;
 };
 
 export type AssistantRole = "user" | "assistant";

@@ -191,6 +191,18 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "toggle_habit",
+    description:
+      "Tandain kebiasaan yang dilacak udah dilakuin hari ini. Cari kebiasaannya pake title_query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string", description: "Kata kunci buat nyari kebiasaannya." },
+      },
+      required: ["title_query"],
+    },
+  },
+  {
     name: "forget",
     description:
       "Hapus satu memory/fakta yang tersimpan tentang user, kalau udah nggak relevan atau salah. Cari pake query yang cocok ke isi memory-nya.",
@@ -522,6 +534,28 @@ export async function executeAssistantTool(
         .eq("category", category);
       if (error) return { ok: false, result: error.message };
       return { ok: true, result: `Anggaran "${category}" dihapus.` };
+    }
+
+    case "toggle_habit": {
+      const found = await findOneByColumn(supabase, "habits", userId, "title", String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: existing } = await supabase
+        .from("habit_checks")
+        .select("id")
+        .eq("habit_id", found.id)
+        .eq("period", today)
+        .maybeSingle();
+      if (existing) {
+        return { ok: true, result: `"${found.label}" udah dicentang hari ini.` };
+      }
+      const { error } = await supabase.from("habit_checks").insert({
+        user_id: userId,
+        habit_id: found.id,
+        period: today,
+      });
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `"${found.label}" ditandain selesai hari ini.` };
     }
 
     case "forget": {

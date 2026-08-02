@@ -19,6 +19,13 @@ function mockSupabase(taskRows: unknown[], subtaskRows: unknown[]) {
         if (table === "task_subtasks") {
           return { select: () => ({ order: () => Promise.resolve({ data: subtaskRows, error: null }) }) };
         }
+        // HabitsPanel (rendered alongside the Kanban board) loads these too.
+        if (table === "habits") {
+          return { select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) };
+        }
+        if (table === "habit_checks") {
+          return { select: () => Promise.resolve({ data: [], error: null }) };
+        }
         throw new Error(`unexpected table: ${table}`);
       },
     }),

@@ -13,9 +13,18 @@ afterEach(() => {
 function mockSupabase(notes: unknown[]) {
   vi.doMock("@/lib/supabase/client", () => ({
     createClient: () => ({
-      from: () => ({
-        select: () => ({ order: () => Promise.resolve({ data: notes, error: null }) }),
-      }),
+      from: (table: string) => {
+        if (table === "study_notes") {
+          return { select: () => ({ order: () => Promise.resolve({ data: notes, error: null }) }) };
+        }
+        if (table === "study_sessions") {
+          return { select: () => Promise.resolve({ data: [], error: null }) };
+        }
+        if (table === "study_resources") {
+          return { select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      },
     }),
   }));
 }

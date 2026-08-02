@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Task, TaskPriority, TaskStatus, TaskSubtask } from "@/lib/types";
 import { formatDateTime, daysUntil } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
+import HabitsPanel from "@/components/kerjaan/HabitsPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
@@ -39,6 +40,8 @@ export default function KerjaanPage() {
   const [description, setDescription] = useState("");
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("medium");
+  const [project, setProject] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
 
   async function load() {
     setLoading(true);
@@ -79,12 +82,14 @@ export default function KerjaanPage() {
       deadline: deadline || null,
       priority,
       status: "todo",
+      project: project.trim() || null,
     });
 
     setTitle("");
     setDescription("");
     setDeadline("");
     setPriority("medium");
+    setProject("");
     setSaving(false);
     setShowForm(false);
     load();
@@ -142,6 +147,8 @@ export default function KerjaanPage() {
     await supabase.from("task_subtasks").delete().eq("id", subtask.id);
   }
 
+  const projects = Array.from(new Set(items.map((t) => t.project).filter((p): p is string => !!p))).sort();
+
   return (
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-3">
@@ -195,20 +202,52 @@ export default function KerjaanPage() {
                 </select>
               </div>
             </div>
-            <div>
-              <label className={labelClass}>Catatan (opsional)</label>
-              <input
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className={inputClass}
-              />
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Catatan (opsional)</label>
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Project (opsional)</label>
+                <input
+                  type="text"
+                  value={project}
+                  onChange={(e) => setProject(e.target.value)}
+                  className={inputClass}
+                  placeholder="Relokasi, Sertifikasi, dll"
+                />
+              </div>
             </div>
             <button type="submit" disabled={saving} className={primaryBtnClass}>
               {saving ? "Menyimpan..." : "Simpan"}
             </button>
           </form>
         </HudPanel>
+      )}
+
+      {!loading && projects.length > 0 && (
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+            Project
+          </label>
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className={`${inputClass} w-auto`}
+          >
+            <option value="">Semua</option>
+            {projects.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
 
       {loading ? (
@@ -218,7 +257,9 @@ export default function KerjaanPage() {
       ) : (
         <div className="grid md:grid-cols-3 gap-4 items-start">
           {COLUMNS.map((col) => {
-            const colItems = items.filter((t) => t.status === col.key);
+            const colItems = items.filter(
+              (t) => t.status === col.key && (!projectFilter || t.project === projectFilter)
+            );
             return (
               <HudPanel key={col.key}>
                 <div className="flex items-center justify-between mb-3">
@@ -266,6 +307,11 @@ export default function KerjaanPage() {
                             >
                               {PRIORITY_LABEL[task.priority]}
                             </span>
+                            {task.project && (
+                              <span className="text-[10px] font-mono border border-cyan-glow/30 text-cyan-glow/80 rounded-sm px-1.5 py-0.5">
+                                {task.project}
+                              </span>
+                            )}
                             {task.deadline && (
                               <span
                                 className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-slate-500"}`}
@@ -384,6 +430,8 @@ export default function KerjaanPage() {
           })}
         </div>
       )}
+
+      <HabitsPanel />
     </div>
   );
 }

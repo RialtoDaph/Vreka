@@ -99,10 +99,12 @@ liat kondisi keuangan, dll).
   target tabungan, anggaran bulanan per kategori, dan tab Analitik (grafik
   tren & breakdown kategori)
 - **Kerjaan** — to-do dengan deadline & prioritas, papan Kanban (To-do/In
-  Progress/Selesai) plus sub-task per to-do
-- **Pelajaran** — catatan + progress tracker, plus mode kuis (Aslan bikin
-  soal pilihan ganda dari isi catatan buat self-test, skornya bisa
-  langsung diangkat jadi progress)
+  Progress/Selesai) plus sub-task per to-do, tag project buat filter, dan
+  pelacak kebiasaan harian (streak)
+- **Pelajaran** — catatan + progress tracker, mode kuis (Aslan bikin soal
+  pilihan ganda dari isi catatan buat self-test, skornya bisa langsung
+  diangkat jadi progress), timer sesi belajar, dan lampiran resource (link)
+  per catatan
 - **Aslan** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi
   keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan lewat
   chat, nyimpen memory jangka panjang soal kamu, punya mode telepon hands-free

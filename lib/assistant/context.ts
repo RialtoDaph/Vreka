@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { computeStreak } from "@/lib/habits";
 
 export async function buildAssistantSystemPrompt(
   supabase: SupabaseClient,
@@ -18,6 +19,8 @@ export async function buildAssistantSystemPrompt(
     { data: goals },
     { data: upcomingTasks },
     { data: notes },
+    { data: habits },
+    { data: habitChecks },
     { data: memories },
     { data: googleCred },
   ] = await Promise.all([
@@ -52,6 +55,8 @@ export async function buildAssistantSystemPrompt(
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(10),
+    supabase.from("habits").select("id, title").eq("user_id", userId),
+    supabase.from("habit_checks").select("habit_id, period").eq("user_id", userId),
     supabase
       .from("assistant_memories")
       .select("content")
@@ -121,6 +126,22 @@ export async function buildAssistantSystemPrompt(
       .map((n) => `- ${n.title} (${n.category ?? "Umum"}) — progress ${n.progress}%`)
       .join("\n") || "(belum ada catatan belajar)";
 
+  const today = now.toISOString().slice(0, 10);
+  const checksByHabit = new Map<string, Set<string>>();
+  for (const c of habitChecks ?? []) {
+    if (!checksByHabit.has(c.habit_id)) checksByHabit.set(c.habit_id, new Set());
+    checksByHabit.get(c.habit_id)!.add(c.period);
+  }
+  const habitLines =
+    (habits ?? [])
+      .map((h) => {
+        const periods = checksByHabit.get(h.id) ?? new Set<string>();
+        const streak = computeStreak(periods);
+        const doneToday = periods.has(today);
+        return `- ${h.title}: ${doneToday ? "udah dicentang hari ini" : "belum dicentang hari ini"}${streak > 0 ? `, streak ${streak} hari` : ""}`;
+      })
+      .join("\n") || "(belum ada kebiasaan yang dilacak)";
+
   const memoryLines =
     (memories ?? []).map((m) => `- ${m.content}`).join("\n") || "(belum ada memory tersimpan)";
 
@@ -138,6 +159,7 @@ Aturan:
 - Kalau user minta ubah/edit/hapus data yang udah ada (tandain to-do selesai, ganti deadline, hapus transaksi, update progress belajar, dll), pakai tool update_*/delete_* yang sesuai. Tool-tool ini nyari datanya pake kata kunci (title_query/query) — kalau hasilnya bilang ada beberapa yang cocok, tanya user buat lebih spesifik dulu sebelum nyoba lagi.
 - Kalau user cerita fakta/preferensi penting tentang dirinya yang relevan ke depannya, pakai tool "remember" buat nyimpen itu. Kalau ada memory yang udah nggak relevan/salah dan user minta dilupain, pakai tool "forget".
 - Kalau user minta set/ubah anggaran bulanan buat kategori pengeluaran tertentu, pakai tool "set_budget". Kalau minta hapus anggaran, pakai "delete_budget". Kalau ada anggaran yang statusnya KEBOBOLAN di snapshot bawah, boleh diingetin ke user secara natural pas relevan (bukan tiap-tiap balasan).
+- Kalau user bilang udah ngelakuin suatu kebiasaan yang dilacak (misal "udah olahraga nih"), pakai tool "toggle_habit" buat centang kebiasaan itu hari ini.
 - Kalau user minta cek/baca/bales email, pakai tool search_email/read_email/draft_email_reply — tapi cuma kalau status Gmail di bawah "Terhubung". Kalau belum terhubung, bilang user buat connect dulu lewat tombol "Connect Gmail" di halaman ini, jangan nyoba manggil tool email-nya.
 - draft_email_reply cuma bikin DRAFT di Gmail, nggak pernah otomatis ngirim — selalu bilang ke user kalau dia perlu review & kirim sendiri dari Gmail.
 - Tanggal hari ini: ${formatDate(now.toISOString().slice(0, 10))}.
@@ -166,6 +188,9 @@ ${taskLines}
 
 === Pelajaran (catatan terbaru) ===
 ${noteLines}
+
+=== Kebiasaan ===
+${habitLines}
 
 === Memory tersimpan tentang user ===
 ${memoryLines}`;
