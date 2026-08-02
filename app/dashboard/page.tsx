@@ -45,13 +45,13 @@ export default async function OverviewPage() {
     supabase
       .from("tasks")
       .select("*")
-      .eq("status", "todo")
+      .neq("status", "done")
       .order("deadline", { ascending: true, nullsFirst: false })
       .limit(5),
     supabase
       .from("tasks")
       .select("*")
-      .eq("status", "todo")
+      .neq("status", "done")
       .not("deadline", "is", null)
       .gte("deadline", startOfToday.toISOString())
       .lt("deadline", endOfToday.toISOString())
@@ -59,7 +59,7 @@ export default async function OverviewPage() {
     supabase
       .from("tasks")
       .select("*")
-      .eq("status", "todo")
+      .neq("status", "done")
       .not("deadline", "is", null)
       .lt("deadline", startOfToday.toISOString())
       .order("deadline", { ascending: true })

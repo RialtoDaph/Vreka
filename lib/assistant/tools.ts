@@ -60,6 +60,33 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "add_subtask",
+    description:
+      "Tambah sub-task (langkah kecil) ke satu to-do yang udah ada. Cari to-do-nya pake title_query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string", description: "Kata kunci buat nyari to-do induknya." },
+        subtask_title: { type: "string", description: "Judul sub-task yang mau ditambah." },
+      },
+      required: ["title_query", "subtask_title"],
+    },
+  },
+  {
+    name: "toggle_subtask",
+    description:
+      "Tandain sub-task selesai atau belum. Cari to-do induknya pake title_query, dan sub-task-nya pake subtask_query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string", description: "Kata kunci buat nyari to-do induknya." },
+        subtask_query: { type: "string", description: "Kata kunci buat nyari sub-task-nya." },
+        done: { type: "boolean", description: "true = tandain selesai, false = buka lagi." },
+      },
+      required: ["title_query", "subtask_query", "done"],
+    },
+  },
+  {
     name: "add_study_note",
     description: "Tambah catatan belajar baru ke modul Pelajaran.",
     input_schema: {
@@ -88,7 +115,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         new_description: { type: "string" },
         new_deadline: { type: "string", description: "ISO 8601 datetime." },
         new_priority: { type: "string", enum: ["low", "medium", "high"] },
-        new_status: { type: "string", enum: ["todo", "done"] },
+        new_status: { type: "string", enum: ["todo", "in_progress", "done"] },
       },
       required: ["title_query"],
     },
@@ -347,6 +374,51 @@ export async function executeAssistantTool(
       return { ok: true, result: "To-do ditambahkan." };
     }
 
+    case "add_subtask": {
+      const found = await findOneByColumn(supabase, "tasks", userId, "title", String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const subtaskTitle = String(input.subtask_title ?? "").trim();
+      if (!subtaskTitle) return { ok: false, result: "subtask_title kosong." };
+      const { error } = await supabase.from("task_subtasks").insert({
+        user_id: userId,
+        task_id: found.id,
+        title: subtaskTitle,
+      });
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Sub-task "${subtaskTitle}" ditambahkan ke "${found.label}".` };
+    }
+
+    case "toggle_subtask": {
+      const found = await findOneByColumn(supabase, "tasks", userId, "title", String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const q = String(input.subtask_query ?? "").trim().toLowerCase();
+      if (!q) return { ok: false, result: "subtask_query kosong." };
+      const { data, error } = await supabase
+        .from("task_subtasks")
+        .select("id, title")
+        .eq("task_id", found.id)
+        .eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      const matches = (data ?? []).filter((s) => s.title.toLowerCase().includes(q));
+      if (matches.length === 0) {
+        return { ok: false, result: `Nggak nemu sub-task yang cocok sama "${q}" di "${found.label}".` };
+      }
+      if (matches.length > 1) {
+        return {
+          ok: false,
+          result: `Ada ${matches.length} sub-task yang cocok: ${matches.map((m) => m.title).join(", ")}. Sebutin lebih spesifik.`,
+        };
+      }
+      const done = input.done === true;
+      const { error: updateError } = await supabase
+        .from("task_subtasks")
+        .update({ done })
+        .eq("id", matches[0].id)
+        .eq("user_id", userId);
+      if (updateError) return { ok: false, result: updateError.message };
+      return { ok: true, result: `Sub-task "${matches[0].title}" ditandain ${done ? "selesai" : "belum selesai"}.` };
+    }
+
     case "add_study_note": {
       const title = String(input.title ?? "").trim();
       if (!title) return { ok: false, result: "title kosong." };
@@ -374,7 +446,9 @@ export async function executeAssistantTool(
       if (input.new_priority === "low" || input.new_priority === "medium" || input.new_priority === "high") {
         patch.priority = input.new_priority;
       }
-      if (input.new_status === "todo" || input.new_status === "done") patch.status = input.new_status;
+      if (input.new_status === "todo" || input.new_status === "in_progress" || input.new_status === "done") {
+        patch.status = input.new_status;
+      }
       if (Object.keys(patch).length === 0) return { ok: false, result: "Nggak ada perubahan yang disebutin." };
       const { error } = await supabase.from("tasks").update(patch).eq("id", found.id).eq("user_id", userId);
       if (error) return { ok: false, result: error.message };

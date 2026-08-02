@@ -98,8 +98,11 @@ liat kondisi keuangan, dll).
   auto-post tanggal tertentu tiap bulan lewat cron harian), utang/piutang,
   target tabungan, anggaran bulanan per kategori, dan tab Analitik (grafik
   tren & breakdown kategori)
-- **Kerjaan** — to-do dengan deadline & prioritas
-- **Pelajaran** — catatan + progress tracker
+- **Kerjaan** — to-do dengan deadline & prioritas, papan Kanban (To-do/In
+  Progress/Selesai) plus sub-task per to-do
+- **Pelajaran** — catatan + progress tracker, plus mode kuis (Aslan bikin
+  soal pilihan ganda dari isi catatan buat self-test, skornya bisa
+  langsung diangkat jadi progress)
 - **Aslan** — asisten AI personal (Claude, model bisa dipilih) yang tau kondisi
   keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan lewat
   chat, nyimpen memory jangka panjang soal kamu, punya mode telepon hands-free

@@ -43,7 +43,7 @@ export async function buildAssistantSystemPrompt(
       .from("tasks")
       .select("*")
       .eq("user_id", userId)
-      .eq("status", "todo")
+      .neq("status", "done")
       .order("deadline", { ascending: true, nullsFirst: false })
       .limit(8),
     supabase
@@ -112,7 +112,7 @@ export async function buildAssistantSystemPrompt(
     (upcomingTasks ?? [])
       .map(
         (t) =>
-          `- [${t.priority}] ${t.title}${t.deadline ? ` (deadline ${formatDate(t.deadline)})` : ""}`
+          `- [${t.priority}]${t.status === "in_progress" ? " [sedang dikerjain]" : ""} ${t.title}${t.deadline ? ` (deadline ${formatDate(t.deadline)})` : ""}`
       )
       .join("\n") || "(nggak ada to-do aktif)";
 

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Task, TaskPriority } from "@/lib/types";
+import { Task, TaskPriority, TaskStatus, TaskSubtask } from "@/lib/types";
 import { formatDateTime, daysUntil } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, dangerBtnClass } from "@/lib/ui";
+import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
   low: "Rendah",
@@ -19,13 +19,21 @@ const PRIORITY_TONE: Record<TaskPriority, string> = {
   high: "text-rose-glow border-rose-glow/40",
 };
 
+const COLUMNS: { key: TaskStatus; label: string; tone: string }[] = [
+  { key: "todo", label: "To-do", tone: "text-slate-300" },
+  { key: "in_progress", label: "In Progress", tone: "text-amber-glow" },
+  { key: "done", label: "Selesai", tone: "text-mint-glow" },
+];
+
 export default function KerjaanPage() {
   const supabase = createClient();
   const [items, setItems] = useState<Task[]>([]);
+  const [subtasksByTask, setSubtasksByTask] = useState<Record<string, TaskSubtask[]>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showDone, setShowDone] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [subtaskInput, setSubtaskInput] = useState("");
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -34,12 +42,19 @@ export default function KerjaanPage() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase
-      .from("tasks")
-      .select("*")
-      .order("status", { ascending: true })
-      .order("deadline", { ascending: true, nullsFirst: false });
-    setItems(data ?? []);
+    const [{ data: taskRows }, { data: subtaskRows }] = await Promise.all([
+      supabase
+        .from("tasks")
+        .select("*")
+        .order("deadline", { ascending: true, nullsFirst: false }),
+      supabase.from("task_subtasks").select("*").order("created_at", { ascending: true }),
+    ]);
+    setItems(taskRows ?? []);
+    const grouped: Record<string, TaskSubtask[]> = {};
+    for (const s of (subtaskRows ?? []) as TaskSubtask[]) {
+      (grouped[s.task_id] ??= []).push(s);
+    }
+    setSubtasksByTask(grouped);
     setLoading(false);
   }
 
@@ -75,19 +90,57 @@ export default function KerjaanPage() {
     load();
   }
 
-  async function toggleStatus(task: Task) {
-    const newStatus = task.status === "done" ? "todo" : "done";
-    await supabase.from("tasks").update({ status: newStatus }).eq("id", task.id);
-    load();
+  async function updateStatus(task: Task, status: TaskStatus) {
+    setItems((prev) => prev.map((t) => (t.id === task.id ? { ...t, status } : t)));
+    await supabase.from("tasks").update({ status }).eq("id", task.id);
   }
 
   async function handleDelete(id: string) {
     await supabase.from("tasks").delete().eq("id", id);
     setItems((prev) => prev.filter((i) => i.id !== id));
+    setSubtasksByTask((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
-  const todoItems = items.filter((i) => i.status === "todo");
-  const doneItems = items.filter((i) => i.status === "done");
+  async function handleAddSubtask(taskId: string) {
+    const subtaskTitle = subtaskInput.trim();
+    if (!subtaskTitle) return;
+    setSubtaskInput("");
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("task_subtasks")
+      .insert({ user_id: user.id, task_id: taskId, title: subtaskTitle })
+      .select("*")
+      .single();
+    if (data) {
+      setSubtasksByTask((prev) => ({ ...prev, [taskId]: [...(prev[taskId] ?? []), data] }));
+    }
+  }
+
+  async function toggleSubtask(subtask: TaskSubtask) {
+    const done = !subtask.done;
+    setSubtasksByTask((prev) => ({
+      ...prev,
+      [subtask.task_id]: (prev[subtask.task_id] ?? []).map((s) =>
+        s.id === subtask.id ? { ...s, done } : s
+      ),
+    }));
+    await supabase.from("task_subtasks").update({ done }).eq("id", subtask.id);
+  }
+
+  async function deleteSubtask(subtask: TaskSubtask) {
+    setSubtasksByTask((prev) => ({
+      ...prev,
+      [subtask.task_id]: (prev[subtask.task_id] ?? []).filter((s) => s.id !== subtask.id),
+    }));
+    await supabase.from("task_subtasks").delete().eq("id", subtask.id);
+  }
 
   return (
     <div className="space-y-6">
@@ -158,92 +211,177 @@ export default function KerjaanPage() {
         </HudPanel>
       )}
 
-      <HudPanel>
-        {loading ? (
+      {loading ? (
+        <HudPanel>
           <p className="text-sm text-slate-500">Memuat...</p>
-        ) : todoItems.length === 0 ? (
-          <p className="text-sm text-slate-500">Gak ada to-do aktif. Santai dulu.</p>
-        ) : (
-          <ul className="divide-y divide-line/60">
-            {todoItems.map((task) => {
-              const d = daysUntil(task.deadline);
-              const urgent = d !== null && d <= 2;
-              return (
-                <li
-                  key={task.id}
-                  className="py-3 first:pt-0 last:pb-0 flex items-start justify-between gap-3"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <button
-                      onClick={() => toggleStatus(task)}
-                      aria-label="Tandai selesai"
-                      className="mt-0.5 w-4 h-4 shrink-0 rounded-sm border border-line hover:border-cyan-glow transition-colors"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm text-slate-200 truncate">{task.title}</p>
-                      {task.description && (
-                        <p className="text-xs text-slate-500 truncate">{task.description}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-1">
-                        <span
-                          className={`text-[10px] font-mono border rounded-sm px-1.5 py-0.5 ${PRIORITY_TONE[task.priority]}`}
-                        >
-                          {PRIORITY_LABEL[task.priority]}
-                        </span>
-                        {task.deadline && (
-                          <span
-                            className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-slate-500"}`}
-                          >
-                            {formatDateTime(task.deadline)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <button onClick={() => handleDelete(task.id)} className={dangerBtnClass}>
-                    Hapus
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </HudPanel>
+        </HudPanel>
+      ) : (
+        <div className="grid md:grid-cols-3 gap-4 items-start">
+          {COLUMNS.map((col) => {
+            const colItems = items.filter((t) => t.status === col.key);
+            return (
+              <HudPanel key={col.key}>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className={`font-display font-semibold tracking-wide ${col.tone}`}>
+                    {col.label}
+                  </h2>
+                  <span className="text-xs font-mono text-slate-500">{colItems.length}</span>
+                </div>
 
-      {doneItems.length > 0 && (
-        <div>
-          <button
-            onClick={() => setShowDone((s) => !s)}
-            className="text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-300 mb-2"
-          >
-            {showDone ? "▾" : "▸"} Selesai ({doneItems.length})
-          </button>
-          {showDone && (
-            <HudPanel>
-              <ul className="divide-y divide-line/60">
-                {doneItems.map((task) => (
-                  <li
-                    key={task.id}
-                    className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <button
-                        onClick={() => toggleStatus(task)}
-                        aria-label="Buka lagi"
-                        className="w-4 h-4 shrink-0 rounded-sm bg-cyan-glow/20 border border-cyan-glow/50"
-                      />
-                      <span className="text-sm text-slate-500 line-through truncate">
-                        {task.title}
-                      </span>
-                    </div>
-                    <button onClick={() => handleDelete(task.id)} className={dangerBtnClass}>
-                      Hapus
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </HudPanel>
-          )}
+                {colItems.length === 0 ? (
+                  <p className="text-sm text-slate-500">Kosong.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {colItems.map((task) => {
+                      const d = daysUntil(task.deadline);
+                      const urgent = d !== null && d <= 2 && task.status !== "done";
+                      const subtasks = subtasksByTask[task.id] ?? [];
+                      const doneSubtasks = subtasks.filter((s) => s.done).length;
+                      const expanded = expandedId === task.id;
+                      return (
+                        <li
+                          key={task.id}
+                          className="border border-line rounded-sm p-3 bg-panel2/50"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p
+                              className={`text-sm truncate ${
+                                task.status === "done"
+                                  ? "text-slate-500 line-through"
+                                  : "text-slate-200"
+                              }`}
+                            >
+                              {task.title}
+                            </p>
+                            <button onClick={() => handleDelete(task.id)} className={dangerBtnClass}>
+                              Hapus
+                            </button>
+                          </div>
+                          {task.description && (
+                            <p className="text-xs text-slate-500 truncate mt-0.5">{task.description}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span
+                              className={`text-[10px] font-mono border rounded-sm px-1.5 py-0.5 ${PRIORITY_TONE[task.priority]}`}
+                            >
+                              {PRIORITY_LABEL[task.priority]}
+                            </span>
+                            {task.deadline && (
+                              <span
+                                className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-slate-500"}`}
+                              >
+                                {formatDateTime(task.deadline)}
+                              </span>
+                            )}
+                            {subtasks.length > 0 && (
+                              <button
+                                onClick={() => setExpandedId(expanded ? null : task.id)}
+                                className="text-[10px] font-mono text-cyan-glow/80 hover:text-cyan-glow"
+                              >
+                                {doneSubtasks}/{subtasks.length} sub-task {expanded ? "▾" : "▸"}
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-2">
+                            {col.key === "todo" && (
+                              <button
+                                onClick={() => updateStatus(task, "in_progress")}
+                                className={ghostBtnClass}
+                              >
+                                → Mulai
+                              </button>
+                            )}
+                            {col.key === "in_progress" && (
+                              <>
+                                <button
+                                  onClick={() => updateStatus(task, "todo")}
+                                  className={ghostBtnClass}
+                                >
+                                  ← To-do
+                                </button>
+                                <button
+                                  onClick={() => updateStatus(task, "done")}
+                                  className={ghostBtnClass}
+                                >
+                                  ✓ Selesai
+                                </button>
+                              </>
+                            )}
+                            {col.key === "done" && (
+                              <button
+                                onClick={() => updateStatus(task, "todo")}
+                                className={ghostBtnClass}
+                              >
+                                ↺ Buka lagi
+                              </button>
+                            )}
+                            {subtasks.length === 0 && (
+                              <button
+                                onClick={() => setExpandedId(expanded ? null : task.id)}
+                                className="text-[11px] font-mono text-slate-500 hover:text-slate-300"
+                              >
+                                + Sub-task
+                              </button>
+                            )}
+                          </div>
+
+                          {expanded && (
+                            <div className="mt-3 pt-3 border-t border-line/60 space-y-2">
+                              {subtasks.map((s) => (
+                                <div key={s.id} className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={s.done}
+                                    onChange={() => toggleSubtask(s)}
+                                    className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-cyan-glow"
+                                  />
+                                  <span
+                                    className={`text-xs flex-1 truncate ${
+                                      s.done ? "text-slate-500 line-through" : "text-slate-300"
+                                    }`}
+                                  >
+                                    {s.title}
+                                  </span>
+                                  <button
+                                    onClick={() => deleteSubtask(s)}
+                                    className="text-[10px] text-rose-glow/70 hover:text-rose-glow font-mono"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={subtaskInput}
+                                  onChange={(e) => setSubtaskInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      handleAddSubtask(task.id);
+                                    }
+                                  }}
+                                  placeholder="Sub-task baru..."
+                                  className={`${inputClass} text-xs py-1.5`}
+                                />
+                                <button
+                                  onClick={() => handleAddSubtask(task.id)}
+                                  className={ghostBtnClass}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </HudPanel>
+            );
+          })}
         </div>
       )}
     </div>

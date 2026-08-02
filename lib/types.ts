@@ -66,7 +66,7 @@ export type Budget = {
   created_at: string;
 };
 
-export type TaskStatus = "todo" | "done";
+export type TaskStatus = "todo" | "in_progress" | "done";
 export type TaskPriority = "low" | "medium" | "high";
 
 export type Task = {
@@ -77,6 +77,15 @@ export type Task = {
   deadline: string | null;
   status: TaskStatus;
   priority: TaskPriority;
+  created_at: string;
+};
+
+export type TaskSubtask = {
+  id: string;
+  user_id: string;
+  task_id: string;
+  title: string;
+  done: boolean;
   created_at: string;
 };
 
