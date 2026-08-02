@@ -26,6 +26,7 @@ export default async function OverviewPage() {
 
   const [
     { data: txMonth },
+    { data: budgets },
     { data: unpaidDebts },
     { data: goals },
     { data: upcomingTasks },
@@ -36,8 +37,9 @@ export default async function OverviewPage() {
   ] = await Promise.all([
     supabase
       .from("transactions")
-      .select("type, amount")
+      .select("type, category, amount")
       .gte("occurred_on", firstDayOfMonth),
+    supabase.from("budgets").select("*"),
     supabase.from("debts").select("*").eq("status", "unpaid"),
     supabase.from("savings_goals").select("*").order("created_at", { ascending: false }),
     supabase
@@ -86,9 +88,32 @@ export default async function OverviewPage() {
       ? Math.round(notes.reduce((sum, n) => sum + n.progress, 0) / notes.length)
       : 0;
 
-  // Live Intelligence Feed: gabungan tugas telat, utang jatuh tempo, dan target
-  // tabungan yang keteteran jadi satu stream alert.
+  const spentByCategory = new Map<string, number>();
+  for (const t of txMonth ?? []) {
+    if (t.type !== "expense") continue;
+    spentByCategory.set(t.category, (spentByCategory.get(t.category) ?? 0) + Number(t.amount));
+  }
+
+  // Live Intelligence Feed: gabungan tugas telat, utang jatuh tempo, target
+  // tabungan yang keteteran, dan anggaran yang mepet/kebobolan jadi satu
+  // stream alert.
   const feedItems: FeedItem[] = [];
+
+  for (const b of budgets ?? []) {
+    const used = spentByCategory.get(b.category) ?? 0;
+    const pct = Math.round((used / Number(b.monthly_limit)) * 100);
+    if (pct < 90) continue;
+    feedItems.push({
+      id: `budget-${b.id}`,
+      tag: pct >= 100 ? "WARN" : "TIP",
+      text:
+        pct >= 100
+          ? `Anggaran "${b.category}" kebobolan (${pct}%)`
+          : `Anggaran "${b.category}" udah kepake ${pct}%`,
+      meta: `${formatCurrency(used)} / ${formatCurrency(Number(b.monthly_limit))}`,
+      href: "/dashboard/keuangan",
+    });
+  }
 
   for (const t of (overdueTasks ?? []) as Task[]) {
     feedItems.push({

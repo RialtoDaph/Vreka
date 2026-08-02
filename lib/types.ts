@@ -55,6 +55,14 @@ export type SavingsGoal = {
   created_at: string;
 };
 
+export type Budget = {
+  id: string;
+  user_id: string;
+  category: string;
+  monthly_limit: number;
+  created_at: string;
+};
+
 export type TaskStatus = "todo" | "done";
 export type TaskPriority = "low" | "medium" | "high";
 

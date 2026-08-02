@@ -5,12 +5,16 @@ import TransactionsTab from "@/components/keuangan/TransactionsTab";
 import RecurringTab from "@/components/keuangan/RecurringTab";
 import DebtsTab from "@/components/keuangan/DebtsTab";
 import SavingsTab from "@/components/keuangan/SavingsTab";
+import AnalyticsTab from "@/components/keuangan/AnalyticsTab";
+import BudgetsTab from "@/components/keuangan/BudgetsTab";
 
 const TABS = [
   { key: "transaksi", label: "Transaksi" },
   { key: "pos-tetap", label: "Pos Tetap" },
   { key: "utang", label: "Utang / Piutang" },
   { key: "tabungan", label: "Tabungan" },
+  { key: "anggaran", label: "Anggaran" },
+  { key: "analitik", label: "Analitik" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -49,6 +53,8 @@ export default function KeuanganPage() {
       {tab === "pos-tetap" && <RecurringTab />}
       {tab === "utang" && <DebtsTab />}
       {tab === "tabungan" && <SavingsTab />}
+      {tab === "anggaran" && <BudgetsTab />}
+      {tab === "analitik" && <AnalyticsTab />}
     </div>
   );
 }

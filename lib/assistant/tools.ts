@@ -137,6 +137,33 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "set_budget",
+    description:
+      "Set atau update batas anggaran bulanan buat satu kategori pengeluaran. Kalau kategori itu udah punya anggaran, batasnya diupdate (bukan bikin duplikat).",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          description: `Kategori pengeluaran. Salah satu dari: ${EXPENSE_CATEGORIES.join(", ")}.`,
+        },
+        monthly_limit: { type: "number", description: "Batas pengeluaran per bulan dalam EUR, harus > 0." },
+      },
+      required: ["category", "monthly_limit"],
+    },
+  },
+  {
+    name: "delete_budget",
+    description: "Hapus anggaran bulanan untuk satu kategori pengeluaran.",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: { type: "string", description: "Nama kategori yang anggarannya mau dihapus." },
+      },
+      required: ["category"],
+    },
+  },
+  {
     name: "forget",
     description:
       "Hapus satu memory/fakta yang tersimpan tentang user, kalau udah nggak relevan atau salah. Cari pake query yang cocok ke isi memory-nya.",
@@ -394,6 +421,33 @@ export async function executeAssistantTool(
       const { error } = await supabase.from("study_notes").delete().eq("id", found.id).eq("user_id", userId);
       if (error) return { ok: false, result: error.message };
       return { ok: true, result: `Catatan "${found.label}" dihapus.` };
+    }
+
+    case "set_budget": {
+      const category = String(input.category ?? "").trim();
+      if (!category) return { ok: false, result: "category kosong." };
+      const monthlyLimit = Number(input.monthly_limit);
+      if (!monthlyLimit || monthlyLimit <= 0) return { ok: false, result: "monthly_limit harus > 0." };
+      const { error } = await supabase
+        .from("budgets")
+        .upsert(
+          { user_id: userId, category, monthly_limit: monthlyLimit },
+          { onConflict: "user_id,category" }
+        );
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Anggaran "${category}" diset ke ${monthlyLimit}/bulan.` };
+    }
+
+    case "delete_budget": {
+      const category = String(input.category ?? "").trim();
+      if (!category) return { ok: false, result: "category kosong." };
+      const { error } = await supabase
+        .from("budgets")
+        .delete()
+        .eq("user_id", userId)
+        .eq("category", category);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Anggaran "${category}" dihapus.` };
     }
 
     case "forget": {
