@@ -9,6 +9,7 @@ export type Transaction = {
   description: string | null;
   occurred_on: string;
   created_at: string;
+  receipt_path: string | null;
 };
 
 export type RecurringItem = {
