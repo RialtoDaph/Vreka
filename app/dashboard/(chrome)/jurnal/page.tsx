@@ -4,13 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { JournalEntry } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { todayKey } from "@/lib/date";
 import { promptForDate } from "@/lib/journalPrompts";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, primaryBtnClass, dangerBtnClass } from "@/lib/ui";
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export default function JurnalPage() {
   const supabase = createClient();
@@ -20,7 +17,7 @@ export default function JurnalPage() {
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const today = todayStr();
+  const today = todayKey();
   const prompt = useMemo(() => promptForDate(new Date()), []);
   const todayEntry = entries.find((e) => e.entry_date === today);
   const pastEntries = entries.filter((e) => e.entry_date !== today);

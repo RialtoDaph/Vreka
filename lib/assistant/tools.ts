@@ -34,7 +34,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
           type: "string",
           description: `Kategori transaksi. Untuk income: ${INCOME_CATEGORIES.join(", ")}. Untuk expense: ${EXPENSE_CATEGORIES.join(", ")}.`,
         },
-        amount: { type: "number", description: "Jumlah dalam EUR, harus > 0." },
+        amount: { type: "number", description: "Jumlah dalam Rupiah (IDR), harus > 0." },
         description: { type: "string", description: "Catatan opsional." },
         occurred_on: {
           type: "string",
@@ -176,7 +176,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
           type: "string",
           description: `Kategori pengeluaran. Salah satu dari: ${EXPENSE_CATEGORIES.join(", ")}.`,
         },
-        monthly_limit: { type: "number", description: "Batas pengeluaran per bulan dalam EUR, harus > 0." },
+        monthly_limit: { type: "number", description: "Batas pengeluaran per bulan dalam Rupiah (IDR), harus > 0." },
       },
       required: ["category", "monthly_limit"],
     },

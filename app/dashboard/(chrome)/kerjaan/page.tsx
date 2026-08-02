@@ -79,7 +79,13 @@ export default function KerjaanPage() {
       user_id: user.id,
       title,
       description: description || null,
-      deadline: deadline || null,
+      // `deadline` comes from an <input type="datetime-local">, e.g.
+      // "2026-08-05T21:00" with no timezone offset. `new Date(...)` parses
+      // that as local time (per spec), so converting to ISO here stores the
+      // correct UTC instant instead of letting Postgres interpret the raw
+      // offset-less string as UTC (which would silently shift it by the
+      // browser's UTC offset).
+      deadline: deadline ? new Date(deadline).toISOString() : null,
       priority,
       status: "todo",
       project: project.trim() || null,

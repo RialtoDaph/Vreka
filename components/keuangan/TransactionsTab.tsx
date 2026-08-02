@@ -221,8 +221,15 @@ export default function TransactionsTab() {
       .lte("occurred_on", lastDay)
       .order("occurred_on", { ascending: true });
     const rows = (data ?? []) as Transaction[];
-    const income = rows.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
-    const expense = rows.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+    // Round to whole Rupiah -- IDR has no meaningful fractional unit, and
+    // summing floats otherwise leaves artifacts like 244.34999999999997
+    // written straight into the exported file.
+    const income = Math.round(
+      rows.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0)
+    );
+    const expense = Math.round(
+      rows.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0)
+    );
 
     downloadCsv(`vreka-transaksi-${exportMonth}.csv`, [
       ["Laporan Keuangan", exportMonth],
@@ -236,7 +243,7 @@ export default function TransactionsTab() {
         t.type === "income" ? "Pemasukan" : "Pengeluaran",
         t.category,
         t.description ?? "",
-        Number(t.amount),
+        Math.round(Number(t.amount)),
       ]),
     ]);
     setExporting(false);
@@ -291,7 +298,7 @@ export default function TransactionsTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Jumlah (€)</label>
+                <label className={labelClass}>Jumlah (Rp)</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -299,7 +306,7 @@ export default function TransactionsTab() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="50,00"
+                  placeholder="50.000"
                 />
               </div>
               <div>

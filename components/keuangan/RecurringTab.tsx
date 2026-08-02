@@ -4,13 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { RecurringItem, RecurringItemCheck, TransactionType } from "@/lib/types";
 import { formatCurrency, parseAmount } from "@/lib/format";
+import { currentMonthKey, todayKey } from "@/lib/date";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
-
-function currentPeriod() {
-  return new Date().toISOString().slice(0, 7); // "YYYY-MM"
-}
 
 export default function RecurringTab() {
   const supabase = createClient();
@@ -30,7 +27,7 @@ export default function RecurringTab() {
   const [autoPost, setAutoPost] = useState(false);
   const [dayOfMonth, setDayOfMonth] = useState("1");
 
-  const period = currentPeriod();
+  const period = currentMonthKey();
 
   function resetForm() {
     setEditingId(null);
@@ -151,7 +148,7 @@ export default function RecurringTab() {
           category: item.category,
           amount: item.amount,
           description: item.name,
-          occurred_on: new Date().toISOString().slice(0, 10),
+          occurred_on: todayKey(),
         })
         .select("id")
         .single();
@@ -239,7 +236,7 @@ export default function RecurringTab() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Nominal (€)</label>
+                <label className={labelClass}>Nominal (Rp)</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -247,7 +244,7 @@ export default function RecurringTab() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="500,00"
+                  placeholder="500.000"
                 />
               </div>
             </div>

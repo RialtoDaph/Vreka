@@ -1,15 +1,18 @@
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("de-DE", {
+  return new Intl.NumberFormat("id-ID", {
     style: "currency",
-    currency: "EUR",
+    currency: "IDR",
   }).format(amount);
 }
 
-// Amount inputs are type="text" (not type="number") because Chrome/Safari
-// reject a typed "," even though the EUR display format uses it as the
-// decimal separator. Accept both so "12,50" and "12.50" both parse.
+// Amount inputs are type="text" (not type="number") so id-ID-style grouping
+// ("1.500.000") can be typed directly. "." is the thousands separator (and
+// is stripped, not parsed as a decimal point) and "," is the decimal
+// separator -- the same convention `formatCurrency` displays in. Getting
+// this pair out of sync is what let "1.500" silently parse as 1.5 before.
 export function parseAmount(value: string): number {
-  return Number(value.replace(",", "."));
+  const cleaned = value.trim().replace(/\./g, "").replace(",", ".");
+  return Number(cleaned);
 }
 
 export function formatDate(dateStr: string | null): string {

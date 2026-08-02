@@ -151,7 +151,7 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Jumlah (€)</label>
+                <label className={labelClass}>Jumlah (Rp)</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -159,7 +159,7 @@ export default function DebtsTab() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="500,00"
+                  placeholder="500.000"
                 />
               </div>
               <div>

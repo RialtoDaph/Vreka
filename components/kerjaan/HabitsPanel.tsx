@@ -4,12 +4,9 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Habit, HabitCheck } from "@/lib/types";
 import { computeStreak } from "@/lib/habits";
+import { todayKey } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export default function HabitsPanel() {
   const supabase = createClient();
@@ -62,7 +59,7 @@ export default function HabitsPanel() {
   }
 
   async function toggleToday(habit: Habit) {
-    const today = todayStr();
+    const today = todayKey();
     const existing = (checksByHabit[habit.id] ?? []).find((c) => c.period === today);
     if (existing) {
       setChecksByHabit((prev) => ({
@@ -118,7 +115,7 @@ export default function HabitsPanel() {
         <ul className="divide-y divide-line/60">
           {habits.map((habit) => {
             const periods = new Set((checksByHabit[habit.id] ?? []).map((c) => c.period));
-            const checkedToday = periods.has(todayStr());
+            const checkedToday = periods.has(todayKey());
             const streak = computeStreak(periods);
             return (
               <li key={habit.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center gap-3">

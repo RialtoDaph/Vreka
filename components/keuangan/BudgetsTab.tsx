@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Budget } from "@/lib/types";
 import { formatCurrency, parseAmount } from "@/lib/format";
+import { localDateKey } from "@/lib/date";
 import { EXPENSE_CATEGORIES } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
@@ -41,9 +42,7 @@ export default function BudgetsTab() {
   async function load() {
     setLoading(true);
     const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-      .toISOString()
-      .slice(0, 10);
+    const firstDayOfMonth = localDateKey(new Date(now.getFullYear(), now.getMonth(), 1));
 
     const [{ data: budgets }, { data: txMonth }] = await Promise.all([
       supabase.from("budgets").select("*").order("created_at", { ascending: false }),
@@ -139,7 +138,7 @@ export default function BudgetsTab() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Batas Bulanan (€)</label>
+                <label className={labelClass}>Batas Bulanan (Rp)</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -147,7 +146,7 @@ export default function BudgetsTab() {
                   value={monthlyLimit}
                   onChange={(e) => setMonthlyLimit(e.target.value)}
                   className={inputClass}
-                  placeholder="500,00"
+                  placeholder="500.000"
                 />
               </div>
             </div>

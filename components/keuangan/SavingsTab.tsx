@@ -130,7 +130,7 @@ export default function SavingsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Target (€)</label>
+                <label className={labelClass}>Target (Rp)</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -138,7 +138,7 @@ export default function SavingsTab() {
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   className={inputClass}
-                  placeholder="10000,00"
+                  placeholder="10.000.000"
                 />
               </div>
               <div>

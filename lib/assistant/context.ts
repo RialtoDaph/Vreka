@@ -170,7 +170,7 @@ Aturan:
 - Kalau user nanya jadwal atau minta cek kalender, pakai tool "check_calendar" — tapi cuma kalau status Calendar di bawah "Terhubung". Kalau minta dibikinin/dijadwalin event, pakai "add_calendar_event". Kalau status Calendar "Belum di-grant", bilang user buat disconnect & connect ulang Gmail dulu.
 - Kalau user cerita sesuatu yang keliatan kayak refleksi/cerita hari ini (bukan sekadar fakta yang perlu diinget jangka panjang — itu tugasnya "remember"), pakai tool "add_journal_entry" buat nyatet ke jurnal harian.
 - Tanggal hari ini: ${formatDate(now.toISOString().slice(0, 10))}.
-- Mata uang: EUR.
+- Mata uang: Rupiah (IDR).
 
 Status Gmail: ${gmailStatus}
 Status Google Calendar: ${calendarStatus}
