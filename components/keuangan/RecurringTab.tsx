@@ -256,8 +256,9 @@ export default function RecurringTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Nama Pos</label>
+                <label htmlFor="recurring-name" className={labelClass}>Nama Pos</label>
                 <input
+                  id="recurring-name"
                   type="text"
                   required
                   value={name}
@@ -267,8 +268,9 @@ export default function RecurringTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Kategori</label>
+                <label htmlFor="recurring-category" className={labelClass}>Kategori</label>
                 <select
+                  id="recurring-category"
                   value={category}
                   onChange={(e) => {
                     setCategory(e.target.value);
@@ -284,8 +286,9 @@ export default function RecurringTab() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Nominal (Rp)</label>
+                <label htmlFor="recurring-amount" className={labelClass}>Nominal (Rp)</label>
                 <input
+                  id="recurring-amount"
                   type="text"
                   inputMode="decimal"
                   required
@@ -309,8 +312,9 @@ export default function RecurringTab() {
               </label>
               {autoPost && (
                 <div className="mt-2.5 max-w-[10rem]">
-                  <label className={labelClass}>Tanggal tiap bulan</label>
+                  <label htmlFor="recurring-day" className={labelClass}>Tanggal tiap bulan</label>
                   <input
+                    id="recurring-day"
                     type="number"
                     min={1}
                     max={31}

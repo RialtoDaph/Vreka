@@ -58,14 +58,14 @@ export default function MfaChallengePage() {
           <h1 className="font-display text-2xl font-bold tracking-wide text-white">
             Verifikasi 2FA
           </h1>
-          <p className="text-slate-400 text-sm mt-1 font-body">
+          <p id="mfa-code-hint" className="text-slate-400 text-sm mt-1 font-body">
             Masukin kode 6 digit dari aplikasi authenticator kamu
           </p>
         </div>
 
         <HudPanel glow>
           {loading ? (
-            <p className="text-sm text-slate-500 text-center">Memuat...</p>
+            <p className="text-sm text-slate-400 text-center">Memuat...</p>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <input
@@ -75,6 +75,8 @@ export default function MfaChallengePage() {
                 maxLength={6}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                aria-label="Kode verifikasi 6 digit"
+                aria-describedby="mfa-code-hint"
                 className={`${inputClass} text-center text-2xl tracking-[0.5em] font-mono`}
                 placeholder="000000"
               />

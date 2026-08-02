@@ -152,8 +152,9 @@ export default function BudgetsTab() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Kategori</label>
+                <label htmlFor="budget-category" className={labelClass}>Kategori</label>
                 <select
+                  id="budget-category"
                   value={category}
                   disabled={!!editingId}
                   onChange={(e) => setCategory(e.target.value)}
@@ -167,8 +168,9 @@ export default function BudgetsTab() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Batas Bulanan (Rp)</label>
+                <label htmlFor="budget-limit" className={labelClass}>Batas Bulanan (Rp)</label>
                 <input
+                  id="budget-limit"
                   type="text"
                   inputMode="decimal"
                   required

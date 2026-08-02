@@ -177,8 +177,9 @@ export default function DebtsTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Nama Pihak</label>
+                <label htmlFor="debt-party" className={labelClass}>Nama Pihak</label>
                 <input
+                  id="debt-party"
                   type="text"
                   required
                   value={partyName}
@@ -188,8 +189,9 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Jumlah (Rp)</label>
+                <label htmlFor="debt-amount" className={labelClass}>Jumlah (Rp)</label>
                 <input
+                  id="debt-amount"
                   type="text"
                   inputMode="decimal"
                   required
@@ -200,8 +202,9 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Jatuh Tempo (opsional)</label>
+                <label htmlFor="debt-due-date" className={labelClass}>Jatuh Tempo (opsional)</label>
                 <input
+                  id="debt-due-date"
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
@@ -209,8 +212,9 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Catatan (opsional)</label>
+                <label htmlFor="debt-notes" className={labelClass}>Catatan (opsional)</label>
                 <input
+                  id="debt-notes"
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}

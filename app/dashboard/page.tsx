@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import MemoryMapLoader from "@/components/dashboard/MemoryMapLoader";
+import CommandPalette from "@/components/CommandPalette";
 import { buildMemoryMapData } from "@/lib/memoryMap";
 import { getCalendarAccessToken } from "@/lib/google/credentials";
 import { listUpcomingEvents, type CalendarEvent } from "@/lib/google/calendar";
@@ -84,5 +85,13 @@ export default async function OverviewPage() {
     voiceEnabled: !!process.env.ELEVENLABS_API_KEY,
   });
 
-  return <MemoryMapLoader data={memoryMapData} />;
+  return (
+    <>
+      <MemoryMapLoader data={memoryMapData} />
+      {/* This route sits outside app/dashboard/(chrome)/layout.tsx (full-bleed
+          layout, no Sidebar), so ⌘K used to silently do nothing here even
+          though it works everywhere else in the dashboard. */}
+      <CommandPalette />
+    </>
+  );
 }

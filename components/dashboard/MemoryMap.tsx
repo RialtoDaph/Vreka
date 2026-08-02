@@ -5,6 +5,7 @@ import Link from "next/link";
 import * as THREE from "three";
 import { TYPE_META, type MemoryMapData, type MemoryNodeType } from "@/lib/memoryMap";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
+import { THEME } from "@/lib/theme";
 import SignOutButton from "@/components/SignOutButton";
 
 type Props = {
@@ -18,7 +19,7 @@ type SceneApi = {
 };
 
 const FILTERS: { id: FilterId; label: string; dot: string }[] = [
-  { id: "all", label: "Semua", dot: "#94a3b8" },
+  { id: "all", label: "Semua", dot: THEME.neutral400 },
   { id: "task", label: "Kerjaan", dot: TYPE_META.task.color },
   { id: "finance", label: "Keuangan", dot: TYPE_META.finance.color },
   { id: "note", label: "Pelajaran", dot: TYPE_META.note.color },
@@ -35,15 +36,15 @@ const NAV = [
   { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },
   { href: "/dashboard/kalender", label: "Kalender", icon: "▦" },
   { href: "/dashboard/jurnal", label: "Jurnal", icon: "✎" },
-  { href: "/dashboard/asisten", label: "Asisten", icon: "✦" },
+  { href: "/dashboard/asisten", label: "Aslan", icon: "✦" },
 ];
 
 const VOICE_PHASE_STYLE: Record<VoicePhase, { color: string; label: string }> = {
-  idle: { color: "#4be8ff", label: "Online" },
-  listening: { color: "#4bffb0", label: "Lagi dengerin..." },
-  processing: { color: "#ffb454", label: "Mikir..." },
-  speaking: { color: "#4bffb0", label: "Ngomong..." },
-  error: { color: "#ff5d7a", label: "Error" },
+  idle: { color: THEME.cyanGlow, label: "Online" },
+  listening: { color: THEME.mintGlow, label: "Lagi dengerin..." },
+  processing: { color: THEME.amberGlow, label: "Mikir..." },
+  speaking: { color: THEME.mintGlow, label: "Ngomong..." },
+  error: { color: THEME.roseGlow, label: "Error" },
 };
 
 export default function MemoryMap({ data }: Props) {
@@ -54,9 +55,14 @@ export default function MemoryMap({ data }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
-  const [spin, setSpin] = useState(true);
+  // Respects prefers-reduced-motion for the initial auto-spin state -- the
+  // user can still turn it back on manually via the "Auto-spin" toggle.
+  const [spin, setSpin] = useState(
+    () => typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
   const [chatDraft, setChatDraft] = useState("");
   const [navOpen, setNavOpen] = useState(false);
+  const [webglError, setWebglError] = useState(false);
 
   const { phase: voicePhase, toggle: toggleVoice, sendText, audioRef } = useVoiceAssistant();
   const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
@@ -117,10 +123,21 @@ export default function MemoryMap({ data }: Props) {
     }
     applyCamera();
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch (err) {
+      // A device that fails to create a WebGL context (blocklisted GPU,
+      // hardened browser settings, ...) used to crash this whole route --
+      // there's nothing to tear down yet at this point, so just report it
+      // and let the component render its non-3D fallback instead.
+      console.error("MemoryMap: gagal bikin WebGL context:", err);
+      setWebglError(true);
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(rect.width, rect.height);
-    renderer.setClearColor(0x05080d, 0);
+    renderer.setClearColor(THEME.void, 0);
     renderer.domElement.style.position = "absolute";
     renderer.domElement.style.inset = "0";
     renderer.domElement.style.cursor = "grab";
@@ -173,7 +190,7 @@ export default function MemoryMap({ data }: Props) {
     edgeGeo.setAttribute("position", new THREE.BufferAttribute(edgePositions, 3));
     const edgeLines = new THREE.LineSegments(
       edgeGeo,
-      new THREE.LineBasicMaterial({ color: 0x4be8ff, transparent: true, opacity: 0.28 })
+      new THREE.LineBasicMaterial({ color: THEME.cyanGlow, transparent: true, opacity: 0.28 })
     );
     scene.add(edgeLines);
 
@@ -431,6 +448,14 @@ export default function MemoryMap({ data }: Props) {
 
     let raf = 0;
     function loop() {
+      // Backgrounded tabs still get throttled rAF callbacks eventually, but
+      // there's no reason to keep running full physics + a WebGL render for
+      // a canvas nobody can see -- stop rescheduling here, and let
+      // onVisibilityChange restart the loop once the tab is visible again.
+      if (document.visibilityState === "hidden") {
+        raf = 0;
+        return;
+      }
       stepPhysics();
       if (spinRef.current && !dragging) {
         orbit.theta += 0.0012;
@@ -442,8 +467,16 @@ export default function MemoryMap({ data }: Props) {
     }
     raf = requestAnimationFrame(loop);
 
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible" && !raf) {
+        raf = requestAnimationFrame(loop);
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       cancelAnimationFrame(raf);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
@@ -479,6 +512,20 @@ export default function MemoryMap({ data }: Props) {
         <div ref={labelLayerRef} className="absolute inset-0 pointer-events-none z-[1]" />
       </div>
 
+      {webglError && (
+        <div className="absolute inset-0 z-[1] flex items-center justify-center p-6">
+          <div className="max-w-sm text-center">
+            <p className="text-xs font-mono uppercase tracking-[0.3em] text-amber-glow mb-2">
+              Grafis 3D nggak kebuka
+            </p>
+            <p className="text-sm text-slate-400">
+              Browser/device ini nggak bisa render tampilan 3D-nya. Semua data kamu tetap aman —
+              pakai menu di kiri atas buat langsung ke modul yang kamu mau.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="absolute top-5 left-5 z-[2] w-[230px]">
         <button
           onClick={() => setNavOpen((o) => !o)}
@@ -492,9 +539,9 @@ export default function MemoryMap({ data }: Props) {
           <div>
             <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0 flex items-center gap-1.5">
               ASLAN
-              <span className="text-slate-500 text-[10px]">{navOpen ? "▲" : "▼"}</span>
+              <span className="text-slate-400 text-[10px]">{navOpen ? "▲" : "▼"}</span>
             </p>
-            <p className="font-mono text-[8px] tracking-[0.15em] text-slate-500 m-0">
+            <p className="font-mono text-[8px] tracking-[0.15em] text-slate-400 m-0">
               {data.nodes.length} memori · {data.edges.length} koneksi
             </p>
           </div>
@@ -526,46 +573,50 @@ export default function MemoryMap({ data }: Props) {
         />
       </div>
 
-      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-2">
-        <button
-          onClick={() => sceneApiRef.current?.fitView()}
-          className="flex items-center gap-1.5 bg-panel/75 border border-line text-slate-300 font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm hover:border-cyan-glow/40"
-        >
-          ⊙ Fit
-        </button>
-        <button
-          onClick={() => setSpin((s) => !s)}
-          className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm border ${
-            spin
-              ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-              : "bg-panel/75 border-line text-slate-300"
-          }`}
-        >
-          ◍ {spin ? "Auto-spin" : "Diam"}
-        </button>
-      </div>
-
-      <div className="absolute top-5 right-5 z-[2] text-right">
-        <p className="font-mono text-[9px] tracking-[0.15em] uppercase text-slate-500 mb-2">
-          Filter
-        </p>
-        <div className="flex flex-col gap-1.5 items-end">
-          {FILTERS.map((f) => {
-            const active = activeFilter === f.id;
-            return (
-              <button
-                key={f.id}
-                onClick={() => setActiveFilter(f.id)}
-                className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
-                style={{ color: active ? "#4be8ff" : "#a8b8c8" }}
-              >
-                {f.label}
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: f.dot }} />
-              </button>
-            );
-          })}
+      {!webglError && (
+        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-2">
+          <button
+            onClick={() => sceneApiRef.current?.fitView()}
+            className="flex items-center gap-1.5 bg-panel/75 border border-line text-slate-300 font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm hover:border-cyan-glow/40"
+          >
+            ⊙ Fit
+          </button>
+          <button
+            onClick={() => setSpin((s) => !s)}
+            className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm border ${
+              spin
+                ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
+                : "bg-panel/75 border-line text-slate-300"
+            }`}
+          >
+            ◍ {spin ? "Auto-spin" : "Diam"}
+          </button>
         </div>
-      </div>
+      )}
+
+      {!webglError && (
+        <div className="absolute top-5 right-5 z-[2] text-right">
+          <p className="font-mono text-[9px] tracking-[0.15em] uppercase text-slate-400 mb-2">
+            Filter
+          </p>
+          <div className="flex flex-col gap-1.5 items-end">
+            {FILTERS.map((f) => {
+              const active = activeFilter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setActiveFilter(f.id)}
+                  className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
+                  style={{ color: active ? THEME.cyanGlow : THEME.neutral400 }}
+                >
+                  {f.label}
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: f.dot }} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {selectedNode && (
         <div className="absolute top-0 right-0 bottom-0 w-[300px] bg-panel/90 border-l border-line backdrop-blur-[10px] p-5 z-[3] overflow-y-auto">
@@ -578,7 +629,7 @@ export default function MemoryMap({ data }: Props) {
             </span>
             <button
               onClick={() => setSelectedId(null)}
-              className="bg-transparent border-none text-slate-500 text-base leading-none cursor-pointer"
+              className="bg-transparent border-none text-slate-400 text-base leading-none cursor-pointer"
               aria-label="Tutup detail"
             >
               ×
@@ -591,12 +642,12 @@ export default function MemoryMap({ data }: Props) {
                 key={f.k}
                 className="flex justify-between gap-2.5 border-b border-line/60 pb-2"
               >
-                <span className="text-[11.5px] text-slate-500">{f.k}</span>
+                <span className="text-[11.5px] text-slate-400">{f.k}</span>
                 <span className="text-[12.5px] text-slate-300 text-right">{f.v}</span>
               </div>
             ))}
           </div>
-          <p className="font-mono text-[10px] text-slate-600 mt-4">{linkCount} koneksi</p>
+          <p className="font-mono text-[10px] text-slate-400 mt-4">{linkCount} koneksi</p>
           {selectedNode.href && (
             <a
               href={selectedNode.href}

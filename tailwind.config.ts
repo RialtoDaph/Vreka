@@ -1,28 +1,29 @@
 import type { Config } from "tailwindcss";
+import { THEME } from "./lib/theme";
 
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        void: "#05080d",
-        panel: "#0b1220",
-        panel2: "#0f1a2c",
-        line: "#1c2b40",
+        void: THEME.void,
+        panel: THEME.panel,
+        panel2: THEME.panel2,
+        line: THEME.line,
         cyan: {
-          glow: "#4be8ff",
+          glow: THEME.cyanGlow,
         },
         amber: {
-          glow: "#ffb454",
+          glow: THEME.amberGlow,
         },
         rose: {
-          glow: "#ff5d7a",
+          glow: THEME.roseGlow,
         },
         mint: {
-          glow: "#4bffb0",
+          glow: THEME.mintGlow,
         },
         violet: {
-          glow: "#b98bff",
+          glow: THEME.violetGlow,
         },
       },
       fontFamily: {

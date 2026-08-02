@@ -27,6 +27,21 @@ const PRIORITY_TONE: Record<TaskPriority, string> = {
   high: "text-rose-glow border-rose-glow/40",
 };
 
+// Higher first. The board used to sort purely by deadline -- the priority
+// badge shown on every card never actually affected ordering, so a "high"
+// item with no deadline sat wherever it happened to land instead of
+// floating up.
+const PRIORITY_RANK: Record<TaskPriority, number> = { high: 0, medium: 1, low: 2 };
+
+function compareTasks(a: Task, b: Task): number {
+  const byPriority = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+  if (byPriority !== 0) return byPriority;
+  if (a.deadline && b.deadline) return a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : 0;
+  if (a.deadline) return -1;
+  if (b.deadline) return 1;
+  return 0;
+}
+
 const COLUMNS: { key: TaskStatus; label: string; tone: string }[] = [
   { key: "todo", label: "To-do", tone: "text-slate-300" },
   { key: "in_progress", label: "In Progress", tone: "text-amber-glow" },
@@ -316,9 +331,9 @@ export default function KerjaanPage() {
       ) : (
         <div className="grid md:grid-cols-3 gap-4 items-start">
           {COLUMNS.map((col) => {
-            const colItems = items.filter(
-              (t) => t.status === col.key && (!projectFilter || t.project === projectFilter)
-            );
+            const colItems = items
+              .filter((t) => t.status === col.key && (!projectFilter || t.project === projectFilter))
+              .sort(compareTasks);
             return (
               <HudPanel key={col.key}>
                 <div className="flex items-center justify-between mb-3">
@@ -337,6 +352,7 @@ export default function KerjaanPage() {
                       const urgent = d !== null && d <= 2 && task.status !== "done";
                       const subtasks = subtasksByTask[task.id] ?? [];
                       const doneSubtasks = subtasks.filter((s) => s.done).length;
+                      const allSubtasksDone = subtasks.length > 0 && doneSubtasks === subtasks.length && task.status !== "done";
                       const expanded = expandedId === task.id;
                       return (
                         <li
@@ -381,8 +397,18 @@ export default function KerjaanPage() {
                             {subtasks.length > 0 && (
                               <button
                                 onClick={() => setExpandedId(expanded ? null : task.id)}
-                                className="text-[10px] font-mono text-cyan-glow/80 hover:text-cyan-glow"
+                                title={
+                                  allSubtasksDone
+                                    ? "Semua sub-task selesai -- tandain to-do ini selesai juga?"
+                                    : undefined
+                                }
+                                className={`text-[10px] font-mono ${
+                                  allSubtasksDone
+                                    ? "text-mint-glow hover:text-mint-glow/80"
+                                    : "text-cyan-glow/80 hover:text-cyan-glow"
+                                }`}
                               >
+                                {allSubtasksDone && "✓ "}
                                 {doneSubtasks}/{subtasks.length} sub-task {expanded ? "▾" : "▸"}
                               </button>
                             )}

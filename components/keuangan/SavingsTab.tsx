@@ -156,8 +156,9 @@ export default function SavingsTab() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
-                <label className={labelClass}>Nama Target</label>
+                <label htmlFor="savings-name" className={labelClass}>Nama Target</label>
                 <input
+                  id="savings-name"
                   type="text"
                   required
                   value={name}
@@ -167,8 +168,9 @@ export default function SavingsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Target (Rp)</label>
+                <label htmlFor="savings-target" className={labelClass}>Target (Rp)</label>
                 <input
+                  id="savings-target"
                   type="text"
                   inputMode="decimal"
                   required
@@ -179,8 +181,9 @@ export default function SavingsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Sudah Terkumpul (opsional)</label>
+                <label htmlFor="savings-current" className={labelClass}>Sudah Terkumpul (opsional)</label>
                 <input
+                  id="savings-current"
                   type="text"
                   inputMode="decimal"
                   value={current}
@@ -190,8 +193,9 @@ export default function SavingsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Deadline (opsional)</label>
+                <label htmlFor="savings-deadline" className={labelClass}>Deadline (opsional)</label>
                 <input
+                  id="savings-deadline"
                   type="date"
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
@@ -260,6 +264,7 @@ export default function SavingsTab() {
                       onChange={(e) => setAddFundValue(e.target.value)}
                       className={inputClass}
                       placeholder="Nominal"
+                      aria-label={`Tambah dana ke ${goal.name}`}
                     />
                     <button onClick={() => handleAddFund(goal)} className={primaryBtnClass}>
                       OK

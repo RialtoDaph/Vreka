@@ -16,10 +16,14 @@ import {
   errorBannerClass,
 } from "@/lib/ui";
 
+const PAGE_SIZE = 100;
+
 export default function TransactionsTab() {
   const supabase = createClient();
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,9 +154,29 @@ export default function TransactionsTab() {
       .select("*")
       .order("occurred_on", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(100);
-    setItems(data ?? []);
+      .range(0, PAGE_SIZE - 1);
+    const rows = data ?? [];
+    setItems(rows);
+    // A full page back means there's likely more beyond it -- not a real
+    // total count, but enough to know whether to show "load more" instead
+    // of silently hiding everything past the first 100 with no indicator.
+    setHasMore(rows.length === PAGE_SIZE);
     setLoading(false);
+  }
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const { data } = await supabase
+      .from("transactions")
+      .select("*")
+      .order("occurred_on", { ascending: false })
+      .order("created_at", { ascending: false })
+      .range(items.length, items.length + PAGE_SIZE - 1);
+    const rows = data ?? [];
+    setItems((prev) => [...prev, ...rows]);
+    setHasMore(rows.length === PAGE_SIZE);
+    setLoadingMore(false);
   }
 
   useEffect(() => {
@@ -329,8 +353,9 @@ export default function TransactionsTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Jumlah (Rp)</label>
+                <label htmlFor="tx-amount" className={labelClass}>Jumlah (Rp)</label>
                 <input
+                  id="tx-amount"
                   type="text"
                   inputMode="decimal"
                   required
@@ -341,10 +366,11 @@ export default function TransactionsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>
+                <label htmlFor="tx-category" className={labelClass}>
                   Kategori {categorizing && <span className="text-cyan-glow normal-case">(nebak...)</span>}
                 </label>
                 <select
+                  id="tx-category"
                   value={category}
                   onChange={(e) => {
                     setCategory(e.target.value);
@@ -360,8 +386,9 @@ export default function TransactionsTab() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Tanggal</label>
+                <label htmlFor="tx-date" className={labelClass}>Tanggal</label>
                 <input
+                  id="tx-date"
                   type="date"
                   value={occurredOn}
                   onChange={(e) => setOccurredOn(e.target.value)}
@@ -369,8 +396,9 @@ export default function TransactionsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Catatan (opsional)</label>
+                <label htmlFor="tx-description" className={labelClass}>Catatan (opsional)</label>
                 <input
+                  id="tx-description"
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -442,7 +470,7 @@ export default function TransactionsTab() {
                       <span className="text-slate-500"> · {tx.description}</span>
                     ) : null}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-600">
+                  <p className="text-[11px] font-mono text-slate-400">
                     {formatDate(tx.occurred_on)}
                   </p>
                 </div>
@@ -478,6 +506,13 @@ export default function TransactionsTab() {
               </li>
             ))}
           </ul>
+        )}
+        {hasMore && !loading && (
+          <div className="flex justify-center pt-4">
+            <button onClick={loadMore} disabled={loadingMore} className={ghostBtnClass}>
+              {loadingMore ? "Memuat..." : "Muat Lebih Banyak"}
+            </button>
+          </div>
         )}
       </HudPanel>
     </div>
