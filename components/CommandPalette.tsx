@@ -2,8 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { SearchResultItem } from "@/lib/search";
 
 type Command = { label: string; href: string; icon: string; keywords?: string };
+type PaletteItem = { key: string; label: string; sublabel?: string; icon: string; href: string };
+
+const SOURCE_ICON: Record<SearchResultItem["source"], string> = {
+  transaction: "⌬",
+  task: "▤",
+  note: "◎",
+  journal: "✎",
+  memory: "✦",
+};
 
 const COMMANDS: Command[] = [
   { label: "Memory Map", href: "/dashboard", icon: "◈", keywords: "overview ringkasan graph" },
@@ -25,6 +35,7 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [dataResults, setDataResults] = useState<SearchResultItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -50,12 +61,40 @@ export default function CommandPalette() {
     triggerRef.current = document.activeElement as HTMLElement | null;
     setQuery("");
     setActiveIndex(0);
+    setDataResults([]);
     const id = requestAnimationFrame(() => inputRef.current?.focus());
     return () => {
       cancelAnimationFrame(id);
       triggerRef.current?.focus?.();
     };
   }, [open]);
+
+  // Debounced live search over the user's own data (transactions, tasks,
+  // notes, journal, Aslan memory) so ⌘K doubles as a global search box, not
+  // just module navigation. Below 2 chars the query is too noisy to be
+  // useful and isn't worth the round trip.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setDataResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    const id = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: controller.signal })
+        .then((res) => (res.ok ? res.json() : { results: [] }))
+        .then((json) => setDataResults(Array.isArray(json.results) ? json.results : []))
+        .catch(() => {
+          // Network hiccup or the query changed mid-flight -- the palette
+          // just falls back to module matches, nothing to surface to the
+          // user over a background search.
+        });
+    }, 250);
+    return () => {
+      clearTimeout(id);
+      controller.abort();
+    };
+  }, [query]);
 
   function handleDialogKeyDown(e: React.KeyboardEvent) {
     if (e.key !== "Tab") return;
@@ -84,21 +123,32 @@ export default function CommandPalette() {
     return c.label.toLowerCase().includes(q) || (c.keywords ?? "").includes(q);
   });
 
-  function go(cmd: Command) {
+  const combined: PaletteItem[] = [
+    ...filtered.map((c) => ({ key: c.href, label: c.label, icon: c.icon, href: c.href })),
+    ...dataResults.map((r) => ({
+      key: `${r.source}-${r.id}`,
+      label: r.title,
+      sublabel: r.snippet,
+      icon: SOURCE_ICON[r.source] ?? "•",
+      href: r.href,
+    })),
+  ];
+
+  function go(item: PaletteItem) {
     setOpen(false);
-    router.push(cmd.href);
+    router.push(item.href);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+      setActiveIndex((i) => Math.min(i + 1, combined.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (filtered[activeIndex]) go(filtered[activeIndex]);
+      if (combined[activeIndex]) go(combined[activeIndex]);
     }
   }
 
@@ -130,20 +180,25 @@ export default function CommandPalette() {
           className="w-full bg-transparent px-4 py-3.5 text-sm text-white placeholder:text-slate-600 border-b border-line focus:outline-none"
         />
         <ul className="max-h-72 overflow-y-auto py-1.5">
-          {filtered.length === 0 ? (
+          {combined.length === 0 ? (
             <li className="px-4 py-3 text-sm text-slate-500">Nggak ketemu.</li>
           ) : (
-            filtered.map((cmd, i) => (
-              <li key={cmd.href}>
+            combined.map((item, i) => (
+              <li key={item.key}>
                 <button
-                  onClick={() => go(cmd)}
+                  onClick={() => go(item)}
                   onMouseEnter={() => setActiveIndex(i)}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
                     i === activeIndex ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-300"
                   }`}
                 >
-                  <span aria-hidden="true">{cmd.icon}</span>
-                  {cmd.label}
+                  <span aria-hidden="true">{item.icon}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate">{item.label}</span>
+                    {item.sublabel ? (
+                      <span className="block truncate text-xs text-slate-500">{item.sublabel}</span>
+                    ) : null}
+                  </span>
                 </button>
               </li>
             ))

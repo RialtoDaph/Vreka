@@ -6,12 +6,23 @@ import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistant/tools";
 
 const MAX_TOOL_ITERATIONS = 5;
 
+// Server-side tool -- Claude executes the search itself and the result
+// lands directly in response.content, no client-side execution needed. Kept
+// separate from search_records (which only looks at the user's own Vreka
+// data): this is for info that genuinely lives outside the app. max_uses
+// caps it at a few searches per turn since each one has a real cost and the
+// system prompt already tells Aslan not to reach for it reflexively.
+const WEB_SEARCH_TOOL: Anthropic.WebSearchTool20260209 = {
+  type: "web_search_20260209",
+  name: "web_search",
+  max_uses: 3,
+};
+
 // Tool schemas never change between requests, so caching them (breakpoint on
 // the last one covers the whole array) is a reliable, free latency win.
-const CACHED_TOOLS: Anthropic.Tool[] = ASSISTANT_TOOLS.map((tool, i) =>
-  i === ASSISTANT_TOOLS.length - 1
-    ? { ...tool, cache_control: { type: "ephemeral" } }
-    : tool
+const ALL_TOOLS: Anthropic.ToolUnion[] = [...ASSISTANT_TOOLS, WEB_SEARCH_TOOL];
+const CACHED_TOOLS: Anthropic.ToolUnion[] = ALL_TOOLS.map((tool, i) =>
+  i === ALL_TOOLS.length - 1 ? { ...tool, cache_control: { type: "ephemeral" } } : tool
 );
 
 // Haiku 4.5 doesn't support the effort parameter — sending it returns a 400.

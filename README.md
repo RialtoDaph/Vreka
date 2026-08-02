@@ -156,7 +156,14 @@ Setelah aktif, dapet notifikasi ringkasan pagi bareng jadwal cron yang sama
   buat export semua data kamu jadi satu file JSON
 
 Plus **Command Palette** (`⌘K` / `Ctrl+K`) buat lompat cepat ke modul mana
-aja dari mana aja di dashboard, dan **2FA** (autentikasi dua faktor) yang bisa
+aja dari mana aja di dashboard, sekaligus jadi **search box global** — ketik
+2+ karakter dan hasilnya nyari lintas transaksi, to-do, catatan belajar,
+jurnal, dan memory Aslan (full-text search Postgres, bukan cuma cocokin nama
+modul). Aslan sendiri bisa nyari histori data itu lewat chat pake tool
+`search_records`, dan buat pertanyaan di luar data Vreka (harga terkini,
+berita, dll) dia punya akses web search bawaan Claude — nggak perlu API key
+tambahan, tapi tiap pencarian ada biayanya jadi dipakai seperlunya aja, bukan
+reflek tiap chat. Dan ada **2FA** (autentikasi dua faktor) yang bisa
 diaktifin dari halaman Aslan — scan QR code pakai app authenticator (Google
 Authenticator, Authy, dll), abis itu login butuh kode 6 digit juga. Bawaan
 Supabase Auth, nggak perlu setup tambahan di luar app ini.
