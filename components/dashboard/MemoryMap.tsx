@@ -615,20 +615,8 @@ export default function MemoryMap({ data }: Props) {
           aria-label={voiceBusy ? "Hentikan ngobrol sama Aslan" : "Ngobrol sama Aslan"}
           className="relative w-[150px] h-[150px] rounded-full bg-transparent border-none cursor-pointer flex items-center justify-center"
         >
-          <span
-            className="absolute inset-0 rounded-full border spin-slow-fwd"
-            style={{ borderColor: `${voiceStyle.color}8c` }}
-          />
-          <span
-            className="absolute inset-3.5 rounded-full border border-dashed spin-slow-rev"
-            style={{ borderColor: `${voiceStyle.color}4d` }}
-          />
-          <span className="absolute inset-0 rounded-full voice-dial-ring" />
-          <span
-            className="relative font-display font-bold tracking-[0.15em] text-[15px]"
-            style={{ color: voiceStyle.color }}
-          >
-            A.S.L.A.N
+          <span className="aslan-avatar w-[120px] h-[120px]">
+            <img src="/aslan.png" alt="" />
           </span>
         </button>
         <p

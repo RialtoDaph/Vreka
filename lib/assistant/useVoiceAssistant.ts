@@ -281,8 +281,7 @@ export function useVoiceAssistant() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text, model: modelRef.current }),
         });
-        const data = await res.json();
-        const reply = res.ok ? (data.message as string) : "Maaf, ada masalah pas mikir.";
+        const reply = res.ok ? await res.text() : "Maaf, ada masalah pas mikir.";
         if (stoppedRef.current) break;
         setPhase("speaking");
         pendingBlob = await speakWithBargeIn(reply);

@@ -13,7 +13,6 @@ export async function buildAssistantSystemPrompt(
 
   const [
     { data: txMonth },
-    { data: expenseByCategoryMonth },
     { data: budgets },
     { data: unpaidDebts },
     { data: goals },
@@ -24,16 +23,12 @@ export async function buildAssistantSystemPrompt(
     { data: memories },
     { data: googleCred },
   ] = await Promise.all([
+    // Covers both the income/expense totals and the per-category expense
+    // breakdown below — one round trip instead of two near-identical ones.
     supabase
       .from("transactions")
-      .select("type, amount")
+      .select("type, category, amount")
       .eq("user_id", userId)
-      .gte("occurred_on", firstDayOfMonth),
-    supabase
-      .from("transactions")
-      .select("category, amount")
-      .eq("user_id", userId)
-      .eq("type", "expense")
       .gte("occurred_on", firstDayOfMonth),
     supabase.from("budgets").select("*").eq("user_id", userId),
     supabase.from("debts").select("*").eq("user_id", userId).eq("status", "unpaid"),
@@ -85,7 +80,8 @@ export async function buildAssistantSystemPrompt(
     .reduce((sum, d) => sum + Number(d.amount), 0);
 
   const spentByCategory = new Map<string, number>();
-  for (const t of expenseByCategoryMonth ?? []) {
+  for (const t of txMonth ?? []) {
+    if (t.type !== "expense") continue;
     spentByCategory.set(t.category, (spentByCategory.get(t.category) ?? 0) + Number(t.amount));
   }
   const budgetLines =

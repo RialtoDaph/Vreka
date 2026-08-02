@@ -30,7 +30,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const finalText = await runAssistantChat(supabase, user.id, userMessage, model, apiKey);
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        await runAssistantChat(supabase, user.id, userMessage, model, apiKey, (delta) => {
+          controller.enqueue(encoder.encode(delta));
+        });
+      } catch {
+        controller.enqueue(encoder.encode("Maaf, ada masalah pas mikir. Coba lagi ya."));
+      } finally {
+        controller.close();
+      }
+    },
+  });
 
-  return NextResponse.json({ message: finalText });
+  return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
