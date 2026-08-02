@@ -173,24 +173,11 @@ body {
   transition: opacity 0.2s ease;
 }
 
-.spin-slow-fwd {
-  animation: aslan-spin 14s linear infinite;
-}
-.spin-slow-rev {
-  animation: aslan-spin 20s linear infinite reverse;
-}
-.voice-dial-ring {
-  animation: aslan-pulse-ring 1.6s ease-out infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .scanline::after,
   .pulse-dot,
   .aslan-avatar::after,
-  .aslan-avatar img,
-  .spin-slow-fwd,
-  .spin-slow-rev,
-  .voice-dial-ring {
+  .aslan-avatar img {
     animation: none !important;
   }
 }

@@ -14,14 +14,13 @@ const CACHED_TOOLS: Anthropic.Tool[] = ASSISTANT_TOOLS.map((tool, i) =>
     : tool
 );
 
-// Haiku 4.5 doesn't support adaptive thinking or the effort parameter — sending
-// either returns a 400. Opus 5 / Sonnet 5 support both.
+// Haiku 4.5 doesn't support the effort parameter — sending it returns a 400.
+// Opus 5 / Sonnet 5 do. Adaptive thinking is left off on purpose: it made
+// Aslan noticeably slower to start replying without a clear quality win for
+// the kind of short, tool-driven turns this assistant mostly handles.
 function modelRequestExtras(model: string) {
   if (model === "claude-haiku-4-5") return {};
-  return {
-    thinking: { type: "adaptive" as const },
-    output_config: { effort: "low" as const },
-  };
+  return { output_config: { effort: "low" as const } };
 }
 
 // Shared by the web chat route and the Telegram webhook — runs one turn of
