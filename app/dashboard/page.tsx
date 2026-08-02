@@ -26,24 +26,5 @@ export default async function OverviewPage() {
     notes: (notes ?? []) as StudyNote[],
   });
 
-  return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
-            Overview
-          </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
-            Memory Map
-          </h1>
-        </div>
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-mint-glow border border-mint-glow/30 rounded-sm px-2 py-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-mint-glow pulse-dot" />
-          Optimal
-        </span>
-      </header>
-
-      <MemoryMapLoader data={memoryMapData} />
-    </div>
-  );
+  return <MemoryMapLoader data={memoryMapData} />;
 }

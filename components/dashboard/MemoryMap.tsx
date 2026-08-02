@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import * as THREE from "three";
 import { TYPE_META, type MemoryMapData, type MemoryNodeType } from "@/lib/memoryMap";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
+import SignOutButton from "@/components/SignOutButton";
 
 type Props = {
   data: MemoryMapData;
@@ -25,6 +27,13 @@ const FILTERS: { id: FilterId; label: string; dot: string }[] = [
 
 const INITIAL_ORBIT = { theta: 0.6, phi: 1.15, radius: 320 };
 
+const NAV = [
+  { href: "/dashboard/keuangan", label: "Keuangan", icon: "⌬" },
+  { href: "/dashboard/kerjaan", label: "Kerjaan", icon: "▤" },
+  { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },
+  { href: "/dashboard/asisten", label: "Asisten", icon: "✦" },
+];
+
 const VOICE_PHASE_STYLE: Record<VoicePhase, { color: string; label: string }> = {
   idle: { color: "#4be8ff", label: "Online" },
   listening: { color: "#4bffb0", label: "Lagi dengerin..." },
@@ -43,6 +52,7 @@ export default function MemoryMap({ data }: Props) {
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
   const [spin, setSpin] = useState(true);
   const [chatDraft, setChatDraft] = useState("");
+  const [navOpen, setNavOpen] = useState(false);
 
   const { phase: voicePhase, toggle: toggleVoice, sendText, audioRef } = useVoiceAssistant();
   const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
@@ -460,27 +470,50 @@ export default function MemoryMap({ data }: Props) {
     : 0;
 
   return (
-    // Interim height while this still sits inside the sidebar layout (Phase 1-3).
-    // Phase 4 makes this true full-viewport once the chrome-less route lands.
-    <div className="relative h-[75vh] min-h-[520px] rounded-md border border-line bg-void overflow-hidden">
+    <div className="relative h-dvh bg-void overflow-hidden">
       <div ref={stageRef} className="absolute inset-0">
         <div ref={labelLayerRef} className="absolute inset-0 pointer-events-none z-[1]" />
       </div>
 
       <div className="absolute top-5 left-5 z-[2] w-[230px]">
-        <div className="flex items-center gap-2 mb-3.5">
+        <button
+          onClick={() => setNavOpen((o) => !o)}
+          aria-expanded={navOpen}
+          aria-label="Buka menu navigasi"
+          className="flex items-center gap-2 mb-3.5 bg-transparent border-none cursor-pointer p-0 text-left"
+        >
           <span className="w-[26px] h-[26px] rounded-full border-2 border-cyan-glow/50 flex items-center justify-center shrink-0">
             <span className="w-2 h-2 rounded-full bg-cyan-glow pulse-dot" />
           </span>
           <div>
-            <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0">
+            <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0 flex items-center gap-1.5">
               ASLAN
+              <span className="text-slate-500 text-[10px]">{navOpen ? "▲" : "▼"}</span>
             </p>
             <p className="font-mono text-[8px] tracking-[0.15em] text-slate-500 m-0">
               {data.nodes.length} memori · {data.edges.length} koneksi
             </p>
           </div>
-        </div>
+        </button>
+
+        {navOpen && (
+          <div className="mb-3.5 bg-panel/90 border border-line rounded-lg backdrop-blur-sm overflow-hidden">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-slate-300 hover:text-cyan-glow hover:bg-panel2 transition-colors border-b border-line/60"
+              >
+                <span aria-hidden="true">{item.icon}</span>
+                {item.label}
+              </Link>
+            ))}
+            <div className="px-3 py-2.5">
+              <SignOutButton />
+            </div>
+          </div>
+        )}
+
         <input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
