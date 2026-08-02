@@ -22,6 +22,8 @@ const FILTERS: { id: FilterId; label: string; dot: string }[] = [
   { id: "task", label: "Kerjaan", dot: TYPE_META.task.color },
   { id: "finance", label: "Keuangan", dot: TYPE_META.finance.color },
   { id: "note", label: "Pelajaran", dot: TYPE_META.note.color },
+  { id: "event", label: "Kalender", dot: TYPE_META.event.color },
+  { id: "journal", label: "Jurnal", dot: TYPE_META.journal.color },
   { id: "contact", label: "Kontak", dot: TYPE_META.contact.color },
 ];
 
@@ -31,6 +33,8 @@ const NAV = [
   { href: "/dashboard/keuangan", label: "Keuangan", icon: "⌬" },
   { href: "/dashboard/kerjaan", label: "Kerjaan", icon: "▤" },
   { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },
+  { href: "/dashboard/kalender", label: "Kalender", icon: "▦" },
+  { href: "/dashboard/jurnal", label: "Jurnal", icon: "✎" },
   { href: "/dashboard/asisten", label: "Asisten", icon: "✦" },
 ];
 

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Sidebar from "@/components/Sidebar";
 import SignOutButton from "@/components/SignOutButton";
 import VoiceCallLauncher from "@/components/VoiceCallLauncher";
+import CommandPalette from "@/components/CommandPalette";
 
 export default async function DashboardLayout({
   children,
@@ -35,12 +36,16 @@ export default async function DashboardLayout({
             {user?.email}
           </p>
           <SignOutButton />
+          <p className="text-[10px] font-mono text-slate-700 mt-4">
+            <kbd className="border border-line rounded-sm px-1 py-0.5">⌘K</kbd> buat cari cepat
+          </p>
         </div>
       </aside>
       <main className="flex-1 p-4 sm:p-6 lg:p-8 pb-28 max-w-6xl mx-auto w-full">
         {children}
       </main>
       <VoiceCallLauncher />
+      <CommandPalette />
     </div>
   );
 }

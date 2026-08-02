@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type Anthropic from "@anthropic-ai/sdk";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
-import { getGmailAccessToken } from "@/lib/google/credentials";
+import { getGmailAccessToken, getCalendarAccessToken } from "@/lib/google/credentials";
 import { listMessages, getMessage, createDraftReply, type ParsedEmail } from "@/lib/google/gmail";
+import { listUpcomingEvents, createEvent } from "@/lib/google/calendar";
+import { formatDateTime } from "@/lib/format";
 
 export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
   {
@@ -60,6 +62,33 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "add_subtask",
+    description:
+      "Tambah sub-task (langkah kecil) ke satu to-do yang udah ada. Cari to-do-nya pake title_query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string", description: "Kata kunci buat nyari to-do induknya." },
+        subtask_title: { type: "string", description: "Judul sub-task yang mau ditambah." },
+      },
+      required: ["title_query", "subtask_title"],
+    },
+  },
+  {
+    name: "toggle_subtask",
+    description:
+      "Tandain sub-task selesai atau belum. Cari to-do induknya pake title_query, dan sub-task-nya pake subtask_query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string", description: "Kata kunci buat nyari to-do induknya." },
+        subtask_query: { type: "string", description: "Kata kunci buat nyari sub-task-nya." },
+        done: { type: "boolean", description: "true = tandain selesai, false = buka lagi." },
+      },
+      required: ["title_query", "subtask_query", "done"],
+    },
+  },
+  {
     name: "add_study_note",
     description: "Tambah catatan belajar baru ke modul Pelajaran.",
     input_schema: {
@@ -88,7 +117,7 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         new_description: { type: "string" },
         new_deadline: { type: "string", description: "ISO 8601 datetime." },
         new_priority: { type: "string", enum: ["low", "medium", "high"] },
-        new_status: { type: "string", enum: ["todo", "done"] },
+        new_status: { type: "string", enum: ["todo", "in_progress", "done"] },
       },
       required: ["title_query"],
     },
@@ -137,6 +166,45 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "set_budget",
+    description:
+      "Set atau update batas anggaran bulanan buat satu kategori pengeluaran. Kalau kategori itu udah punya anggaran, batasnya diupdate (bukan bikin duplikat).",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          description: `Kategori pengeluaran. Salah satu dari: ${EXPENSE_CATEGORIES.join(", ")}.`,
+        },
+        monthly_limit: { type: "number", description: "Batas pengeluaran per bulan dalam EUR, harus > 0." },
+      },
+      required: ["category", "monthly_limit"],
+    },
+  },
+  {
+    name: "delete_budget",
+    description: "Hapus anggaran bulanan untuk satu kategori pengeluaran.",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: { type: "string", description: "Nama kategori yang anggarannya mau dihapus." },
+      },
+      required: ["category"],
+    },
+  },
+  {
+    name: "toggle_habit",
+    description:
+      "Tandain kebiasaan yang dilacak udah dilakuin hari ini. Cari kebiasaannya pake title_query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string", description: "Kata kunci buat nyari kebiasaannya." },
+      },
+      required: ["title_query"],
+    },
+  },
+  {
     name: "forget",
     description:
       "Hapus satu memory/fakta yang tersimpan tentang user, kalau udah nggak relevan atau salah. Cari pake query yang cocok ke isi memory-nya.",
@@ -179,6 +247,47 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         body: { type: "string", description: "Isi balesan yang mau ditulis." },
       },
       required: ["query", "body"],
+    },
+  },
+  {
+    name: "check_calendar",
+    description:
+      "Liat jadwal/event Google Calendar user yang akan datang. Cuma bisa dipake kalau Google Calendar udah di-connect (bagian dari koneksi Gmail).",
+    input_schema: {
+      type: "object",
+      properties: {
+        days_ahead: {
+          type: "integer",
+          description: "Berapa hari ke depan yang mau dicek, default 7.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "add_calendar_event",
+    description: "Bikin event baru di Google Calendar user.",
+    input_schema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "Judul event." },
+        start: { type: "string", description: "Waktu mulai, ISO 8601 datetime (misal 2026-08-05T14:00:00+02:00)." },
+        end: { type: "string", description: "Waktu selesai, ISO 8601 datetime." },
+        description: { type: "string", description: "Catatan event, opsional." },
+      },
+      required: ["summary", "start", "end"],
+    },
+  },
+  {
+    name: "add_journal_entry",
+    description:
+      "Tambah catatan ke jurnal harian user. Kalau udah ada catatan hari ini, ini nambahin ke catatan yang ada (bukan nimpa).",
+    input_schema: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "Isi catatan yang mau ditambahin." },
+      },
+      required: ["content"],
     },
   },
 ];
@@ -320,6 +429,51 @@ export async function executeAssistantTool(
       return { ok: true, result: "To-do ditambahkan." };
     }
 
+    case "add_subtask": {
+      const found = await findOneByColumn(supabase, "tasks", userId, "title", String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const subtaskTitle = String(input.subtask_title ?? "").trim();
+      if (!subtaskTitle) return { ok: false, result: "subtask_title kosong." };
+      const { error } = await supabase.from("task_subtasks").insert({
+        user_id: userId,
+        task_id: found.id,
+        title: subtaskTitle,
+      });
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Sub-task "${subtaskTitle}" ditambahkan ke "${found.label}".` };
+    }
+
+    case "toggle_subtask": {
+      const found = await findOneByColumn(supabase, "tasks", userId, "title", String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const q = String(input.subtask_query ?? "").trim().toLowerCase();
+      if (!q) return { ok: false, result: "subtask_query kosong." };
+      const { data, error } = await supabase
+        .from("task_subtasks")
+        .select("id, title")
+        .eq("task_id", found.id)
+        .eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      const matches = (data ?? []).filter((s) => s.title.toLowerCase().includes(q));
+      if (matches.length === 0) {
+        return { ok: false, result: `Nggak nemu sub-task yang cocok sama "${q}" di "${found.label}".` };
+      }
+      if (matches.length > 1) {
+        return {
+          ok: false,
+          result: `Ada ${matches.length} sub-task yang cocok: ${matches.map((m) => m.title).join(", ")}. Sebutin lebih spesifik.`,
+        };
+      }
+      const done = input.done === true;
+      const { error: updateError } = await supabase
+        .from("task_subtasks")
+        .update({ done })
+        .eq("id", matches[0].id)
+        .eq("user_id", userId);
+      if (updateError) return { ok: false, result: updateError.message };
+      return { ok: true, result: `Sub-task "${matches[0].title}" ditandain ${done ? "selesai" : "belum selesai"}.` };
+    }
+
     case "add_study_note": {
       const title = String(input.title ?? "").trim();
       if (!title) return { ok: false, result: "title kosong." };
@@ -347,7 +501,9 @@ export async function executeAssistantTool(
       if (input.new_priority === "low" || input.new_priority === "medium" || input.new_priority === "high") {
         patch.priority = input.new_priority;
       }
-      if (input.new_status === "todo" || input.new_status === "done") patch.status = input.new_status;
+      if (input.new_status === "todo" || input.new_status === "in_progress" || input.new_status === "done") {
+        patch.status = input.new_status;
+      }
       if (Object.keys(patch).length === 0) return { ok: false, result: "Nggak ada perubahan yang disebutin." };
       const { error } = await supabase.from("tasks").update(patch).eq("id", found.id).eq("user_id", userId);
       if (error) return { ok: false, result: error.message };
@@ -394,6 +550,55 @@ export async function executeAssistantTool(
       const { error } = await supabase.from("study_notes").delete().eq("id", found.id).eq("user_id", userId);
       if (error) return { ok: false, result: error.message };
       return { ok: true, result: `Catatan "${found.label}" dihapus.` };
+    }
+
+    case "set_budget": {
+      const category = String(input.category ?? "").trim();
+      if (!category) return { ok: false, result: "category kosong." };
+      const monthlyLimit = Number(input.monthly_limit);
+      if (!monthlyLimit || monthlyLimit <= 0) return { ok: false, result: "monthly_limit harus > 0." };
+      const { error } = await supabase
+        .from("budgets")
+        .upsert(
+          { user_id: userId, category, monthly_limit: monthlyLimit },
+          { onConflict: "user_id,category" }
+        );
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Anggaran "${category}" diset ke ${monthlyLimit}/bulan.` };
+    }
+
+    case "delete_budget": {
+      const category = String(input.category ?? "").trim();
+      if (!category) return { ok: false, result: "category kosong." };
+      const { error } = await supabase
+        .from("budgets")
+        .delete()
+        .eq("user_id", userId)
+        .eq("category", category);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Anggaran "${category}" dihapus.` };
+    }
+
+    case "toggle_habit": {
+      const found = await findOneByColumn(supabase, "habits", userId, "title", String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: existing } = await supabase
+        .from("habit_checks")
+        .select("id")
+        .eq("habit_id", found.id)
+        .eq("period", today)
+        .maybeSingle();
+      if (existing) {
+        return { ok: true, result: `"${found.label}" udah dicentang hari ini.` };
+      }
+      const { error } = await supabase.from("habit_checks").insert({
+        user_id: userId,
+        habit_id: found.id,
+        period: today,
+      });
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `"${found.label}" ditandain selesai hari ini.` };
     }
 
     case "forget": {
@@ -471,6 +676,67 @@ export async function executeAssistantTool(
       } catch (err) {
         return { ok: false, result: err instanceof Error ? err.message : "Gagal bikin draft." };
       }
+    }
+
+    case "check_calendar": {
+      const cred = await getCalendarAccessToken(supabase, userId);
+      if ("error" in cred) return { ok: false, result: cred.error };
+      const daysAhead = Number(input.days_ahead ?? 7) || 7;
+      const timeMax = new Date();
+      timeMax.setDate(timeMax.getDate() + daysAhead);
+      try {
+        const events = await listUpcomingEvents(cred.accessToken, { maxResults: 15, timeMax });
+        if (events.length === 0) return { ok: true, result: "Nggak ada event di rentang waktu itu." };
+        return {
+          ok: true,
+          result: events
+            .map((e) => `- ${e.summary} (${formatDateTime(e.start)})${e.location ? ` @ ${e.location}` : ""}`)
+            .join("\n"),
+        };
+      } catch (err) {
+        return { ok: false, result: err instanceof Error ? err.message : "Gagal ambil kalender." };
+      }
+    }
+
+    case "add_calendar_event": {
+      const cred = await getCalendarAccessToken(supabase, userId);
+      if ("error" in cred) return { ok: false, result: cred.error };
+      const summary = String(input.summary ?? "").trim();
+      const start = String(input.start ?? "").trim();
+      const end = String(input.end ?? "").trim();
+      if (!summary || !start || !end) return { ok: false, result: "summary/start/end kosong." };
+      try {
+        await createEvent(cred.accessToken, {
+          summary,
+          startIso: start,
+          endIso: end,
+          description: input.description ? String(input.description) : undefined,
+        });
+        return { ok: true, result: `Event "${summary}" ditambahin ke Google Calendar.` };
+      } catch (err) {
+        return { ok: false, result: err instanceof Error ? err.message : "Gagal bikin event." };
+      }
+    }
+
+    case "add_journal_entry": {
+      const content = String(input.content ?? "").trim();
+      if (!content) return { ok: false, result: "content kosong." };
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: existing } = await supabase
+        .from("journal_entries")
+        .select("id, content")
+        .eq("user_id", userId)
+        .eq("entry_date", today)
+        .maybeSingle();
+      const newContent = existing?.content ? `${existing.content}\n\n${content}` : content;
+      const { error } = await supabase
+        .from("journal_entries")
+        .upsert(
+          { user_id: userId, entry_date: today, content: newContent, updated_at: new Date().toISOString() },
+          { onConflict: "user_id,entry_date" }
+        );
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: "Catatan jurnal hari ini diupdate." };
     }
 
     default:

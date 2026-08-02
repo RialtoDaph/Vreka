@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { GMAIL_SCOPES } from "@/lib/google/gmail";
+import { CALENDAR_SCOPES } from "@/lib/google/calendar";
 import { getBaseUrl } from "@/lib/google/credentials";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("redirect_uri", redirectUri);
   authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", GMAIL_SCOPES);
+  authUrl.searchParams.set("scope", `${GMAIL_SCOPES} ${CALENDAR_SCOPES}`);
   authUrl.searchParams.set("access_type", "offline");
   authUrl.searchParams.set("prompt", "consent");
   authUrl.searchParams.set("state", state);

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Transaction, TransactionType } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
+import { downloadCsv } from "@/lib/csv";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
 
@@ -15,6 +16,8 @@ export default function TransactionsTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [exportMonth, setExportMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [exporting, setExporting] = useState(false);
 
   const [type, setType] = useState<TransactionType>("expense");
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
@@ -26,6 +29,14 @@ export default function TransactionsTab() {
     new Date().toISOString().slice(0, 10)
   );
 
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [existingReceiptPath, setExistingReceiptPath] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [receiptUploading, setReceiptUploading] = useState(false);
+  const [viewingReceiptId, setViewingReceiptId] = useState<string | null>(null);
+
   function resetForm() {
     setEditingId(null);
     setType("expense");
@@ -34,6 +45,10 @@ export default function TransactionsTab() {
     setAmount("");
     setDescription("");
     setOccurredOn(new Date().toISOString().slice(0, 10));
+    setReceiptFile(null);
+    setReceiptPreview(null);
+    setExistingReceiptPath(null);
+    setScanError(null);
   }
 
   async function handleDescriptionBlur() {
@@ -71,7 +86,53 @@ export default function TransactionsTab() {
     setAmount(String(tx.amount).replace(".", ","));
     setDescription(tx.description ?? "");
     setOccurredOn(tx.occurred_on);
+    setReceiptFile(null);
+    setReceiptPreview(null);
+    setExistingReceiptPath(tx.receipt_path);
+    setScanError(null);
     setShowForm(true);
+  }
+
+  async function handleReceiptFile(file: File | null) {
+    if (!file) return;
+    setReceiptFile(file);
+    setReceiptPreview(URL.createObjectURL(file));
+    setScanError(null);
+    if (!showForm) setShowForm(true);
+
+    setScanning(true);
+    try {
+      const form = new FormData();
+      form.append("image", file);
+      const res = await fetch("/api/assistant/scan-receipt", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) {
+        setScanError(data.error ?? "Gagal baca struk.");
+        return;
+      }
+      setType("expense");
+      setAmount(String(data.amount).replace(".", ","));
+      setCategory(data.category);
+      setCategoryTouched(true);
+      if (data.description) setDescription(data.description);
+      if (data.occurred_on) setOccurredOn(data.occurred_on);
+    } catch {
+      setScanError("Gagal baca struk. Isi manual aja.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function handleViewReceipt(tx: Transaction) {
+    if (!tx.receipt_path || viewingReceiptId) return;
+    setViewingReceiptId(tx.id);
+    const { data, error } = await supabase.storage
+      .from("receipts")
+      .createSignedUrl(tx.receipt_path, 60);
+    if (!error && data?.signedUrl) {
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    }
+    setViewingReceiptId(null);
   }
 
   async function load() {
@@ -102,21 +163,38 @@ export default function TransactionsTab() {
     if (!amount || !Number.isFinite(parsed) || parsed <= 0) return;
     setSaving(true);
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSaving(false);
+      return;
+    }
+
+    let receiptPath = existingReceiptPath;
+    if (receiptFile) {
+      setReceiptUploading(true);
+      const ext = receiptFile.name.split(".").pop() || "jpg";
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("receipts")
+        .upload(path, receiptFile);
+      setReceiptUploading(false);
+      if (!uploadError) receiptPath = path;
+    }
+
     const payload = {
       type,
       category,
       amount: parsed,
       description: description || null,
       occurred_on: occurredOn,
+      receipt_path: receiptPath,
     };
 
     if (editingId) {
       await supabase.from("transactions").update(payload).eq("id", editingId);
     } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
       await supabase.from("transactions").insert({ user_id: user.id, ...payload });
     }
 
@@ -131,11 +209,53 @@ export default function TransactionsTab() {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
 
+  async function handleExport() {
+    setExporting(true);
+    const [y, m] = exportMonth.split("-").map(Number);
+    const firstDay = `${exportMonth}-01`;
+    const lastDay = new Date(y, m, 0).toISOString().slice(0, 10);
+    const { data } = await supabase
+      .from("transactions")
+      .select("*")
+      .gte("occurred_on", firstDay)
+      .lte("occurred_on", lastDay)
+      .order("occurred_on", { ascending: true });
+    const rows = (data ?? []) as Transaction[];
+    const income = rows.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
+    const expense = rows.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+
+    downloadCsv(`vreka-transaksi-${exportMonth}.csv`, [
+      ["Laporan Keuangan", exportMonth],
+      ["Total Pemasukan", income],
+      ["Total Pengeluaran", expense],
+      ["Saldo", income - expense],
+      [],
+      ["Tanggal", "Tipe", "Kategori", "Catatan", "Jumlah"],
+      ...rows.map((t) => [
+        t.occurred_on,
+        t.type === "income" ? "Pemasukan" : "Pengeluaran",
+        t.category,
+        t.description ?? "",
+        Number(t.amount),
+      ]),
+    ]);
+    setExporting(false);
+  }
+
   const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end items-center gap-2 flex-wrap">
+        <input
+          type="month"
+          value={exportMonth}
+          onChange={(e) => setExportMonth(e.target.value)}
+          className={`${inputClass} w-auto`}
+        />
+        <button onClick={handleExport} disabled={exporting} className={ghostBtnClass}>
+          {exporting ? "Export..." : "Export CSV"}
+        </button>
         <button onClick={toggleForm} className={primaryBtnClass}>
           {showForm ? "Batal" : "+ Catat Transaksi"}
         </button>
@@ -223,8 +343,41 @@ export default function TransactionsTab() {
               </div>
             </div>
 
+            <div>
+              <label className={labelClass}>
+                Struk (opsional) {scanning && <span className="text-cyan-glow normal-case">(membaca struk...)</span>}
+              </label>
+              <div className="flex items-center gap-3 flex-wrap">
+                {receiptPreview ? (
+                  <img
+                    src={receiptPreview}
+                    alt="Preview struk"
+                    className="h-16 w-16 object-cover rounded-sm border border-line"
+                  />
+                ) : existingReceiptPath ? (
+                  <span className="text-xs text-slate-500 font-mono">📎 Struk udah ada — upload baru buat ganti</span>
+                ) : null}
+                <label className={`${ghostBtnClass} cursor-pointer`}>
+                  {receiptPreview || existingReceiptPath ? "Ganti Foto" : "📷 Upload/Scan Struk"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleReceiptFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+              </div>
+              {scanError && <p className="text-xs text-rose-glow mt-1.5">{scanError}</p>}
+            </div>
+
             <button type="submit" disabled={saving} className={primaryBtnClass}>
-              {saving ? "Menyimpan..." : editingId ? "Update Transaksi" : "Simpan Transaksi"}
+              {saving
+                ? receiptUploading
+                  ? "Upload struk..."
+                  : "Menyimpan..."
+                : editingId
+                  ? "Update Transaksi"
+                  : "Simpan Transaksi"}
             </button>
           </form>
         </HudPanel>
@@ -264,6 +417,16 @@ export default function TransactionsTab() {
                     {tx.type === "income" ? "+" : "-"}
                     {formatCurrency(Number(tx.amount))}
                   </span>
+                  {tx.receipt_path && (
+                    <button
+                      onClick={() => handleViewReceipt(tx)}
+                      disabled={viewingReceiptId === tx.id}
+                      className={ghostBtnClass}
+                      title="Lihat struk"
+                    >
+                      📎
+                    </button>
+                  )}
                   <button onClick={() => startEdit(tx)} className={ghostBtnClass}>
                     Edit
                   </button>

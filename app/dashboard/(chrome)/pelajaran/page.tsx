@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { StudyNote } from "@/lib/types";
+import { StudyNote, StudyResource } from "@/lib/types";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, dangerBtnClass } from "@/lib/ui";
+import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+
+type QuizQuestion = { question: string; options: string[]; correct_index: number };
 
 export default function PelajaranPage() {
   const supabase = createClient();
@@ -19,15 +21,50 @@ export default function PelajaranPage() {
   const [content, setContent] = useState("");
   const [progress, setProgress] = useState(0);
 
+  const [quizNoteId, setQuizNoteId] = useState<string | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+
+  const [sessionTotals, setSessionTotals] = useState<Record<string, number>>({});
+  const [activeTimerNoteId, setActiveTimerNoteId] = useState<string | null>(null);
+  const [timerStart, setTimerStart] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  const [resourcesByNote, setResourcesByNote] = useState<Record<string, StudyResource[]>>({});
+  const [resourceLabel, setResourceLabel] = useState("");
+  const [resourceUrl, setResourceUrl] = useState("");
+
   async function load() {
     setLoading(true);
-    const { data } = await supabase
-      .from("study_notes")
-      .select("*")
-      .order("updated_at", { ascending: false });
-    setItems(data ?? []);
+    const [{ data: noteRows }, { data: sessionRows }, { data: resourceRows }] = await Promise.all([
+      supabase.from("study_notes").select("*").order("updated_at", { ascending: false }),
+      supabase.from("study_sessions").select("note_id, minutes"),
+      supabase.from("study_resources").select("*").order("created_at", { ascending: true }),
+    ]);
+    setItems(noteRows ?? []);
+    const totals: Record<string, number> = {};
+    for (const s of sessionRows ?? []) {
+      totals[s.note_id] = (totals[s.note_id] ?? 0) + s.minutes;
+    }
+    setSessionTotals(totals);
+    const grouped: Record<string, StudyResource[]> = {};
+    for (const r of (resourceRows ?? []) as StudyResource[]) {
+      (grouped[r.note_id] ??= []).push(r);
+    }
+    setResourcesByNote(grouped);
     setLoading(false);
   }
+
+  useEffect(() => {
+    if (!activeTimerNoteId || !timerStart) return;
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - timerStart) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeTimerNoteId, timerStart]);
 
   useEffect(() => {
     load();
@@ -73,6 +110,91 @@ export default function PelajaranPage() {
   async function handleDelete(id: string) {
     await supabase.from("study_notes").delete().eq("id", id);
     setItems((prev) => prev.filter((i) => i.id !== id));
+  }
+
+  function startTimer(noteId: string) {
+    setActiveTimerNoteId(noteId);
+    setTimerStart(Date.now());
+    setElapsedSeconds(0);
+  }
+
+  async function stopTimer(note: StudyNote) {
+    // Klik start lalu langsung stop (< 10 detik) dianggap nggak sengaja,
+    // jangan dicatet sebagai sesi belajar.
+    if (elapsedSeconds >= 10) {
+      const minutes = Math.max(1, Math.round(elapsedSeconds / 60));
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from("study_sessions")
+          .insert({ user_id: user.id, note_id: note.id, minutes });
+        setSessionTotals((prev) => ({ ...prev, [note.id]: (prev[note.id] ?? 0) + minutes }));
+      }
+    }
+    setActiveTimerNoteId(null);
+    setTimerStart(null);
+    setElapsedSeconds(0);
+  }
+
+  async function handleAddResource(noteId: string) {
+    const label = resourceLabel.trim();
+    const url = resourceUrl.trim();
+    if (!label || !url) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("study_resources")
+      .insert({ user_id: user.id, note_id: noteId, label, url })
+      .select("*")
+      .single();
+    if (data) {
+      setResourcesByNote((prev) => ({ ...prev, [noteId]: [...(prev[noteId] ?? []), data] }));
+    }
+    setResourceLabel("");
+    setResourceUrl("");
+  }
+
+  async function deleteResource(resource: StudyResource) {
+    setResourcesByNote((prev) => ({
+      ...prev,
+      [resource.note_id]: (prev[resource.note_id] ?? []).filter((r) => r.id !== resource.id),
+    }));
+    await supabase.from("study_resources").delete().eq("id", resource.id);
+  }
+
+  function closeQuiz() {
+    setQuizNoteId(null);
+    setQuizQuestions([]);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setQuizError(null);
+  }
+
+  async function startQuiz(note: StudyNote) {
+    closeQuiz();
+    setQuizNoteId(note.id);
+    setQuizLoading(true);
+    try {
+      const res = await fetch("/api/assistant/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteId: note.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setQuizError(data.error ?? "Gagal bikin kuis.");
+        return;
+      }
+      setQuizQuestions(data.questions);
+    } catch {
+      setQuizError("Gagal bikin kuis. Coba lagi.");
+    } finally {
+      setQuizLoading(false);
+    }
   }
 
   return (
@@ -186,25 +308,229 @@ export default function PelajaranPage() {
                   aria-label={`Progress ${note.title}`}
                 />
 
-                {note.content && (
-                  <>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={() => setExpandedId(expanded ? null : note.id)}
+                    className="text-xs font-mono text-cyan-glow/80 hover:text-cyan-glow"
+                  >
+                    {expanded ? "Tutup detail ▾" : "Lihat detail ▸"}
+                  </button>
+                  {note.content && (
                     <button
-                      onClick={() => setExpandedId(expanded ? null : note.id)}
-                      className="text-xs font-mono text-cyan-glow/80 hover:text-cyan-glow"
+                      onClick={() => startQuiz(note)}
+                      className="text-xs font-mono text-amber-glow/80 hover:text-amber-glow"
                     >
-                      {expanded ? "Tutup catatan ▾" : "Lihat catatan ▸"}
+                      🧠 Mode Kuis
                     </button>
-                    {expanded && (
-                      <p className="text-sm text-slate-400 mt-2 whitespace-pre-wrap">
-                        {note.content}
-                      </p>
+                  )}
+                  {activeTimerNoteId === note.id ? (
+                    <button
+                      onClick={() => stopTimer(note)}
+                      className="text-xs font-mono text-rose-glow animate-pulse"
+                    >
+                      ⏱ {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, "0")} — Stop
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => startTimer(note.id)}
+                      disabled={!!activeTimerNoteId}
+                      className="text-xs font-mono text-slate-500 hover:text-slate-300 disabled:opacity-40"
+                    >
+                      ⏱ Mulai Sesi
+                      {sessionTotals[note.id] ? ` (total ${sessionTotals[note.id]}m)` : ""}
+                    </button>
+                  )}
+                </div>
+
+                {expanded && (
+                  <div className="mt-2 space-y-3">
+                    {note.content && (
+                      <p className="text-sm text-slate-400 whitespace-pre-wrap">{note.content}</p>
                     )}
-                  </>
+
+                    <div>
+                      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
+                        Resource
+                      </p>
+                      {(resourcesByNote[note.id] ?? []).length === 0 ? (
+                        <p className="text-xs text-slate-600">Belum ada link resource.</p>
+                      ) : (
+                        <ul className="space-y-1 mb-2">
+                          {(resourcesByNote[note.id] ?? []).map((r) => (
+                            <li key={r.id} className="flex items-center gap-2">
+                              <a
+                                href={r.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-cyan-glow/80 hover:text-cyan-glow truncate flex-1"
+                              >
+                                🔗 {r.label}
+                              </a>
+                              <button
+                                onClick={() => deleteResource(r)}
+                                className="text-[10px] text-rose-glow/70 hover:text-rose-glow font-mono shrink-0"
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={resourceLabel}
+                          onChange={(e) => setResourceLabel(e.target.value)}
+                          placeholder="Label"
+                          className={`${inputClass} text-xs py-1.5 w-1/3`}
+                        />
+                        <input
+                          type="url"
+                          value={resourceUrl}
+                          onChange={(e) => setResourceUrl(e.target.value)}
+                          placeholder="https://..."
+                          className={`${inputClass} text-xs py-1.5`}
+                        />
+                        <button
+                          onClick={() => handleAddResource(note.id)}
+                          className={ghostBtnClass}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {quizNoteId === note.id && (
+                  <QuizPanel
+                    loading={quizLoading}
+                    error={quizError}
+                    questions={quizQuestions}
+                    answers={quizAnswers}
+                    submitted={quizSubmitted}
+                    currentProgress={note.progress}
+                    onAnswer={(qIndex, optIndex) =>
+                      setQuizAnswers((prev) => ({ ...prev, [qIndex]: optIndex }))
+                    }
+                    onSubmit={() => setQuizSubmitted(true)}
+                    onApplyScore={(score) => {
+                      updateProgress(note, score);
+                      closeQuiz();
+                    }}
+                    onClose={closeQuiz}
+                  />
                 )}
               </HudPanel>
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+function QuizPanel({
+  loading,
+  error,
+  questions,
+  answers,
+  submitted,
+  currentProgress,
+  onAnswer,
+  onSubmit,
+  onApplyScore,
+  onClose,
+}: {
+  loading: boolean;
+  error: string | null;
+  questions: QuizQuestion[];
+  answers: Record<number, number>;
+  submitted: boolean;
+  currentProgress: number;
+  onAnswer: (qIndex: number, optIndex: number) => void;
+  onSubmit: () => void;
+  onApplyScore: (score: number) => void;
+  onClose: () => void;
+}) {
+  const answeredAll = questions.length > 0 && questions.every((_, i) => answers[i] !== undefined);
+  const score =
+    questions.length > 0
+      ? Math.round(
+          (questions.filter((q, i) => answers[i] === q.correct_index).length / questions.length) * 100
+        )
+      : 0;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-line/60 space-y-3">
+      {loading ? (
+        <p className="text-xs text-slate-500 font-mono">Bikin soal...</p>
+      ) : error ? (
+        <p className="text-xs text-rose-glow">{error}</p>
+      ) : (
+        <>
+          {questions.map((q, qIndex) => (
+            <div key={qIndex}>
+              <p className="text-xs text-slate-200 mb-1.5">
+                {qIndex + 1}. {q.question}
+              </p>
+              <div className="space-y-1">
+                {q.options.map((opt, optIndex) => {
+                  const selected = answers[qIndex] === optIndex;
+                  const isCorrect = optIndex === q.correct_index;
+                  const showResult = submitted;
+                  return (
+                    <button
+                      key={optIndex}
+                      type="button"
+                      disabled={submitted}
+                      onClick={() => onAnswer(qIndex, optIndex)}
+                      className={`w-full text-left text-xs px-2.5 py-1.5 rounded-sm border transition-colors ${
+                        showResult && isCorrect
+                          ? "border-mint-glow/50 bg-mint-glow/10 text-mint-glow"
+                          : showResult && selected && !isCorrect
+                            ? "border-rose-glow/50 bg-rose-glow/10 text-rose-glow"
+                            : selected
+                              ? "border-cyan-glow/50 bg-cyan-glow/10 text-cyan-glow"
+                              : "border-line text-slate-400 hover:border-slate-500"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {!submitted ? (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!answeredAll}
+              className={primaryBtnClass}
+            >
+              Selesai
+            </button>
+          ) : (
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm font-mono text-cyan-glow">Skor: {score}%</span>
+              {score > currentProgress && (
+                <button onClick={() => onApplyScore(score)} className={primaryBtnClass}>
+                  Update progress ke {score}%
+                </button>
+              )}
+              <button onClick={onClose} className={ghostBtnClass}>
+                Tutup
+              </button>
+            </div>
+          )}
+        </>
+      )}
+      {!loading && !error && (
+        <button onClick={onClose} className="text-[11px] text-slate-500 hover:text-slate-300 font-mono">
+          Batal kuis
+        </button>
       )}
     </div>
   );
