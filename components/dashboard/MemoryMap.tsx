@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { TYPE_META, type MemoryMapData, type MemoryNodeType } from "@/lib/memoryMap";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
 import { THEME } from "@/lib/theme";
+import { ASSISTANT_MODELS } from "@/lib/assistant/models";
 import SignOutButton from "@/components/SignOutButton";
 
 type Props = {
@@ -64,9 +65,11 @@ export default function MemoryMap({ data }: Props) {
   const [navOpen, setNavOpen] = useState(false);
   const [webglError, setWebglError] = useState(false);
 
-  const { phase: voicePhase, toggle: toggleVoice, sendText, audioRef } = useVoiceAssistant();
+  const { phase: voicePhase, toggle: toggleVoice, sendText, audioRef, model: voiceModel } =
+    useVoiceAssistant();
   const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
   const voiceBusy = voicePhase !== "idle" && voicePhase !== "error";
+  const voiceModelLabel = ASSISTANT_MODELS.find((m) => m.id === voiceModel)?.label ?? voiceModel;
 
   function submitChat(e: React.FormEvent) {
     e.preventDefault();
@@ -703,6 +706,9 @@ export default function MemoryMap({ data }: Props) {
           <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ backgroundColor: voiceStyle.color }} />
           {voiceStyle.label}
         </p>
+        <span className="flex items-center gap-1.5 bg-panel/75 border border-line rounded-full px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.15em] text-slate-300 backdrop-blur-sm">
+          ◆ {voiceModelLabel}
+        </span>
       </div>
 
       <form

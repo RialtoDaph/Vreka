@@ -33,13 +33,19 @@ export function useVoiceAssistant() {
   const stoppedRef = useRef(true);
   const audioRef = useRef<HTMLAudioElement>(null);
   const modelRef = useRef(DEFAULT_ASSISTANT_MODEL);
+  // Mirrors modelRef for display purposes — components render off state
+  // (not a ref) so they actually re-render when the model is known.
+  const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
 
   useEffect(() => {
     setSupported(
       typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia
     );
     const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
-    if (isValidAssistantModel(saved)) modelRef.current = saved;
+    if (isValidAssistantModel(saved)) {
+      modelRef.current = saved;
+      setModel(saved);
+    }
     return () => {
       stoppedRef.current = true;
     };
@@ -314,5 +320,5 @@ export function useVoiceAssistant() {
     runLoop(trimmed);
   }
 
-  return { supported, phase, errorMsg, toggle, sendText, audioRef };
+  return { supported, phase, errorMsg, toggle, sendText, audioRef, model };
 }
