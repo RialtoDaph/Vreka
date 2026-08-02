@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { TYPE_META, type MemoryMapData, type MemoryNodeType } from "@/lib/memoryMap";
+import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
 
 type Props = {
   data: MemoryMapData;
@@ -24,6 +25,14 @@ const FILTERS: { id: FilterId; label: string; dot: string }[] = [
 
 const INITIAL_ORBIT = { theta: 0.6, phi: 1.15, radius: 320 };
 
+const VOICE_PHASE_STYLE: Record<VoicePhase, { color: string; label: string }> = {
+  idle: { color: "#4be8ff", label: "Online" },
+  listening: { color: "#4bffb0", label: "Lagi dengerin..." },
+  processing: { color: "#ffb454", label: "Mikir..." },
+  speaking: { color: "#4bffb0", label: "Ngomong..." },
+  error: { color: "#ff5d7a", label: "Error" },
+};
+
 export default function MemoryMap({ data }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
@@ -33,6 +42,19 @@ export default function MemoryMap({ data }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
   const [spin, setSpin] = useState(true);
+  const [chatDraft, setChatDraft] = useState("");
+
+  const { phase: voicePhase, toggle: toggleVoice, sendText, audioRef } = useVoiceAssistant();
+  const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
+  const voiceBusy = voicePhase !== "idle" && voicePhase !== "error";
+
+  function submitChat(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = chatDraft.trim();
+    if (!trimmed || voiceBusy) return;
+    sendText(trimmed);
+    setChatDraft("");
+  }
 
   // Read by the render loop without forcing the mount effect to depend on
   // (and rebuild the whole three.js scene for) every keystroke/toggle.
@@ -550,33 +572,58 @@ export default function MemoryMap({ data }: Props) {
       )}
 
       <div className="absolute z-[2] flex flex-col items-center gap-2.5 top-1/2 right-[34px] -translate-y-1/2">
-        <div className="relative w-[150px] h-[150px] rounded-full flex items-center justify-center">
-          <span className="absolute inset-0 rounded-full border border-cyan-glow/55 spin-slow-fwd" />
-          <span className="absolute inset-3.5 rounded-full border border-dashed border-cyan-glow/30 spin-slow-rev" />
+        <button
+          onClick={toggleVoice}
+          data-phase={voicePhase}
+          aria-label={voiceBusy ? "Hentikan ngobrol sama Aslan" : "Ngobrol sama Aslan"}
+          className="relative w-[150px] h-[150px] rounded-full bg-transparent border-none cursor-pointer flex items-center justify-center"
+        >
+          <span
+            className="absolute inset-0 rounded-full border spin-slow-fwd"
+            style={{ borderColor: `${voiceStyle.color}8c` }}
+          />
+          <span
+            className="absolute inset-3.5 rounded-full border border-dashed spin-slow-rev"
+            style={{ borderColor: `${voiceStyle.color}4d` }}
+          />
           <span className="absolute inset-0 rounded-full voice-dial-ring" />
-          <span className="relative font-display font-bold tracking-[0.15em] text-[15px] text-cyan-glow">
+          <span
+            className="relative font-display font-bold tracking-[0.15em] text-[15px]"
+            style={{ color: voiceStyle.color }}
+          >
             A.S.L.A.N
           </span>
-        </div>
-        <p className="font-mono text-[9.5px] uppercase tracking-[0.15em] text-cyan-glow flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow pulse-dot" />
-          Online
+        </button>
+        <p
+          className="font-mono text-[9.5px] uppercase tracking-[0.15em] flex items-center gap-1.5"
+          style={{ color: voiceStyle.color }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ backgroundColor: voiceStyle.color }} />
+          {voiceStyle.label}
         </p>
       </div>
 
-      <div className="absolute bottom-5 left-5 right-5 z-[2] flex items-center gap-2.5 max-w-[900px] mx-auto">
+      <form
+        onSubmit={submitChat}
+        className="absolute bottom-5 left-5 right-5 z-[2] flex items-center gap-2.5 max-w-[900px] mx-auto"
+      >
         <input
-          disabled
+          value={chatDraft}
+          onChange={(e) => setChatDraft(e.target.value)}
+          disabled={voiceBusy}
           placeholder="Tanya Aslan sesuatu..."
-          className="flex-1 bg-panel/85 border border-line text-slate-200 font-mono text-[13px] px-[18px] py-3.5 rounded-full outline-none backdrop-blur-[10px] disabled:opacity-60"
+          className="flex-1 bg-panel/85 border border-line text-slate-200 font-mono text-[13px] px-[18px] py-3.5 rounded-full outline-none backdrop-blur-[10px] disabled:opacity-60 focus-visible:outline-cyan-glow"
         />
         <button
-          disabled
+          type="submit"
+          disabled={voiceBusy || !chatDraft.trim()}
           className="w-11 h-11 shrink-0 rounded-full border border-line bg-panel/85 text-cyan-glow backdrop-blur-[10px] disabled:opacity-60"
         >
           ➤
         </button>
-      </div>
+      </form>
+
+      <audio ref={audioRef} className="hidden" />
     </div>
   );
 }
