@@ -2,22 +2,56 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import type { MemoryMapData } from "@/lib/memoryMap";
+import { TYPE_META, type MemoryMapData, type MemoryNodeType } from "@/lib/memoryMap";
 
 type Props = {
   data: MemoryMapData;
 };
 
+type FilterId = MemoryNodeType | "all";
+
 type SceneApi = {
-  applySelection: (id: string | null) => void;
+  fitView: () => void;
 };
+
+const FILTERS: { id: FilterId; label: string; dot: string }[] = [
+  { id: "all", label: "Semua", dot: "#94a3b8" },
+  { id: "task", label: "Kerjaan", dot: TYPE_META.task.color },
+  { id: "finance", label: "Keuangan", dot: TYPE_META.finance.color },
+  { id: "note", label: "Pelajaran", dot: TYPE_META.note.color },
+  { id: "contact", label: "Kontak", dot: TYPE_META.contact.color },
+];
+
+const INITIAL_ORBIT = { theta: 0.6, phi: 1.15, radius: 320 };
 
 export default function MemoryMap({ data }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
   const sceneApiRef = useRef<SceneApi | null>(null);
-  const selectedIdRef = useRef<string | null>(null);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<FilterId>("all");
+  const [spin, setSpin] = useState(true);
+
+  // Read by the render loop without forcing the mount effect to depend on
+  // (and rebuild the whole three.js scene for) every keystroke/toggle.
+  const selectedIdRef = useRef(selectedId);
+  const searchQueryRef = useRef(searchQuery);
+  const activeFilterRef = useRef(activeFilter);
+  const spinRef = useRef(spin);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+  useEffect(() => {
+    searchQueryRef.current = searchQuery;
+  }, [searchQuery]);
+  useEffect(() => {
+    activeFilterRef.current = activeFilter;
+  }, [activeFilter]);
+  useEffect(() => {
+    spinRef.current = spin;
+  }, [spin]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -25,11 +59,18 @@ export default function MemoryMap({ data }: Props) {
     if (!stage || !labelLayer) return;
 
     const byId = Object.fromEntries(data.nodes.map((n) => [n.id, n]));
-    const rect = stage.getBoundingClientRect();
+    const physics: Record<
+      string,
+      { x: number; y: number; z: number; vx: number; vy: number; vz: number; fx: number; fy: number; fz: number }
+    > = {};
+    for (const n of data.nodes) {
+      physics[n.id] = { x: n.x, y: n.y, z: n.z, vx: 0, vy: 0, vz: 0, fx: 0, fy: 0, fz: 0 };
+    }
 
+    const rect = stage.getBoundingClientRect();
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, rect.width / rect.height, 1, 2000);
-    const orbit = { theta: 0.6, phi: 1.15, radius: 320 };
+    const orbit = { ...INITIAL_ORBIT };
     function applyCamera() {
       camera.position.set(
         orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta),
@@ -46,7 +87,8 @@ export default function MemoryMap({ data }: Props) {
     renderer.setClearColor(0x05080d, 0);
     renderer.domElement.style.position = "absolute";
     renderer.domElement.style.inset = "0";
-    renderer.domElement.style.cursor = "pointer";
+    renderer.domElement.style.cursor = "grab";
+    renderer.domElement.style.touchAction = "none";
     stage.insertBefore(renderer.domElement, stage.firstChild);
 
     const sphereGeo = new THREE.SphereGeometry(1, 24, 16);
@@ -55,10 +97,14 @@ export default function MemoryMap({ data }: Props) {
     const labels: Record<string, HTMLDivElement> = {};
 
     for (const n of data.nodes) {
+      const p = physics[n.id];
       const col = new THREE.Color(n.color);
 
-      const mesh = new THREE.Mesh(sphereGeo, new THREE.MeshBasicMaterial({ color: col }));
-      mesh.position.set(n.x, n.y, n.z);
+      const mesh = new THREE.Mesh(
+        sphereGeo,
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 1 })
+      );
+      mesh.position.set(p.x, p.y, p.z);
       mesh.scale.setScalar(n.r);
       mesh.userData.id = n.id;
       scene.add(mesh);
@@ -74,7 +120,7 @@ export default function MemoryMap({ data }: Props) {
           depthWrite: false,
         })
       );
-      glow.position.set(n.x, n.y, n.z);
+      glow.position.set(p.x, p.y, p.z);
       glow.scale.setScalar(n.r * 2.2);
       scene.add(glow);
       glows[n.id] = glow;
@@ -87,20 +133,6 @@ export default function MemoryMap({ data }: Props) {
     }
 
     const edgePositions = new Float32Array(data.edges.length * 6);
-    let ei = 0;
-    for (const [aId, bId] of data.edges) {
-      const a = byId[aId];
-      const b = byId[bId];
-      if (a && b) {
-        edgePositions[ei] = a.x;
-        edgePositions[ei + 1] = a.y;
-        edgePositions[ei + 2] = a.z;
-        edgePositions[ei + 3] = b.x;
-        edgePositions[ei + 4] = b.y;
-        edgePositions[ei + 5] = b.z;
-      }
-      ei += 6;
-    }
     const edgeGeo = new THREE.BufferGeometry();
     edgeGeo.setAttribute("position", new THREE.BufferAttribute(edgePositions, 3));
     const edgeLines = new THREE.LineSegments(
@@ -109,46 +141,240 @@ export default function MemoryMap({ data }: Props) {
     );
     scene.add(edgeLines);
 
-    function projectLabels(selId: string | null) {
+    const flowGeo = new THREE.SphereGeometry(0.55, 8, 6);
+    const flowBaseMat = new THREE.MeshBasicMaterial({
+      color: 0x9df3ff,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const flowParticles = data.edges.map(() => {
+      const m = new THREE.Mesh(flowGeo, flowBaseMat.clone());
+      m.userData.phase = Math.random();
+      m.userData.speed = 0.05 + Math.random() * 0.03;
+      m.visible = Math.random() < 0.5;
+      scene.add(m);
+      return m;
+    });
+
+    let hoveredId: string | null = null;
+    let dragging: { x: number; y: number; moved: boolean } | null = null;
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const meshList = Object.values(meshes);
+
+    function focusSet(): Set<string> | null {
+      const focusId = hoveredId || selectedIdRef.current;
+      if (!focusId) return null;
+      const set = new Set([focusId]);
+      for (const [a, b] of data.edges) {
+        if (a === focusId) set.add(b);
+        if (b === focusId) set.add(a);
+      }
+      return set;
+    }
+
+    function isVisible(id: string): boolean {
+      const n = byId[id];
+      const q = searchQueryRef.current.trim().toLowerCase();
+      const f = activeFilterRef.current;
+      return (f === "all" || n.type === f) && (!q || n.label.toLowerCase().includes(q));
+    }
+
+    function projectLabels(focus: Set<string> | null) {
       const r = renderer.domElement.getBoundingClientRect();
       const v = new THREE.Vector3();
       for (const n of data.nodes) {
+        const p = physics[n.id];
         const div = labels[n.id];
-        v.set(n.x, n.y + n.r + 6, n.z).project(camera);
+        v.set(p.x, p.y + n.r + 6, p.z).project(camera);
         const behind = v.z > 1;
         const x = (v.x * 0.5 + 0.5) * r.width;
         const y = (-v.y * 0.5 + 0.5) * r.height;
+        const dim = focus ? !focus.has(n.id) : !isVisible(n.id);
+        const show =
+          !behind &&
+          !dim &&
+          (n.type === "hub" ||
+            hoveredId === n.id ||
+            selectedIdRef.current === n.id ||
+            (focus ? focus.has(n.id) : false));
         div.style.transform = `translate(-50%,-50%) translate(${x}px,${y}px)`;
-        const show = !behind && (n.type === "hub" || n.id === selId);
         div.style.opacity = show ? "1" : "0";
       }
     }
 
-    function applySelection(selId: string | null) {
-      for (const n of data.nodes) {
-        const isSel = selId === n.id;
-        const scale = n.r * (isSel ? 1.25 : 1);
-        meshes[n.id].scale.setScalar(scale);
-        glows[n.id].scale.setScalar(scale * (isSel ? 2.9 : 2.2));
-        (glows[n.id].material as THREE.MeshBasicMaterial).opacity = isSel ? 0.3 : 0.16;
+    function stepPhysics() {
+      for (const id in physics) {
+        physics[id].fx = 0;
+        physics[id].fy = 0;
+        physics[id].fz = 0;
       }
-      renderer.render(scene, camera);
-      projectLabels(selId);
+      const ids = Object.keys(physics);
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const a = physics[ids[i]];
+          const b = physics[ids[j]];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dz = a.z - b.z;
+          let d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < 1) d2 = 1;
+          const d = Math.sqrt(d2);
+          const f = 4200 / d2;
+          const fx = (dx / d) * f;
+          const fy = (dy / d) * f;
+          const fz = (dz / d) * f;
+          a.fx += fx;
+          a.fy += fy;
+          a.fz += fz;
+          b.fx -= fx;
+          b.fy -= fy;
+          b.fz -= fz;
+        }
+      }
+      for (const [aId, bId] of data.edges) {
+        const a = physics[aId];
+        const b = physics[bId];
+        if (!a || !b) continue;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dz = b.z - a.z;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        const f = (d - 46) * 0.02;
+        const fx = (dx / d) * f;
+        const fy = (dy / d) * f;
+        const fz = (dz / d) * f;
+        a.fx += fx;
+        a.fy += fy;
+        a.fz += fz;
+        b.fx -= fx;
+        b.fy -= fy;
+        b.fz -= fz;
+      }
+      for (const id of ids) {
+        const p = physics[id];
+        const n = byId[id];
+        if (n.anchor) {
+          p.fx += (n.anchor[0] - p.x) * 0.02;
+          p.fy += (n.anchor[1] - p.y) * 0.02;
+          p.fz += (n.anchor[2] - p.z) * 0.02;
+        } else {
+          p.fx += -p.x * 0.002;
+          p.fy += -p.y * 0.002;
+          p.fz += -p.z * 0.002;
+        }
+        p.fx += (Math.random() - 0.5) * 0.25;
+        p.fy += (Math.random() - 0.5) * 0.25;
+        p.fz += (Math.random() - 0.5) * 0.25;
+        p.vx = (p.vx + p.fx * 0.02) * 0.88;
+        p.vy = (p.vy + p.fy * 0.02) * 0.88;
+        p.vz = (p.vz + p.fz * 0.02) * 0.88;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.z += p.vz;
+      }
     }
-    applySelection(null);
-    sceneApiRef.current = { applySelection };
 
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
-    function onClick(e: MouseEvent) {
+    let lastFrameTime = 0;
+    function syncScene() {
+      const focus = focusSet();
+      const t = performance.now() * 0.002;
+      for (const n of data.nodes) {
+        const p = physics[n.id];
+        const mesh = meshes[n.id];
+        const glow = glows[n.id];
+        mesh.position.set(p.x, p.y, p.z);
+        glow.position.set(p.x, p.y, p.z);
+        const dim = focus ? !focus.has(n.id) : !isVisible(n.id);
+        const isFocus = focus !== null && (hoveredId === n.id || selectedIdRef.current === n.id);
+        (mesh.material as THREE.MeshBasicMaterial).opacity = dim ? 0.16 : 1;
+        const breathe = n.type === "hub" ? 1 + Math.sin(t + p.x) * 0.04 : 1;
+        const scale = n.r * breathe * (isFocus ? 1.25 : 1);
+        mesh.scale.setScalar(scale);
+        glow.scale.setScalar(scale * (isFocus ? 2.8 : 2.2));
+        (glow.material as THREE.MeshBasicMaterial).opacity = dim ? 0.02 : isFocus ? 0.3 : 0.16;
+      }
+
+      let i = 0;
+      for (const [aId, bId] of data.edges) {
+        const a = physics[aId];
+        const b = physics[bId];
+        if (a && b) {
+          edgePositions[i] = a.x;
+          edgePositions[i + 1] = a.y;
+          edgePositions[i + 2] = a.z;
+          edgePositions[i + 3] = b.x;
+          edgePositions[i + 4] = b.y;
+          edgePositions[i + 5] = b.z;
+        }
+        i += 6;
+      }
+      edgeGeo.attributes.position.needsUpdate = true;
+      (edgeLines.material as THREE.LineBasicMaterial).opacity = focus ? 0.12 : 0.28;
+
+      const now = performance.now();
+      const dt = lastFrameTime ? (now - lastFrameTime) / 1000 : 0.016;
+      lastFrameTime = now;
+      data.edges.forEach(([aId, bId], idx) => {
+        const a = physics[aId];
+        const b = physics[bId];
+        const fp = flowParticles[idx];
+        if (!a || !b || !fp) return;
+        fp.userData.phase = (fp.userData.phase + fp.userData.speed * dt) % 1;
+        const tt = fp.userData.phase as number;
+        fp.position.set(a.x + (b.x - a.x) * tt, a.y + (b.y - a.y) * tt, a.z + (b.z - a.z) * tt);
+        const dimEdge = focus ? !(focus.has(aId) && focus.has(bId)) : false;
+        (fp.material as THREE.MeshBasicMaterial).opacity = dimEdge ? 0.03 : 0.35;
+      });
+
+      renderer.render(scene, camera);
+      projectLabels(focus);
+    }
+
+    function pickNode(select: boolean) {
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(meshList, false);
+      const id = hits.length ? (hits[0].object.userData.id as string) : null;
+      if (select) setSelectedId(id);
+      else if (id !== hoveredId) hoveredId = id;
+    }
+
+    function onPointerDown(e: PointerEvent) {
+      dragging = { x: e.clientX, y: e.clientY, moved: false };
+      renderer.domElement.style.cursor = "grabbing";
+    }
+    function onPointerMove(e: PointerEvent) {
       const r = renderer.domElement.getBoundingClientRect();
       pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
       pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
-      raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(Object.values(meshes), false);
-      setSelectedId(hits.length ? (hits[0].object.userData.id as string) : null);
+      if (dragging) {
+        const dx = e.clientX - dragging.x;
+        const dy = e.clientY - dragging.y;
+        if (Math.abs(dx) + Math.abs(dy) > 3) dragging.moved = true;
+        orbit.theta -= dx * 0.005;
+        orbit.phi = Math.max(0.25, Math.min(2.9, orbit.phi - dy * 0.005));
+        dragging.x = e.clientX;
+        dragging.y = e.clientY;
+        applyCamera();
+      }
     }
-    renderer.domElement.addEventListener("click", onClick);
+    function onPointerUp() {
+      if (dragging && !dragging.moved) pickNode(true);
+      dragging = null;
+      renderer.domElement.style.cursor = "grab";
+    }
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      orbit.radius = Math.max(90, Math.min(700, orbit.radius + e.deltaY * 0.4));
+      applyCamera();
+    }
+
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
 
     function onResize() {
       if (!stage) return;
@@ -156,21 +382,48 @@ export default function MemoryMap({ data }: Props) {
       camera.aspect = r.width / r.height;
       camera.updateProjectionMatrix();
       renderer.setSize(r.width, r.height);
-      applySelection(selectedIdRef.current);
     }
     window.addEventListener("resize", onResize);
 
+    function fitView() {
+      orbit.theta = INITIAL_ORBIT.theta;
+      orbit.phi = INITIAL_ORBIT.phi;
+      orbit.radius = INITIAL_ORBIT.radius;
+      applyCamera();
+    }
+    sceneApiRef.current = { fitView };
+
+    let raf = 0;
+    function loop() {
+      stepPhysics();
+      if (spinRef.current && !dragging) {
+        orbit.theta += 0.0012;
+        applyCamera();
+      }
+      if (!dragging) pickNode(false);
+      syncScene();
+      raf = requestAnimationFrame(loop);
+    }
+    raf = requestAnimationFrame(loop);
+
     return () => {
-      renderer.domElement.removeEventListener("click", onClick);
+      cancelAnimationFrame(raf);
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      renderer.domElement.removeEventListener("wheel", onWheel);
       window.removeEventListener("resize", onResize);
       sceneApiRef.current = null;
       renderer.dispose();
       sphereGeo.dispose();
       edgeGeo.dispose();
+      flowGeo.dispose();
+      flowBaseMat.dispose();
       for (const id of Object.keys(meshes)) {
         (meshes[id].material as THREE.Material).dispose();
         (glows[id].material as THREE.Material).dispose();
       }
+      for (const fp of flowParticles) (fp.material as THREE.Material).dispose();
       labelLayer.innerHTML = "";
       if (renderer.domElement.parentElement === stage) {
         stage.removeChild(renderer.domElement);
@@ -178,11 +431,6 @@ export default function MemoryMap({ data }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
-
-  useEffect(() => {
-    selectedIdRef.current = selectedId;
-    sceneApiRef.current?.applySelection(selectedId);
-  }, [selectedId]);
 
   const selectedNode = selectedId ? data.nodes.find((n) => n.id === selectedId) ?? null : null;
   const linkCount = selectedId
@@ -198,7 +446,7 @@ export default function MemoryMap({ data }: Props) {
       </div>
 
       <div className="absolute top-5 left-5 z-[2] w-[230px]">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mb-3.5">
           <span className="w-[26px] h-[26px] rounded-full border-2 border-cyan-glow/50 flex items-center justify-center shrink-0">
             <span className="w-2 h-2 rounded-full bg-cyan-glow pulse-dot" />
           </span>
@@ -210,6 +458,53 @@ export default function MemoryMap({ data }: Props) {
               {data.nodes.length} memori · {data.edges.length} koneksi
             </p>
           </div>
+        </div>
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Cari memori..."
+          className="w-full box-border bg-panel/75 border border-line text-slate-200 font-mono text-xs px-3 py-2.5 rounded-lg outline-none backdrop-blur-sm focus-visible:outline-cyan-glow"
+        />
+      </div>
+
+      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-2">
+        <button
+          onClick={() => sceneApiRef.current?.fitView()}
+          className="flex items-center gap-1.5 bg-panel/75 border border-line text-slate-300 font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm hover:border-cyan-glow/40"
+        >
+          ⊙ Fit
+        </button>
+        <button
+          onClick={() => setSpin((s) => !s)}
+          className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm border ${
+            spin
+              ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
+              : "bg-panel/75 border-line text-slate-300"
+          }`}
+        >
+          ◍ {spin ? "Auto-spin" : "Diam"}
+        </button>
+      </div>
+
+      <div className="absolute top-5 right-5 z-[2] text-right">
+        <p className="font-mono text-[9px] tracking-[0.15em] uppercase text-slate-500 mb-2">
+          Filter
+        </p>
+        <div className="flex flex-col gap-1.5 items-end">
+          {FILTERS.map((f) => {
+            const active = activeFilter === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setActiveFilter(f.id)}
+                className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
+                style={{ color: active ? "#4be8ff" : "#a8b8c8" }}
+              >
+                {f.label}
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: f.dot }} />
+              </button>
+            );
+          })}
         </div>
       </div>
 
