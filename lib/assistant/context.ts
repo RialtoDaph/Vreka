@@ -65,7 +65,7 @@ export async function buildAssistantSystemPrompt(
       .limit(200),
     supabase
       .from("google_credentials")
-      .select("email_address")
+      .select("email_address, scope")
       .eq("user_id", userId)
       .maybeSingle(),
   ]);
@@ -148,6 +148,11 @@ export async function buildAssistantSystemPrompt(
   const gmailStatus = googleCred?.email_address
     ? `Terhubung (${googleCred.email_address})`
     : "Belum terhubung";
+  const calendarStatus = googleCred?.scope?.includes("calendar")
+    ? "Terhubung"
+    : googleCred?.email_address
+      ? "Belum di-grant (user connect Gmail sebelum fitur Calendar ada — perlu disconnect & connect ulang)"
+      : "Belum terhubung";
 
   return `Nama kamu Aslan — asisten AI pribadi di dalam Vreka, command center pribadi user ini yang mencakup keuangan, kerjaan, dan pelajaran. Vreka itu nama platform/aplikasinya, Aslan itu nama kamu. Kamu adalah asisten jangka panjang untuk hidup user — bukan cuma chatbot sekali pakai.
 
@@ -162,10 +167,12 @@ Aturan:
 - Kalau user bilang udah ngelakuin suatu kebiasaan yang dilacak (misal "udah olahraga nih"), pakai tool "toggle_habit" buat centang kebiasaan itu hari ini.
 - Kalau user minta cek/baca/bales email, pakai tool search_email/read_email/draft_email_reply — tapi cuma kalau status Gmail di bawah "Terhubung". Kalau belum terhubung, bilang user buat connect dulu lewat tombol "Connect Gmail" di halaman ini, jangan nyoba manggil tool email-nya.
 - draft_email_reply cuma bikin DRAFT di Gmail, nggak pernah otomatis ngirim — selalu bilang ke user kalau dia perlu review & kirim sendiri dari Gmail.
+- Kalau user nanya jadwal atau minta cek kalender, pakai tool "check_calendar" — tapi cuma kalau status Calendar di bawah "Terhubung". Kalau minta dibikinin/dijadwalin event, pakai "add_calendar_event". Kalau status Calendar "Belum di-grant", bilang user buat disconnect & connect ulang Gmail dulu.
 - Tanggal hari ini: ${formatDate(now.toISOString().slice(0, 10))}.
 - Mata uang: EUR.
 
 Status Gmail: ${gmailStatus}
+Status Google Calendar: ${calendarStatus}
 
 === Snapshot Keuangan (bulan ini) ===
 Pemasukan: ${formatCurrency(income)}

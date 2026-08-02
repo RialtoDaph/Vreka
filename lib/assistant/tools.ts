@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type Anthropic from "@anthropic-ai/sdk";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
-import { getGmailAccessToken } from "@/lib/google/credentials";
+import { getGmailAccessToken, getCalendarAccessToken } from "@/lib/google/credentials";
 import { listMessages, getMessage, createDraftReply, type ParsedEmail } from "@/lib/google/gmail";
+import { listUpcomingEvents, createEvent } from "@/lib/google/calendar";
+import { formatDateTime } from "@/lib/format";
 
 export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
   {
@@ -245,6 +247,35 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         body: { type: "string", description: "Isi balesan yang mau ditulis." },
       },
       required: ["query", "body"],
+    },
+  },
+  {
+    name: "check_calendar",
+    description:
+      "Liat jadwal/event Google Calendar user yang akan datang. Cuma bisa dipake kalau Google Calendar udah di-connect (bagian dari koneksi Gmail).",
+    input_schema: {
+      type: "object",
+      properties: {
+        days_ahead: {
+          type: "integer",
+          description: "Berapa hari ke depan yang mau dicek, default 7.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "add_calendar_event",
+    description: "Bikin event baru di Google Calendar user.",
+    input_schema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "Judul event." },
+        start: { type: "string", description: "Waktu mulai, ISO 8601 datetime (misal 2026-08-05T14:00:00+02:00)." },
+        end: { type: "string", description: "Waktu selesai, ISO 8601 datetime." },
+        description: { type: "string", description: "Catatan event, opsional." },
+      },
+      required: ["summary", "start", "end"],
     },
   },
 ];
@@ -632,6 +663,46 @@ export async function executeAssistantTool(
         };
       } catch (err) {
         return { ok: false, result: err instanceof Error ? err.message : "Gagal bikin draft." };
+      }
+    }
+
+    case "check_calendar": {
+      const cred = await getCalendarAccessToken(supabase, userId);
+      if ("error" in cred) return { ok: false, result: cred.error };
+      const daysAhead = Number(input.days_ahead ?? 7) || 7;
+      const timeMax = new Date();
+      timeMax.setDate(timeMax.getDate() + daysAhead);
+      try {
+        const events = await listUpcomingEvents(cred.accessToken, { maxResults: 15, timeMax });
+        if (events.length === 0) return { ok: true, result: "Nggak ada event di rentang waktu itu." };
+        return {
+          ok: true,
+          result: events
+            .map((e) => `- ${e.summary} (${formatDateTime(e.start)})${e.location ? ` @ ${e.location}` : ""}`)
+            .join("\n"),
+        };
+      } catch (err) {
+        return { ok: false, result: err instanceof Error ? err.message : "Gagal ambil kalender." };
+      }
+    }
+
+    case "add_calendar_event": {
+      const cred = await getCalendarAccessToken(supabase, userId);
+      if ("error" in cred) return { ok: false, result: cred.error };
+      const summary = String(input.summary ?? "").trim();
+      const start = String(input.start ?? "").trim();
+      const end = String(input.end ?? "").trim();
+      if (!summary || !start || !end) return { ok: false, result: "summary/start/end kosong." };
+      try {
+        await createEvent(cred.accessToken, {
+          summary,
+          startIso: start,
+          endIso: end,
+          description: input.description ? String(input.description) : undefined,
+        });
+        return { ok: true, result: `Event "${summary}" ditambahin ke Google Calendar.` };
+      } catch (err) {
+        return { ok: false, result: err instanceof Error ? err.message : "Gagal bikin event." };
       }
     }
 

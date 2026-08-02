@@ -142,3 +142,13 @@ export type AssistantMessage = {
   content: string;
   created_at: string;
 };
+
+export type AssistantAuditLog = {
+  id: string;
+  user_id: string;
+  tool_name: string;
+  input: Record<string, unknown>;
+  result_ok: boolean;
+  result_summary: string | null;
+  created_at: string;
+};

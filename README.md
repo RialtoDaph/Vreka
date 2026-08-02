@@ -37,14 +37,18 @@ domain produksi, bukan `http://localhost:3000` bawaannya, dan `/auth/callback`
 harus masuk daftar Redirect URLs — kalau nggak, link konfirmasi email bakal
 nembak localhost.
 
-## Gmail (opsional — biar Aslan bisa cek/bales email)
+## Gmail & Google Calendar (opsional — biar Aslan bisa cek/bales email dan liat/bikin jadwal)
+
+Satu koneksi Google yang sama dipake buat Gmail dan Calendar (satu tombol
+**Connect Gmail**, satu baris di tabel `google_credentials`).
 
 1. **Google Cloud Console** (console.cloud.google.com):
    - Bikin project baru.
-   - APIs & Services → Library → enable **Gmail API**.
+   - APIs & Services → Library → enable **Gmail API** dan **Google Calendar API**.
    - APIs & Services → OAuth consent screen → User type **External**, tambahin
-     scope `gmail.readonly` + `gmail.compose`, dan tambahin akun Gmail kamu
-     sendiri sebagai **Test user** (biar nggak perlu proses verifikasi Google).
+     scope `gmail.readonly` + `gmail.compose` + `calendar.readonly` +
+     `calendar.events`, dan tambahin akun Gmail kamu sendiri sebagai
+     **Test user** (biar nggak perlu proses verifikasi Google).
    - APIs & Services → Credentials → Create Credentials → **OAuth client ID**,
      tipe **Web application**. Authorized redirect URI-nya:
      ```
@@ -60,13 +64,18 @@ nembak localhost.
    pernah expose ke client.
 4. Set `CRON_SECRET` di Vercel (string acak bebas) — Vercel otomatis kirim ini
    sebagai header pas motoran cron job-nya, dipakai buat mastiin cuma Vercel
-   yang bisa manggil endpoint digest email.
+   yang bisa manggil endpoint cron harian.
 5. Redeploy, lalu buka halaman **Aslan** → klik **Connect Gmail**.
 
 Setelah connect, Aslan bisa cari/baca email dan bikin **draft balesan** (nggak
-pernah auto-kirim) pas diminta lewat chat, plus dapet ringkasan email belum
-dibaca otomatis sekali sehari (`vercel.json` — jadwal `0 7 * * *` UTC; di
-Vercel Hobby plan, cron cuma bisa jalan maksimal sekali sehari).
+pernah auto-kirim), liat jadwal dan bikinin event di Google Calendar pas
+diminta lewat chat, plus dapet ringkasan email belum dibaca otomatis sekali
+sehari (`vercel.json` — jadwal `0 7 * * *` UTC; di Vercel Hobby plan, cron
+cuma bisa jalan maksimal sekali sehari).
+
+**Udah connect Gmail sebelum fitur Calendar ini ada?** Refresh token lama
+cuma punya izin Gmail — disconnect dulu (tombol di halaman Aslan) terus
+connect ulang biar izin Calendar-nya ikut ke-grant.
 
 ## Telegram (opsional — biar bisa chat Aslan langsung dari Telegram)
 
@@ -90,7 +99,10 @@ Vercel Hobby plan, cron cuma bisa jalan maksimal sekali sehari).
 
 Setelah connect, chat teks apa aja ke bot-nya bakal langsung dibales Aslan,
 dengan akses yang sama kayak di dashboard (nyatet transaksi, nambah to-do,
-liat kondisi keuangan, dll).
+liat kondisi keuangan, dll), plus dapet **morning briefing** otomatis sekali
+sehari (saldo, tugas due/telat hari ini, anggaran yang mepet, kebiasaan yang
+belum dicentang, dan jadwal Calendar kalau udah connect) — jadwalnya nebeng
+di cron yang sama dengan digest email (`/api/cron/daily-digest`, `0 7 * * *` UTC).
 
 ## Modul
 
@@ -109,6 +121,8 @@ liat kondisi keuangan, dll).
   keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan lewat
   chat, nyimpen memory jangka panjang soal kamu, punya mode telepon hands-free
   dengan barge-in (lewat ElevenLabs) kalau `ELEVENLABS_API_KEY` di-set, kalau
-  Gmail di-connect bisa cari/baca email, bikin draft balesan, plus ringkasan
-  email belum dibaca otomatis sekali sehari, dan kalau Telegram di-connect bisa
-  diajak chat langsung dari Telegram
+  Gmail di-connect bisa cari/baca email, bikin draft balesan, liat/bikin event
+  Google Calendar, plus ringkasan email belum dibaca otomatis sekali sehari,
+  kalau Telegram di-connect bisa diajak chat langsung dari Telegram dan dapet
+  morning briefing harian, dan tiap aksi yang diambil Aslan (nyatet transaksi,
+  ubah data, dst) tercatat di log Aktivitas (halaman Aslan) buat transparansi

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
 import { ASSISTANT_MODELS, DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
 import HudPanel from "@/components/HudPanel";
+import ActivityLog from "@/components/asisten/ActivityLog";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
@@ -426,6 +427,8 @@ export default function AsistenPage() {
             ))}
         </div>
       </HudPanel>
+
+      <ActivityLog />
 
       <HudPanel className="flex-1 flex flex-col min-h-0" as="section">
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">

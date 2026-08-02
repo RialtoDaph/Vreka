@@ -65,7 +65,7 @@ export default async function OverviewPage() {
       .order("deadline", { ascending: true })
       .limit(3),
     supabase.from("study_notes").select("progress"),
-    supabase.from("google_credentials").select("email_address").maybeSingle(),
+    supabase.from("google_credentials").select("email_address, scope").maybeSingle(),
   ]);
 
   const income = (txMonth ?? [])
@@ -204,7 +204,11 @@ export default async function OverviewPage() {
 
       <div className="grid lg:grid-cols-2 gap-4">
         <QuickCommands />
-        <StatusIntegrasi gmailEmail={gmailCred?.email_address ?? null} voiceEnabled={voiceEnabled} />
+        <StatusIntegrasi
+          gmailEmail={gmailCred?.email_address ?? null}
+          calendarConnected={!!gmailCred?.scope?.includes("calendar")}
+          voiceEnabled={voiceEnabled}
+        />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">

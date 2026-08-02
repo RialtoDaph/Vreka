@@ -8,9 +8,11 @@ const MODEL_STORAGE_KEY = "vreka-assistant-model";
 
 export default function StatusIntegrasi({
   gmailEmail,
+  calendarConnected,
   voiceEnabled,
 }: {
   gmailEmail: string | null;
+  calendarConnected: boolean;
   voiceEnabled: boolean;
 }) {
   const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
@@ -28,6 +30,11 @@ export default function StatusIntegrasi({
       label: "Gmail",
       value: gmailEmail ? `Terhubung (${gmailEmail})` : "Belum terhubung",
       ok: !!gmailEmail,
+    },
+    {
+      label: "Google Calendar",
+      value: calendarConnected ? "Terhubung" : "Belum terhubung",
+      ok: calendarConnected,
     },
     { label: "Voice (ElevenLabs)", value: voiceEnabled ? "Aktif" : "Nonaktif", ok: voiceEnabled },
   ];
