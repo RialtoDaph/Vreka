@@ -4,9 +4,17 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Budget } from "@/lib/types";
 import { formatCurrency, parseAmount } from "@/lib/format";
+import { localDateKey } from "@/lib/date";
 import { EXPENSE_CATEGORIES } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 export default function BudgetsTab() {
   const supabase = createClient();
@@ -16,6 +24,7 @@ export default function BudgetsTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [monthlyLimit, setMonthlyLimit] = useState("");
@@ -41,9 +50,7 @@ export default function BudgetsTab() {
   async function load() {
     setLoading(true);
     const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-      .toISOString()
-      .slice(0, 10);
+    const firstDayOfMonth = localDateKey(new Date(now.getFullYear(), now.getMonth(), 1));
 
     const [{ data: budgets }, { data: txMonth }] = await Promise.all([
       supabase.from("budgets").select("*").order("created_at", { ascending: false }),
@@ -71,24 +78,36 @@ export default function BudgetsTab() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseAmount(monthlyLimit);
-    if (!monthlyLimit || !Number.isFinite(parsed) || parsed <= 0) return;
+    if (!monthlyLimit || !Number.isFinite(parsed) || parsed <= 0) {
+      setError("Batas bulanan nggak valid. Cek lagi formatnya (misal 500.000).");
+      return;
+    }
     setSaving(true);
+    setError(null);
 
-    if (editingId) {
-      await supabase.from("budgets").update({ monthly_limit: parsed }).eq("id", editingId);
-    } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      // Satu kategori cuma boleh punya satu anggaran (unique constraint),
-      // jadi kalau user pilih kategori yang udah ada, ini efektifnya update.
-      await supabase
-        .from("budgets")
-        .upsert(
-          { user_id: user.id, category, monthly_limit: parsed },
-          { onConflict: "user_id,category" }
-        );
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSaving(false);
+      return;
+    }
+
+    // Satu kategori cuma boleh punya satu anggaran (unique constraint), jadi
+    // kalau user pilih kategori yang udah ada, upsert ini efektifnya update.
+    const { error: saveError } = editingId
+      ? await supabase.from("budgets").update({ monthly_limit: parsed }).eq("id", editingId)
+      : await supabase
+          .from("budgets")
+          .upsert(
+            { user_id: user.id, category, monthly_limit: parsed },
+            { onConflict: "user_id,category" }
+          );
+
+    if (saveError) {
+      setError("Gagal simpan anggaran. Coba lagi.");
+      setSaving(false);
+      return;
     }
 
     resetForm();
@@ -98,8 +117,15 @@ export default function BudgetsTab() {
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("budgets").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus anggaran ini?")) return;
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
+    const { error: deleteError } = await supabase.from("budgets").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previous);
+      setError("Gagal hapus. Coba lagi.");
+    }
   }
 
   const budgetedCategories = new Set(items.map((b) => b.category));
@@ -119,13 +145,16 @@ export default function BudgetsTab() {
         </button>
       </div>
 
+      {error && <p className={errorBannerClass}>{error}</p>}
+
       {showForm && (
         <HudPanel>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Kategori</label>
+                <label htmlFor="budget-category" className={labelClass}>Kategori</label>
                 <select
+                  id="budget-category"
                   value={category}
                   disabled={!!editingId}
                   onChange={(e) => setCategory(e.target.value)}
@@ -139,15 +168,16 @@ export default function BudgetsTab() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Batas Bulanan (€)</label>
+                <label htmlFor="budget-limit" className={labelClass}>Batas Bulanan (Rp)</label>
                 <input
+                  id="budget-limit"
                   type="text"
                   inputMode="decimal"
                   required
                   value={monthlyLimit}
                   onChange={(e) => setMonthlyLimit(e.target.value)}
                   className={inputClass}
-                  placeholder="500,00"
+                  placeholder="500.000"
                 />
               </div>
             </div>

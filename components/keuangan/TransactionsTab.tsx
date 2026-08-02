@@ -7,14 +7,26 @@ import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
 import { downloadCsv } from "@/lib/csv";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
+
+const PAGE_SIZE = 100;
 
 export default function TransactionsTab() {
   const supabase = createClient();
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [exportMonth, setExportMonth] = useState(new Date().toISOString().slice(0, 7));
   const [exporting, setExporting] = useState(false);
@@ -142,9 +154,29 @@ export default function TransactionsTab() {
       .select("*")
       .order("occurred_on", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(100);
-    setItems(data ?? []);
+      .range(0, PAGE_SIZE - 1);
+    const rows = data ?? [];
+    setItems(rows);
+    // A full page back means there's likely more beyond it -- not a real
+    // total count, but enough to know whether to show "load more" instead
+    // of silently hiding everything past the first 100 with no indicator.
+    setHasMore(rows.length === PAGE_SIZE);
     setLoading(false);
+  }
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const { data } = await supabase
+      .from("transactions")
+      .select("*")
+      .order("occurred_on", { ascending: false })
+      .order("created_at", { ascending: false })
+      .range(items.length, items.length + PAGE_SIZE - 1);
+    const rows = data ?? [];
+    setItems((prev) => [...prev, ...rows]);
+    setHasMore(rows.length === PAGE_SIZE);
+    setLoadingMore(false);
   }
 
   useEffect(() => {
@@ -160,8 +192,12 @@ export default function TransactionsTab() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseAmount(amount);
-    if (!amount || !Number.isFinite(parsed) || parsed <= 0) return;
+    if (!amount || !Number.isFinite(parsed) || parsed <= 0) {
+      setError("Nominal nggak valid. Cek lagi formatnya (misal 50.000).");
+      return;
+    }
     setSaving(true);
+    setError(null);
 
     const {
       data: { user },
@@ -172,6 +208,7 @@ export default function TransactionsTab() {
     }
 
     let receiptPath = existingReceiptPath;
+    let uploadWarning: string | null = null;
     if (receiptFile) {
       setReceiptUploading(true);
       const ext = receiptFile.name.split(".").pop() || "jpg";
@@ -180,7 +217,11 @@ export default function TransactionsTab() {
         .from("receipts")
         .upload(path, receiptFile);
       setReceiptUploading(false);
-      if (!uploadError) receiptPath = path;
+      if (uploadError) {
+        uploadWarning = "Struk gagal diupload, tapi transaksinya tetap disimpan.";
+      } else {
+        receiptPath = path;
+      }
     }
 
     const payload = {
@@ -192,12 +233,17 @@ export default function TransactionsTab() {
       receipt_path: receiptPath,
     };
 
-    if (editingId) {
-      await supabase.from("transactions").update(payload).eq("id", editingId);
-    } else {
-      await supabase.from("transactions").insert({ user_id: user.id, ...payload });
+    const { error: saveError } = editingId
+      ? await supabase.from("transactions").update(payload).eq("id", editingId)
+      : await supabase.from("transactions").insert({ user_id: user.id, ...payload });
+
+    if (saveError) {
+      setError("Gagal simpan transaksi. Coba lagi.");
+      setSaving(false);
+      return;
     }
 
+    setError(uploadWarning);
     resetForm();
     setSaving(false);
     setShowForm(false);
@@ -205,8 +251,15 @@ export default function TransactionsTab() {
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("transactions").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus transaksi ini?")) return;
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
+    const { error: deleteError } = await supabase.from("transactions").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previous);
+      setError("Gagal hapus transaksi. Coba lagi.");
+    }
   }
 
   async function handleExport() {
@@ -221,8 +274,15 @@ export default function TransactionsTab() {
       .lte("occurred_on", lastDay)
       .order("occurred_on", { ascending: true });
     const rows = (data ?? []) as Transaction[];
-    const income = rows.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
-    const expense = rows.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+    // Round to whole Rupiah -- IDR has no meaningful fractional unit, and
+    // summing floats otherwise leaves artifacts like 244.34999999999997
+    // written straight into the exported file.
+    const income = Math.round(
+      rows.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0)
+    );
+    const expense = Math.round(
+      rows.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0)
+    );
 
     downloadCsv(`vreka-transaksi-${exportMonth}.csv`, [
       ["Laporan Keuangan", exportMonth],
@@ -236,7 +296,7 @@ export default function TransactionsTab() {
         t.type === "income" ? "Pemasukan" : "Pengeluaran",
         t.category,
         t.description ?? "",
-        Number(t.amount),
+        Math.round(Number(t.amount)),
       ]),
     ]);
     setExporting(false);
@@ -260,6 +320,8 @@ export default function TransactionsTab() {
           {showForm ? "Batal" : "+ Catat Transaksi"}
         </button>
       </div>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>
@@ -291,22 +353,24 @@ export default function TransactionsTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Jumlah (€)</label>
+                <label htmlFor="tx-amount" className={labelClass}>Jumlah (Rp)</label>
                 <input
+                  id="tx-amount"
                   type="text"
                   inputMode="decimal"
                   required
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="50,00"
+                  placeholder="50.000"
                 />
               </div>
               <div>
-                <label className={labelClass}>
+                <label htmlFor="tx-category" className={labelClass}>
                   Kategori {categorizing && <span className="text-cyan-glow normal-case">(nebak...)</span>}
                 </label>
                 <select
+                  id="tx-category"
                   value={category}
                   onChange={(e) => {
                     setCategory(e.target.value);
@@ -322,8 +386,9 @@ export default function TransactionsTab() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Tanggal</label>
+                <label htmlFor="tx-date" className={labelClass}>Tanggal</label>
                 <input
+                  id="tx-date"
                   type="date"
                   value={occurredOn}
                   onChange={(e) => setOccurredOn(e.target.value)}
@@ -331,8 +396,9 @@ export default function TransactionsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Catatan (opsional)</label>
+                <label htmlFor="tx-description" className={labelClass}>Catatan (opsional)</label>
                 <input
+                  id="tx-description"
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -404,7 +470,7 @@ export default function TransactionsTab() {
                       <span className="text-slate-500"> · {tx.description}</span>
                     ) : null}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-600">
+                  <p className="text-[11px] font-mono text-slate-400">
                     {formatDate(tx.occurred_on)}
                   </p>
                 </div>
@@ -440,6 +506,13 @@ export default function TransactionsTab() {
               </li>
             ))}
           </ul>
+        )}
+        {hasMore && !loading && (
+          <div className="flex justify-center pt-4">
+            <button onClick={loadMore} disabled={loadingMore} className={ghostBtnClass}>
+              {loadingMore ? "Memuat..." : "Muat Lebih Banyak"}
+            </button>
+          </div>
         )}
       </HudPanel>
     </div>

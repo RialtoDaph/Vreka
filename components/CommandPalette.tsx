@@ -26,6 +26,8 @@ export default function CommandPalette() {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -42,11 +44,39 @@ export default function CommandPalette() {
 
   useEffect(() => {
     if (!open) return;
+    // Remember whatever had focus before opening (⌘K can fire from
+    // anywhere on the page, not just a dedicated trigger button) so it can
+    // be restored on close instead of leaving focus stranded on <body>.
+    triggerRef.current = document.activeElement as HTMLElement | null;
     setQuery("");
     setActiveIndex(0);
     const id = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(id);
+    return () => {
+      cancelAnimationFrame(id);
+      triggerRef.current?.focus?.();
+    };
   }, [open]);
+
+  function handleDialogKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== "Tab") return;
+    const container = dialogRef.current;
+    if (!container) return;
+    const focusables = container.querySelectorAll<HTMLElement>(
+      'input, button, [href], [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    // Keep Tab/Shift+Tab cycling inside the dialog instead of escaping to
+    // whatever's behind the backdrop.
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   const filtered = COMMANDS.filter((c) => {
     const q = query.trim().toLowerCase();
@@ -80,10 +110,13 @@ export default function CommandPalette() {
       onClick={() => setOpen(false)}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-label="Command palette"
+        aria-modal="true"
         className="w-full max-w-lg bg-panel border border-cyan-glow/30 rounded-md shadow-glow overflow-hidden"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleDialogKeyDown}
       >
         <input
           ref={inputRef}

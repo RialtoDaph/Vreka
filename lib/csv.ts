@@ -1,5 +1,14 @@
 function csvEscape(value: string | number): string {
-  const s = String(value);
+  let s = String(value);
+  // Neutralize CSV/formula injection: a free-text field (description,
+  // notes, ...) starting with = + - @ gets interpreted as a formula by
+  // Excel/Sheets when the file is opened. A leading single-quote forces
+  // it back to plain text. Only applied to actual strings -- a computed
+  // number is never attacker-controlled, and quoting it would turn a
+  // legitimate negative total into text.
+  if (typeof value === "string" && /^[=+\-@]/.test(s)) {
+    s = `'${s}`;
+  }
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

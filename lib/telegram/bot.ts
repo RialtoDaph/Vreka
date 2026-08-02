@@ -9,11 +9,19 @@ function apiUrl(method: string): string {
 }
 
 export async function sendTelegramMessage(chatId: number, text: string): Promise<void> {
-  await fetch(apiUrl("sendMessage"), {
+  const res = await fetch(apiUrl("sendMessage"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, text }),
   });
+  // Deliberately doesn't throw -- callers (webhook route especially) treat
+  // this as fire-and-forget across several call sites that aren't all
+  // wrapped in their own try/catch. But a failed send used to be
+  // completely invisible (no res.ok check at all), so at least log it.
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(`Telegram sendMessage gagal (chat ${chatId}, status ${res.status}): ${body}`);
+  }
 }
 
 export async function setTelegramWebhook(url: string, secretToken: string): Promise<void> {

@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { StudyNote, StudyResource } from "@/lib/types";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 type QuizQuestion = { question: string; options: string[]; correct_index: number };
 
@@ -15,6 +22,7 @@ export default function PelajaranPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -75,18 +83,28 @@ export default function PelajaranPage() {
     e.preventDefault();
     if (!title) return;
     setSaving(true);
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setSaving(false);
+      return;
+    }
 
-    await supabase.from("study_notes").insert({
+    const { error: saveError } = await supabase.from("study_notes").insert({
       user_id: user.id,
       title,
       category: category || "Umum",
       content: content || null,
       progress,
     });
+
+    if (saveError) {
+      setError("Gagal simpan topik. Coba lagi.");
+      setSaving(false);
+      return;
+    }
 
     setTitle("");
     setCategory("");
@@ -98,18 +116,31 @@ export default function PelajaranPage() {
   }
 
   async function updateProgress(note: StudyNote, value: number) {
+    setError(null);
+    const previous = items;
     setItems((prev) =>
       prev.map((n) => (n.id === note.id ? { ...n, progress: value } : n))
     );
-    await supabase
+    const { error: updateError } = await supabase
       .from("study_notes")
       .update({ progress: value, updated_at: new Date().toISOString() })
       .eq("id", note.id);
+    if (updateError) {
+      setItems(previous);
+      setError("Gagal update progress. Coba lagi.");
+    }
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("study_notes").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus topik ini? Catatan, resource, dan riwayat sesinya ikut hilang.")) return;
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
+    const { error: deleteError } = await supabase.from("study_notes").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previous);
+      setError("Gagal hapus topik. Coba lagi.");
+    }
   }
 
   function startTimer(noteId: string) {
@@ -127,10 +158,14 @@ export default function PelajaranPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
-        await supabase
+        const { error: insertError } = await supabase
           .from("study_sessions")
           .insert({ user_id: user.id, note_id: note.id, minutes });
-        setSessionTotals((prev) => ({ ...prev, [note.id]: (prev[note.id] ?? 0) + minutes }));
+        if (insertError) {
+          setError("Sesi belajar gagal kesimpen. Coba lagi.");
+        } else {
+          setSessionTotals((prev) => ({ ...prev, [note.id]: (prev[note.id] ?? 0) + minutes }));
+        }
       }
     }
     setActiveTimerNoteId(null);
@@ -142,28 +177,37 @@ export default function PelajaranPage() {
     const label = resourceLabel.trim();
     const url = resourceUrl.trim();
     if (!label || !url) return;
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase
+    const { data, error: insertError } = await supabase
       .from("study_resources")
       .insert({ user_id: user.id, note_id: noteId, label, url })
       .select("*")
       .single();
-    if (data) {
-      setResourcesByNote((prev) => ({ ...prev, [noteId]: [...(prev[noteId] ?? []), data] }));
+    if (insertError || !data) {
+      setError("Gagal tambah resource. Coba lagi.");
+      return;
     }
+    setResourcesByNote((prev) => ({ ...prev, [noteId]: [...(prev[noteId] ?? []), data] }));
     setResourceLabel("");
     setResourceUrl("");
   }
 
   async function deleteResource(resource: StudyResource) {
+    setError(null);
+    const previous = resourcesByNote;
     setResourcesByNote((prev) => ({
       ...prev,
       [resource.note_id]: (prev[resource.note_id] ?? []).filter((r) => r.id !== resource.id),
     }));
-    await supabase.from("study_resources").delete().eq("id", resource.id);
+    const { error: deleteError } = await supabase.from("study_resources").delete().eq("id", resource.id);
+    if (deleteError) {
+      setResourcesByNote(previous);
+      setError("Gagal hapus resource. Coba lagi.");
+    }
   }
 
   function closeQuiz() {
@@ -212,6 +256,8 @@ export default function PelajaranPage() {
           {showForm ? "Batal" : "+ Topik Baru"}
         </button>
       </header>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>

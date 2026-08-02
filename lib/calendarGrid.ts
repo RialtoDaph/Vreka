@@ -1,6 +1,10 @@
-export function dateKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+import { localDateKey } from "./date";
+
+// Re-exported so existing importers (`@/lib/calendarGrid`) keep working --
+// this used to be `d.toISOString().slice(0, 10)`, which returns the UTC
+// calendar day instead of the day actually shown in the grid cell for any
+// positive-UTC-offset user. See lib/date.ts.
+export const dateKey = localDateKey;
 
 export function isSameMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();

@@ -5,7 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { Debt, DebtDirection } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 export default function DebtsTab() {
   const supabase = createClient();
@@ -14,6 +21,7 @@ export default function DebtsTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [partyName, setPartyName] = useState("");
   const [direction, setDirection] = useState<DebtDirection>("i_owe");
@@ -64,8 +72,20 @@ export default function DebtsTab() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseAmount(amount);
-    if (!partyName || !amount || !Number.isFinite(parsed) || parsed <= 0) return;
+    if (!partyName || !amount || !Number.isFinite(parsed) || parsed <= 0) {
+      setError("Nominal atau nama pihak nggak valid. Cek lagi formatnya (misal 500.000).");
+      return;
+    }
     setSaving(true);
+    setError(null);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       party_name: partyName,
@@ -75,14 +95,14 @@ export default function DebtsTab() {
       notes: notes || null,
     };
 
-    if (editingId) {
-      await supabase.from("debts").update(payload).eq("id", editingId);
-    } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      await supabase.from("debts").insert({ user_id: user.id, ...payload });
+    const { error: saveError } = editingId
+      ? await supabase.from("debts").update(payload).eq("id", editingId)
+      : await supabase.from("debts").insert({ user_id: user.id, ...payload });
+
+    if (saveError) {
+      setError("Gagal simpan utang/piutang. Coba lagi.");
+      setSaving(false);
+      return;
     }
 
     resetForm();
@@ -92,14 +112,29 @@ export default function DebtsTab() {
   }
 
   async function toggleStatus(debt: Debt) {
+    setError(null);
     const newStatus = debt.status === "paid" ? "unpaid" : "paid";
-    await supabase.from("debts").update({ status: newStatus }).eq("id", debt.id);
+    const { error: updateError } = await supabase
+      .from("debts")
+      .update({ status: newStatus })
+      .eq("id", debt.id);
+    if (updateError) {
+      setError("Gagal update status. Coba lagi.");
+      return;
+    }
     load();
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("debts").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus catatan utang/piutang ini?")) return;
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
+    const { error: deleteError } = await supabase.from("debts").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previous);
+      setError("Gagal hapus. Coba lagi.");
+    }
   }
 
   return (
@@ -109,6 +144,8 @@ export default function DebtsTab() {
           {showForm ? "Batal" : "+ Catat Utang/Piutang"}
         </button>
       </div>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>
@@ -140,8 +177,9 @@ export default function DebtsTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Nama Pihak</label>
+                <label htmlFor="debt-party" className={labelClass}>Nama Pihak</label>
                 <input
+                  id="debt-party"
                   type="text"
                   required
                   value={partyName}
@@ -151,20 +189,22 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Jumlah (€)</label>
+                <label htmlFor="debt-amount" className={labelClass}>Jumlah (Rp)</label>
                 <input
+                  id="debt-amount"
                   type="text"
                   inputMode="decimal"
                   required
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="500,00"
+                  placeholder="500.000"
                 />
               </div>
               <div>
-                <label className={labelClass}>Jatuh Tempo (opsional)</label>
+                <label htmlFor="debt-due-date" className={labelClass}>Jatuh Tempo (opsional)</label>
                 <input
+                  id="debt-due-date"
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
@@ -172,8 +212,9 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Catatan (opsional)</label>
+                <label htmlFor="debt-notes" className={labelClass}>Catatan (opsional)</label>
                 <input
+                  id="debt-notes"
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}

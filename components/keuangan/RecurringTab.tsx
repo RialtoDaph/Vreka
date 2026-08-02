@@ -4,13 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { RecurringItem, RecurringItemCheck, TransactionType } from "@/lib/types";
 import { formatCurrency, parseAmount } from "@/lib/format";
+import { currentMonthKey, todayKey } from "@/lib/date";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
-
-function currentPeriod() {
-  return new Date().toISOString().slice(0, 7); // "YYYY-MM"
-}
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 export default function RecurringTab() {
   const supabase = createClient();
@@ -21,6 +25,7 @@ export default function RecurringTab() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [type, setType] = useState<TransactionType>("expense");
   const [name, setName] = useState("");
@@ -30,7 +35,7 @@ export default function RecurringTab() {
   const [autoPost, setAutoPost] = useState(false);
   const [dayOfMonth, setDayOfMonth] = useState("1");
 
-  const period = currentPeriod();
+  const period = currentMonthKey();
 
   function resetForm() {
     setEditingId(null);
@@ -86,10 +91,25 @@ export default function RecurringTab() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseAmount(amount);
-    if (!name.trim() || !amount || !Number.isFinite(parsed) || parsed <= 0) return;
+    if (!name.trim() || !amount || !Number.isFinite(parsed) || parsed <= 0) {
+      setError("Nominal atau nama nggak valid. Cek lagi formatnya (misal 500.000).");
+      return;
+    }
     const day = Number(dayOfMonth);
-    if (autoPost && (!Number.isInteger(day) || day < 1 || day > 31)) return;
+    if (autoPost && (!Number.isInteger(day) || day < 1 || day > 31)) {
+      setError("Tanggal auto-post harus antara 1-31.");
+      return;
+    }
     setSaving(true);
+    setError(null);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       type,
@@ -100,14 +120,14 @@ export default function RecurringTab() {
       day_of_month: autoPost ? day : null,
     };
 
-    if (editingId) {
-      await supabase.from("recurring_items").update(payload).eq("id", editingId);
-    } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      await supabase.from("recurring_items").insert({ user_id: user.id, ...payload });
+    const { error: saveError } = editingId
+      ? await supabase.from("recurring_items").update(payload).eq("id", editingId)
+      : await supabase.from("recurring_items").insert({ user_id: user.id, ...payload });
+
+    if (saveError) {
+      setError("Gagal simpan pos tetap. Coba lagi.");
+      setSaving(false);
+      return;
     }
 
     resetForm();
@@ -117,24 +137,36 @@ export default function RecurringTab() {
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("recurring_items").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus pos tetap ini? Riwayat centangnya ikut hilang.")) return;
+    setError(null);
+    const previousItems = items;
+    const previousChecks = checks;
     setItems((prev) => prev.filter((i) => i.id !== id));
     setChecks((prev) => prev.filter((c) => c.recurring_item_id !== id));
+    const { error: deleteError } = await supabase.from("recurring_items").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previousItems);
+      setChecks(previousChecks);
+      setError("Gagal hapus pos tetap. Coba lagi.");
+    }
   }
 
   async function toggleCheck(item: RecurringItem) {
     if (togglingId) return;
     setTogglingId(item.id);
+    setError(null);
     const existing = checks.find((c) => c.recurring_item_id === item.id);
 
     if (existing) {
       // Undo: hapus transaksi yang kebikin otomatis; check-nya ikut kehapus lewat cascade.
-      if (existing.transaction_id) {
-        await supabase.from("transactions").delete().eq("id", existing.transaction_id);
+      const { error: undoError } = existing.transaction_id
+        ? await supabase.from("transactions").delete().eq("id", existing.transaction_id)
+        : await supabase.from("recurring_item_checks").delete().eq("id", existing.id);
+      if (undoError) {
+        setError("Gagal batal-centang. Coba lagi.");
       } else {
-        await supabase.from("recurring_item_checks").delete().eq("id", existing.id);
+        setChecks((prev) => prev.filter((c) => c.id !== existing.id));
       }
-      setChecks((prev) => prev.filter((c) => c.id !== existing.id));
     } else {
       const {
         data: { user },
@@ -151,13 +183,15 @@ export default function RecurringTab() {
           category: item.category,
           amount: item.amount,
           description: item.name,
-          occurred_on: new Date().toISOString().slice(0, 10),
+          occurred_on: todayKey(),
         })
         .select("id")
         .single();
 
-      if (!txError && tx) {
-        const { data: check } = await supabase
+      if (txError || !tx) {
+        setError("Gagal catat transaksi. Coba lagi.");
+      } else {
+        const { data: check, error: checkError } = await supabase
           .from("recurring_item_checks")
           .insert({
             user_id: user.id,
@@ -167,7 +201,16 @@ export default function RecurringTab() {
           })
           .select("*")
           .single();
-        if (check) setChecks((prev) => [...prev, check]);
+        if (checkError || !check) {
+          // Transaksinya kesimpen tapi check-nya gagal -- jangan biarin diam-diam,
+          // biar user tau harus refresh/cek manual daripada nyoba centang lagi
+          // (yang bakal nyatet transaksi kedua).
+          setError(
+            "Transaksi kesimpen, tapi statusnya gagal ke-update. Refresh halaman buat lihat status terbaru."
+          );
+        } else {
+          setChecks((prev) => [...prev, check]);
+        }
       }
     }
     setTogglingId(null);
@@ -184,6 +227,8 @@ export default function RecurringTab() {
           {showForm ? "Batal" : "+ Tambah Pos Tetap"}
         </button>
       </div>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>
@@ -211,8 +256,9 @@ export default function RecurringTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Nama Pos</label>
+                <label htmlFor="recurring-name" className={labelClass}>Nama Pos</label>
                 <input
+                  id="recurring-name"
                   type="text"
                   required
                   value={name}
@@ -222,8 +268,9 @@ export default function RecurringTab() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Kategori</label>
+                <label htmlFor="recurring-category" className={labelClass}>Kategori</label>
                 <select
+                  id="recurring-category"
                   value={category}
                   onChange={(e) => {
                     setCategory(e.target.value);
@@ -239,15 +286,16 @@ export default function RecurringTab() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Nominal (€)</label>
+                <label htmlFor="recurring-amount" className={labelClass}>Nominal (Rp)</label>
                 <input
+                  id="recurring-amount"
                   type="text"
                   inputMode="decimal"
                   required
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="500,00"
+                  placeholder="500.000"
                 />
               </div>
             </div>
@@ -264,8 +312,9 @@ export default function RecurringTab() {
               </label>
               {autoPost && (
                 <div className="mt-2.5 max-w-[10rem]">
-                  <label className={labelClass}>Tanggal tiap bulan</label>
+                  <label htmlFor="recurring-day" className={labelClass}>Tanggal tiap bulan</label>
                   <input
+                    id="recurring-day"
                     type="number"
                     min={1}
                     max={31}

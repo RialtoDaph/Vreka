@@ -4,13 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { JournalEntry } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { todayKey } from "@/lib/date";
 import { promptForDate } from "@/lib/journalPrompts";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, primaryBtnClass, dangerBtnClass } from "@/lib/ui";
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { inputClass, primaryBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 export default function JurnalPage() {
   const supabase = createClient();
@@ -19,8 +16,9 @@ export default function JurnalPage() {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const today = todayStr();
+  const today = todayKey();
   const prompt = useMemo(() => promptForDate(new Date()), []);
   const todayEntry = entries.find((e) => e.entry_date === today);
   const pastEntries = entries.filter((e) => e.entry_date !== today);
@@ -45,6 +43,7 @@ export default function JurnalPage() {
   async function handleSave() {
     if (!content.trim()) return;
     setSaving(true);
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -52,7 +51,7 @@ export default function JurnalPage() {
       setSaving(false);
       return;
     }
-    const { data } = await supabase
+    const { data, error: saveError } = await supabase
       .from("journal_entries")
       .upsert(
         { user_id: user.id, entry_date: today, content: content.trim(), updated_at: new Date().toISOString() },
@@ -60,18 +59,29 @@ export default function JurnalPage() {
       )
       .select("*")
       .single();
-    if (data) {
-      setEntries((prev) => {
-        const withoutToday = prev.filter((e) => e.entry_date !== today);
-        return [data, ...withoutToday].sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1));
-      });
+    if (saveError || !data) {
+      setError("Gagal simpan catatan. Coba lagi.");
+      setSaving(false);
+      return;
     }
+    setEntries((prev) => {
+      const withoutToday = prev.filter((e) => e.entry_date !== today);
+      return [data, ...withoutToday].sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1));
+    });
     setSaving(false);
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("journal_entries").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus catatan ini?")) return;
+    setError(null);
+    const previous = entries;
     setEntries((prev) => prev.filter((e) => e.id !== id));
+    const { error: deleteError } = await supabase.from("journal_entries").delete().eq("id", id);
+    if (deleteError) {
+      setEntries(previous);
+      setError("Gagal hapus catatan. Coba lagi.");
+      return;
+    }
     if (id === todayEntry?.id) setContent("");
   }
 
@@ -85,6 +95,8 @@ export default function JurnalPage() {
           Catatan Harian
         </h1>
       </header>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       <HudPanel glow>
         <p className="text-xs font-mono uppercase tracking-wider text-slate-500 mb-1.5">

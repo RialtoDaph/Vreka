@@ -11,124 +11,182 @@ import { formatCurrency, formatDateTime } from "@/lib/format";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Runs once a day (vercel.json). Does two independent jobs in one cron slot
-// — Gmail unread-email digest and a Telegram morning briefing — rather than
-// registering a second Vercel Cron entry, since Hobby-plan projects only get
-// a couple of cron slots and this app already spends one on recurring-post.
+// Claims a `(job, dedupeKey)` slot before doing any actual sending, so a
+// retried or overlapping cron invocation can't re-send the same day's
+// content twice. Same atomic-insert-wins pattern as recurring-post's period
+// dedupe: the DB's unique constraint is what actually prevents the race,
+// not a separate read-then-check. Fails *open* (returns true, i.e. "go
+// ahead and send") if the claim itself errors for a reason other than
+// already-claimed -- a rare duplicate send is a better failure mode here
+// than silently skipping a real digest because the bookkeeping table had a
+// transient problem.
+async function claimOnce(admin: SupabaseClient, job: string, dedupeKey: string): Promise<boolean> {
+  const { error } = await admin.from("cron_dedupe").insert({ job, dedupe_key: dedupeKey });
+  if (!error) return true;
+  if (error.code === "23505") return false; // unique_violation: already sent today
+  console.error(`daily-digest: claim gagal buat ${job}:${dedupeKey}:`, error);
+  return true;
+}
+
+// Runs once a day (vercel.json). Does three independent jobs in one cron
+// slot — Gmail unread-email digest, a Telegram morning briefing, and a push
+// notification — rather than registering separate Vercel Cron entries,
+// since Hobby-plan projects only get a couple of cron slots and this app
+// already spends one on recurring-post. Each section is wrapped in its own
+// try/catch around the whole section (not just the per-user loop), so a
+// query failure fetching *that section's* user list can't take down the
+// other two independent sections.
 export async function GET(request: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Explicit `!cronSecret` check so a deployment that forgot to set
+  // CRON_SECRET fails closed instead of the expected value silently
+  // becoming the literal string "Bearer undefined".
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const admin = createAdminClient();
   const results: Array<{ user_id: string; status: string }> = [];
+  const today = new Date().toISOString().slice(0, 10);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (apiKey) {
-    const { data: connections, error } = await admin
-      .from("google_credentials")
-      .select("user_id, refresh_token");
+    try {
+      const { data: connections, error } = await admin
+        .from("google_credentials")
+        .select("user_id, refresh_token");
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+      if (error) throw error;
 
-    const anthropic = new Anthropic({ apiKey });
+      const anthropic = new Anthropic({ apiKey });
 
-    for (const conn of connections ?? []) {
-      try {
-        const accessToken = await refreshAccessToken(conn.refresh_token);
-        const matches = await listMessages(accessToken, "is:unread in:inbox newer_than:2d", 15);
+      for (const conn of connections ?? []) {
+        try {
+          if (!(await claimOnce(admin, "daily-digest:gmail", `${conn.user_id}:${today}`))) {
+            results.push({ user_id: conn.user_id, status: "skip: digest already sent today" });
+            continue;
+          }
 
-        if (matches.length === 0) {
-          results.push({ user_id: conn.user_id, status: "skip: no unread email" });
-          continue;
-        }
+          const accessToken = await refreshAccessToken(conn.refresh_token);
+          const matches = await listMessages(accessToken, "is:unread in:inbox newer_than:2d", 15);
 
-        const details = await Promise.all(matches.map((m) => getMessage(accessToken, m.id)));
-        const emailList = details
-          .map((d) => `- Dari: ${d.from}\n  Subjek: ${d.subject}\n  Cuplikan: ${d.snippet}`)
-          .join("\n");
+          if (matches.length === 0) {
+            results.push({ user_id: conn.user_id, status: "skip: no unread email" });
+            continue;
+          }
 
-        const response = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
-          max_tokens: 500,
-          system:
-            "Kamu bikin ringkasan email masuk buat user, Bahasa Indonesia santai. Fokus ke email yang keliatan penting/butuh respon (ada pertanyaan, permintaan meeting, deadline, tagihan). Format singkat per-poin, jangan bertele-tele. Email yang keliatan cuma notifikasi/promosi boleh diringkas jadi satu baris gabungan atau di-skip.",
-          messages: [
-            {
-              role: "user",
-              content: `Ada ${details.length} email belum dibaca dalam 2 hari terakhir:\n\n${emailList}\n\nBikin ringkasan singkat, dan tandain mana yang kayaknya perlu dibales.`,
-            },
-          ],
-        });
+          const details = await Promise.all(matches.map((m) => getMessage(accessToken, m.id)));
+          const emailList = details
+            .map((d) => `- Dari: ${d.from}\n  Subjek: ${d.subject}\n  Cuplikan: ${d.snippet}`)
+            .join("\n");
 
-        const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-        const digest = textBlock?.text?.trim();
-        if (digest) {
-          await admin.from("assistant_messages").insert({
-            user_id: conn.user_id,
-            role: "assistant",
-            content: `📬 Ringkasan email hari ini:\n\n${digest}`,
+          const response = await anthropic.messages.create({
+            model: "claude-haiku-4-5",
+            max_tokens: 500,
+            system:
+              "Kamu bikin ringkasan email masuk buat user, Bahasa Indonesia santai. Fokus ke email yang keliatan penting/butuh respon (ada pertanyaan, permintaan meeting, deadline, tagihan). Format singkat per-poin, jangan bertele-tele. Email yang keliatan cuma notifikasi/promosi boleh diringkas jadi satu baris gabungan atau di-skip.",
+            messages: [
+              {
+                role: "user",
+                content: `Ada ${details.length} email belum dibaca dalam 2 hari terakhir:\n\n${emailList}\n\nBikin ringkasan singkat, dan tandain mana yang kayaknya perlu dibales.`,
+              },
+            ],
           });
-          results.push({ user_id: conn.user_id, status: "digest posted" });
-        } else {
-          results.push({ user_id: conn.user_id, status: "skip: empty digest" });
+
+          const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === "text");
+          const digest = textBlock?.text?.trim();
+          if (digest) {
+            await admin.from("assistant_messages").insert({
+              user_id: conn.user_id,
+              role: "assistant",
+              content: `📬 Ringkasan email hari ini:\n\n${digest}`,
+            });
+            results.push({ user_id: conn.user_id, status: "digest posted" });
+          } else {
+            results.push({ user_id: conn.user_id, status: "skip: empty digest" });
+          }
+        } catch (err) {
+          console.error(`daily-digest: gagal buat user ${conn.user_id} (gmail):`, err);
+          results.push({
+            user_id: conn.user_id,
+            status: `error: ${err instanceof Error ? err.message : "unknown"}`,
+          });
         }
-      } catch (err) {
-        results.push({
-          user_id: conn.user_id,
-          status: `error: ${err instanceof Error ? err.message : "unknown"}`,
-        });
       }
+    } catch (err) {
+      console.error("daily-digest: seksi Gmail gagal total:", err);
+      results.push({ user_id: "-", status: `gmail section error: ${err instanceof Error ? err.message : "unknown"}` });
     }
   }
 
   if (process.env.TELEGRAM_BOT_TOKEN) {
-    const { data: links } = await admin
-      .from("telegram_links")
-      .select("user_id, chat_id")
-      .not("chat_id", "is", null)
-      .not("linked_at", "is", null);
+    try {
+      const { data: links, error } = await admin
+        .from("telegram_links")
+        .select("user_id, chat_id")
+        .not("chat_id", "is", null)
+        .not("linked_at", "is", null);
 
-    for (const link of links ?? []) {
-      if (!link.chat_id) continue;
-      try {
-        const briefing = await buildMorningBriefing(admin, link.user_id);
-        await sendTelegramMessage(link.chat_id, briefing.text);
-        results.push({ user_id: link.user_id, status: "morning briefing sent" });
-      } catch (err) {
-        results.push({
-          user_id: link.user_id,
-          status: `briefing error: ${err instanceof Error ? err.message : "unknown"}`,
-        });
+      if (error) throw error;
+
+      for (const link of links ?? []) {
+        if (!link.chat_id) continue;
+        try {
+          if (!(await claimOnce(admin, "daily-digest:telegram", `${link.user_id}:${today}`))) {
+            results.push({ user_id: link.user_id, status: "skip: briefing already sent today" });
+            continue;
+          }
+          const briefing = await buildMorningBriefing(admin, link.user_id);
+          await sendTelegramMessage(link.chat_id, briefing.text);
+          results.push({ user_id: link.user_id, status: "morning briefing sent" });
+        } catch (err) {
+          console.error(`daily-digest: gagal buat user ${link.user_id} (telegram):`, err);
+          results.push({
+            user_id: link.user_id,
+            status: `briefing error: ${err instanceof Error ? err.message : "unknown"}`,
+          });
+        }
       }
+    } catch (err) {
+      console.error("daily-digest: seksi Telegram gagal total:", err);
+      results.push({ user_id: "-", status: `telegram section error: ${err instanceof Error ? err.message : "unknown"}` });
     }
   }
 
   if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-    const { data: pushRows } = await admin.from("push_subscriptions").select("user_id");
-    const userIds = Array.from(new Set((pushRows ?? []).map((p) => p.user_id)));
+    try {
+      const { data: pushRows, error } = await admin.from("push_subscriptions").select("user_id");
+      if (error) throw error;
+      const userIds = Array.from(new Set((pushRows ?? []).map((p) => p.user_id)));
 
-    for (const userId of userIds) {
-      try {
-        const briefing = await buildMorningBriefing(admin, userId);
-        const { sent } = await sendPushToUser(admin, userId, {
-          title: "🌅 Ringkasan Pagi",
-          body: briefing.pushBody,
-          url: "/dashboard",
-        });
-        results.push({
-          user_id: userId,
-          status: sent > 0 ? `push sent to ${sent} device(s)` : "push: no active subscription",
-        });
-      } catch (err) {
-        results.push({
-          user_id: userId,
-          status: `push error: ${err instanceof Error ? err.message : "unknown"}`,
-        });
+      for (const userId of userIds) {
+        try {
+          if (!(await claimOnce(admin, "daily-digest:push", `${userId}:${today}`))) {
+            results.push({ user_id: userId, status: "skip: push already sent today" });
+            continue;
+          }
+          const briefing = await buildMorningBriefing(admin, userId);
+          const { sent } = await sendPushToUser(admin, userId, {
+            title: "🌅 Ringkasan Pagi",
+            body: briefing.pushBody,
+            url: "/dashboard",
+          });
+          results.push({
+            user_id: userId,
+            status: sent > 0 ? `push sent to ${sent} device(s)` : "push: no active subscription",
+          });
+        } catch (err) {
+          console.error(`daily-digest: gagal buat user ${userId} (push):`, err);
+          results.push({
+            user_id: userId,
+            status: `push error: ${err instanceof Error ? err.message : "unknown"}`,
+          });
+        }
       }
+    } catch (err) {
+      console.error("daily-digest: seksi push gagal total:", err);
+      results.push({ user_id: "-", status: `push section error: ${err instanceof Error ? err.message : "unknown"}` });
     }
   }
 

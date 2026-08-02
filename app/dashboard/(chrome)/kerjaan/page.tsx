@@ -6,7 +6,14 @@ import { Task, TaskPriority, TaskStatus, TaskSubtask } from "@/lib/types";
 import { formatDateTime, daysUntil } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
 import HabitsPanel from "@/components/kerjaan/HabitsPanel";
-import { inputClass, labelClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import {
+  inputClass,
+  labelClass,
+  primaryBtnClass,
+  ghostBtnClass,
+  dangerBtnClass,
+  errorBannerClass,
+} from "@/lib/ui";
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
   low: "Rendah",
@@ -19,6 +26,21 @@ const PRIORITY_TONE: Record<TaskPriority, string> = {
   medium: "text-amber-glow border-amber-glow/40",
   high: "text-rose-glow border-rose-glow/40",
 };
+
+// Higher first. The board used to sort purely by deadline -- the priority
+// badge shown on every card never actually affected ordering, so a "high"
+// item with no deadline sat wherever it happened to land instead of
+// floating up.
+const PRIORITY_RANK: Record<TaskPriority, number> = { high: 0, medium: 1, low: 2 };
+
+function compareTasks(a: Task, b: Task): number {
+  const byPriority = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+  if (byPriority !== 0) return byPriority;
+  if (a.deadline && b.deadline) return a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : 0;
+  if (a.deadline) return -1;
+  if (b.deadline) return 1;
+  return 0;
+}
 
 const COLUMNS: { key: TaskStatus; label: string; tone: string }[] = [
   { key: "todo", label: "To-do", tone: "text-slate-300" },
@@ -35,6 +57,7 @@ export default function KerjaanPage() {
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [subtaskInput, setSubtaskInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -70,20 +93,36 @@ export default function KerjaanPage() {
     e.preventDefault();
     if (!title) return;
     setSaving(true);
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setSaving(false);
+      return;
+    }
 
-    await supabase.from("tasks").insert({
+    const { error: saveError } = await supabase.from("tasks").insert({
       user_id: user.id,
       title,
       description: description || null,
-      deadline: deadline || null,
+      // `deadline` comes from an <input type="datetime-local">, e.g.
+      // "2026-08-05T21:00" with no timezone offset. `new Date(...)` parses
+      // that as local time (per spec), so converting to ISO here stores the
+      // correct UTC instant instead of letting Postgres interpret the raw
+      // offset-less string as UTC (which would silently shift it by the
+      // browser's UTC offset).
+      deadline: deadline ? new Date(deadline).toISOString() : null,
       priority,
       status: "todo",
       project: project.trim() || null,
     });
+
+    if (saveError) {
+      setError("Gagal simpan to-do. Coba lagi.");
+      setSaving(false);
+      return;
+    }
 
     setTitle("");
     setDescription("");
@@ -96,39 +135,59 @@ export default function KerjaanPage() {
   }
 
   async function updateStatus(task: Task, status: TaskStatus) {
+    setError(null);
+    const previous = items;
     setItems((prev) => prev.map((t) => (t.id === task.id ? { ...t, status } : t)));
-    await supabase.from("tasks").update({ status }).eq("id", task.id);
+    const { error: updateError } = await supabase.from("tasks").update({ status }).eq("id", task.id);
+    if (updateError) {
+      setItems(previous);
+      setError("Gagal update status. Coba lagi.");
+    }
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("tasks").delete().eq("id", id);
+    if (!window.confirm("Yakin mau hapus to-do ini? Sub-task-nya ikut kehapus.")) return;
+    setError(null);
+    const previousItems = items;
+    const previousSubtasks = subtasksByTask;
     setItems((prev) => prev.filter((i) => i.id !== id));
     setSubtasksByTask((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
     });
+    const { error: deleteError } = await supabase.from("tasks").delete().eq("id", id);
+    if (deleteError) {
+      setItems(previousItems);
+      setSubtasksByTask(previousSubtasks);
+      setError("Gagal hapus to-do. Coba lagi.");
+    }
   }
 
   async function handleAddSubtask(taskId: string) {
     const subtaskTitle = subtaskInput.trim();
     if (!subtaskTitle) return;
     setSubtaskInput("");
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase
+    const { data, error: insertError } = await supabase
       .from("task_subtasks")
       .insert({ user_id: user.id, task_id: taskId, title: subtaskTitle })
       .select("*")
       .single();
-    if (data) {
-      setSubtasksByTask((prev) => ({ ...prev, [taskId]: [...(prev[taskId] ?? []), data] }));
+    if (insertError || !data) {
+      setError("Gagal tambah sub-task. Coba lagi.");
+      return;
     }
+    setSubtasksByTask((prev) => ({ ...prev, [taskId]: [...(prev[taskId] ?? []), data] }));
   }
 
   async function toggleSubtask(subtask: TaskSubtask) {
+    setError(null);
+    const previous = subtasksByTask;
     const done = !subtask.done;
     setSubtasksByTask((prev) => ({
       ...prev,
@@ -136,15 +195,28 @@ export default function KerjaanPage() {
         s.id === subtask.id ? { ...s, done } : s
       ),
     }));
-    await supabase.from("task_subtasks").update({ done }).eq("id", subtask.id);
+    const { error: updateError } = await supabase
+      .from("task_subtasks")
+      .update({ done })
+      .eq("id", subtask.id);
+    if (updateError) {
+      setSubtasksByTask(previous);
+      setError("Gagal update sub-task. Coba lagi.");
+    }
   }
 
   async function deleteSubtask(subtask: TaskSubtask) {
+    setError(null);
+    const previous = subtasksByTask;
     setSubtasksByTask((prev) => ({
       ...prev,
       [subtask.task_id]: (prev[subtask.task_id] ?? []).filter((s) => s.id !== subtask.id),
     }));
-    await supabase.from("task_subtasks").delete().eq("id", subtask.id);
+    const { error: deleteError } = await supabase.from("task_subtasks").delete().eq("id", subtask.id);
+    if (deleteError) {
+      setSubtasksByTask(previous);
+      setError("Gagal hapus sub-task. Coba lagi.");
+    }
   }
 
   const projects = Array.from(new Set(items.map((t) => t.project).filter((p): p is string => !!p))).sort();
@@ -164,6 +236,8 @@ export default function KerjaanPage() {
           {showForm ? "Batal" : "+ To-do Baru"}
         </button>
       </header>
+
+      {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
         <HudPanel>
@@ -257,9 +331,9 @@ export default function KerjaanPage() {
       ) : (
         <div className="grid md:grid-cols-3 gap-4 items-start">
           {COLUMNS.map((col) => {
-            const colItems = items.filter(
-              (t) => t.status === col.key && (!projectFilter || t.project === projectFilter)
-            );
+            const colItems = items
+              .filter((t) => t.status === col.key && (!projectFilter || t.project === projectFilter))
+              .sort(compareTasks);
             return (
               <HudPanel key={col.key}>
                 <div className="flex items-center justify-between mb-3">
@@ -278,6 +352,7 @@ export default function KerjaanPage() {
                       const urgent = d !== null && d <= 2 && task.status !== "done";
                       const subtasks = subtasksByTask[task.id] ?? [];
                       const doneSubtasks = subtasks.filter((s) => s.done).length;
+                      const allSubtasksDone = subtasks.length > 0 && doneSubtasks === subtasks.length && task.status !== "done";
                       const expanded = expandedId === task.id;
                       return (
                         <li
@@ -322,8 +397,18 @@ export default function KerjaanPage() {
                             {subtasks.length > 0 && (
                               <button
                                 onClick={() => setExpandedId(expanded ? null : task.id)}
-                                className="text-[10px] font-mono text-cyan-glow/80 hover:text-cyan-glow"
+                                title={
+                                  allSubtasksDone
+                                    ? "Semua sub-task selesai -- tandain to-do ini selesai juga?"
+                                    : undefined
+                                }
+                                className={`text-[10px] font-mono ${
+                                  allSubtasksDone
+                                    ? "text-mint-glow hover:text-mint-glow/80"
+                                    : "text-cyan-glow/80 hover:text-cyan-glow"
+                                }`}
                               >
+                                {allSubtasksDone && "✓ "}
                                 {doneSubtasks}/{subtasks.length} sub-task {expanded ? "▾" : "▸"}
                               </button>
                             )}

@@ -34,3 +34,28 @@ export function resolveAuthRedirect(params: {
   if (isAuthRoute) return challenge ? "/mfa" : "/dashboard";
   return null;
 }
+
+// API routes that authenticate via the normal Supabase session cookie (as
+// opposed to a bearer/webhook secret) and can read or mutate real user
+// data. 2FA used to only be enforced at page-routing layer (proxy.ts's old
+// matcher only covered /dashboard, /login, /mfa) -- a session cookie stuck
+// at aal1 (MFA enrolled but this session hasn't cleared the challenge, e.g.
+// a stolen post-login-pre-MFA cookie) could call any of these directly and
+// fully bypass the second factor. Deliberately an allowlist, not "all of
+// /api/* except a blocklist": a route added here later without a session
+// cookie (like the cron routes' CRON_SECRET or the Telegram webhook's
+// signature) must never be added, since there's no user AAL to check for a
+// server-to-server call -- an allowlist fails safe by simply not adding
+// the extra gate, rather than accidentally gating a secret-authenticated
+// route that has no session to inspect.
+const MFA_GATED_API_PREFIXES = [
+  "/api/assistant/",
+  "/api/google/",
+  "/api/push/",
+  "/api/telegram/link",
+  "/api/telegram/setup",
+];
+
+export function isMfaGatedApiRoute(pathname: string): boolean {
+  return MFA_GATED_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}

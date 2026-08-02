@@ -1,31 +1,37 @@
 import { describe, expect, it } from "vitest";
 import { daysUntil, formatCurrency, formatDate, formatDateTime, parseAmount } from "./format";
 
-// de-DE currency formatting puts a NON-BREAKING space (U+00A0, not a plain
-// ASCII space) between the amount and the € sign -- Intl/ICU output.
+// id-ID currency formatting puts a NON-BREAKING space (U+00A0, not a plain
+// ASCII space) between the "Rp" symbol and the amount -- Intl/ICU output.
 const NBSP = " ";
 
 describe("formatCurrency", () => {
-  it("formats a positive amount as EUR with de-DE grouping/decimal separators", () => {
-    expect(formatCurrency(1234.5)).toBe(`1.234,50${NBSP}€`);
+  it("formats a positive amount as IDR with id-ID grouping, rounded to whole Rupiah", () => {
+    expect(formatCurrency(1234500)).toBe(`Rp${NBSP}1.234.500`);
   });
 
   it("formats zero", () => {
-    expect(formatCurrency(0)).toBe(`0,00${NBSP}€`);
+    expect(formatCurrency(0)).toBe(`Rp${NBSP}0`);
   });
 
   it("formats a negative amount", () => {
-    expect(formatCurrency(-50)).toBe(`-50,00${NBSP}€`);
+    expect(formatCurrency(-50000)).toBe(`-Rp${NBSP}50.000`);
   });
 });
 
 describe("parseAmount", () => {
-  it("parses a dot-decimal string", () => {
-    expect(parseAmount("12.50")).toBe(12.5);
+  it("regression: no longer silently shrinks dot-grouped thousands (the critical bug)", () => {
+    expect(parseAmount("1.500")).toBe(1500);
+    expect(parseAmount("10.000")).toBe(10000);
+    expect(parseAmount("1.500.000")).toBe(1500000);
   });
 
-  it("parses a comma-decimal string (EUR display format)", () => {
+  it("parses a comma-decimal string (id-ID display format)", () => {
     expect(parseAmount("12,50")).toBe(12.5);
+  });
+
+  it("parses a dot-grouped amount with a comma-decimal remainder", () => {
+    expect(parseAmount("1.500,50")).toBe(1500.5);
   });
 
   it("parses a plain integer string", () => {

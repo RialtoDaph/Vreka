@@ -22,18 +22,29 @@ function chainable(result: { data: unknown; error?: unknown }) {
     limit: () => obj,
     order: () => obj,
     maybeSingle: () => Promise.resolve(result),
+    // cron_dedupe's claimOnce() and the Gmail section's assistant_messages
+    // write both just `await ...insert(...)` directly (no further
+    // chaining), so insert() itself needs to resolve like a query result.
+    insert: () => Promise.resolve(result),
     then: (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
       Promise.resolve(result).then(resolve, reject),
   };
   return obj;
 }
 
+// Defaults `cron_dedupe` claims to "not yet claimed today" (error: null)
+// unless a test overrides it, so existing send-path assertions don't all
+// need to know about the dedupe table.
 function mockAdmin(tables: Record<string, Array<{ data: unknown; error?: unknown }>>) {
   const counters: Record<string, number> = {};
+  const withDefaults: Record<string, Array<{ data: unknown; error?: unknown }>> = {
+    cron_dedupe: [{ data: null, error: null }],
+    ...tables,
+  };
   vi.doMock("@/lib/supabase/admin", () => ({
     createAdminClient: () => ({
       from: (table: string) => {
-        const results = tables[table] ?? [{ data: [], error: null }];
+        const results = withDefaults[table] ?? [{ data: [], error: null }];
         const idx = counters[table] ?? 0;
         counters[table] = idx + 1;
         return chainable(results[Math.min(idx, results.length - 1)]);
@@ -91,6 +102,17 @@ describe("GET /api/cron/daily-digest", () => {
     mockGoogle();
     const { GET } = await import("./route");
     const res = await GET(req("wrong-secret"));
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects requests when CRON_SECRET is unset, even with header 'Bearer undefined'", async () => {
+    // Regression: `authHeader !== \`Bearer ${process.env.CRON_SECRET}\`` used
+    // to make an unset secret literally match the string "Bearer undefined".
+    vi.stubEnv("CRON_SECRET", "");
+    mockAdmin({});
+    mockGoogle();
+    const { GET } = await import("./route");
+    const res = await GET(req("undefined"));
     expect(res.status).toBe(401);
   });
 
@@ -209,6 +231,57 @@ describe("GET /api/cron/daily-digest", () => {
       body: expect.stringContaining("1 tugas due"),
       url: "/dashboard",
     });
+  });
+
+  it("skips a channel that already claimed today's dedupe key, without sending again", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-bot-token");
+    mockGoogle();
+    const sent = mockTelegram();
+
+    mockAdmin({
+      cron_dedupe: [{ data: null, error: { message: "duplicate key", code: "23505" } }],
+      telegram_links: [{ data: [{ user_id: "user-1", chat_id: 555 }] }],
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(req("test-secret"));
+    const body = await res.json();
+
+    expect(body.results).toEqual([
+      { user_id: "user-1", status: "skip: briefing already sent today" },
+    ]);
+    expect(sent).toEqual([]);
+  });
+
+  it("keeps the push section running even when the Gmail section's own query fails", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    vi.stubEnv("VAPID_PUBLIC_KEY", "pub");
+    vi.stubEnv("VAPID_PRIVATE_KEY", "priv");
+    mockGoogle();
+    const pushCalls = mockPush({ sent: 1, removed: 0 });
+
+    mockAdmin({
+      google_credentials: [{ data: null, error: { message: "db unreachable" } }],
+      push_subscriptions: [{ data: [{ user_id: "user-1" }] }],
+      transactions: [{ data: [] }],
+      budgets: [{ data: [] }],
+      tasks: [{ data: [] }, { data: [] }],
+      habits: [{ data: [] }],
+      habit_checks: [{ data: [] }],
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(req("test-secret"));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.results).toContainEqual({ user_id: "user-1", status: "push sent to 1 device(s)" });
+    expect(body.results).toContainEqual(
+      expect.objectContaining({ user_id: "-", status: expect.stringContaining("gmail section error") })
+    );
+    expect(pushCalls).toHaveLength(1);
   });
 
   it("skips the push section entirely when VAPID keys aren't configured", async () => {

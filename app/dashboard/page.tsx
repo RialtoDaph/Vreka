@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import MemoryMapLoader from "@/components/dashboard/MemoryMapLoader";
+import CommandPalette from "@/components/CommandPalette";
 import { buildMemoryMapData } from "@/lib/memoryMap";
 import { getCalendarAccessToken } from "@/lib/google/credentials";
 import { listUpcomingEvents, type CalendarEvent } from "@/lib/google/calendar";
@@ -53,14 +54,18 @@ export default async function OverviewPage() {
   let calendarEvents: CalendarEvent[] = [];
   let calendarConnected = false;
   if (user) {
-    const cred = await getCalendarAccessToken(supabase, user.id);
-    if ("accessToken" in cred) {
-      calendarConnected = true;
-      try {
+    try {
+      const cred = await getCalendarAccessToken(supabase, user.id);
+      if ("accessToken" in cred) {
+        calendarConnected = true;
         calendarEvents = await listUpcomingEvents(cred.accessToken, { maxResults: 8 });
-      } catch {
-        // Kalender hub just shows "Terhubung" with no events on failure.
       }
+    } catch (err) {
+      // A revoked/expired refresh token throws out of getCalendarAccessToken
+      // (not one of its designed { error } responses) -- without this, that
+      // used to crash the whole Memory Map page load instead of just
+      // leaving the calendar widget showing "belum terhubung".
+      console.error("Dashboard: gagal ambil data Google Calendar:", err);
     }
   }
 
@@ -80,5 +85,13 @@ export default async function OverviewPage() {
     voiceEnabled: !!process.env.ELEVENLABS_API_KEY,
   });
 
-  return <MemoryMapLoader data={memoryMapData} />;
+  return (
+    <>
+      <MemoryMapLoader data={memoryMapData} />
+      {/* This route sits outside app/dashboard/(chrome)/layout.tsx (full-bleed
+          layout, no Sidebar), so ⌘K used to silently do nothing here even
+          though it works everywhere else in the dashboard. */}
+      <CommandPalette />
+    </>
+  );
 }

@@ -32,11 +32,11 @@ export default async function DashboardLayout({
           <Sidebar />
         </div>
         <div className="hidden md:block mt-8 pt-4 border-t border-line">
-          <p className="text-[11px] font-mono text-slate-600 truncate mb-3">
+          <p className="text-[11px] font-mono text-slate-400 truncate mb-3">
             {user?.email}
           </p>
           <SignOutButton />
-          <p className="text-[10px] font-mono text-slate-700 mt-4">
+          <p className="text-[10px] font-mono text-slate-400 mt-4">
             <kbd className="border border-line rounded-sm px-1 py-0.5">⌘K</kbd> buat cari cepat
           </p>
         </div>
