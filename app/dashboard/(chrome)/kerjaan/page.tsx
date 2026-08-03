@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Task, TaskPriority, TaskStatus, TaskSubtask } from "@/lib/types";
 import { formatDateTime, daysUntil } from "@/lib/format";
@@ -232,9 +233,14 @@ export default function KerjaanPage() {
             Kerjaan
           </h1>
         </div>
-        <button onClick={() => setShowForm((s) => !s)} className={primaryBtnClass}>
-          {showForm ? "Batal" : "+ To-do Baru"}
-        </button>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/canvas" className={ghostBtnClass}>
+            ⌗ Canvas
+          </Link>
+          <button onClick={() => setShowForm((s) => !s)} className={primaryBtnClass}>
+            {showForm ? "Batal" : "+ To-do Baru"}
+          </button>
+        </div>
       </header>
 
       {error && <p className={errorBannerClass}>{error}</p>}
