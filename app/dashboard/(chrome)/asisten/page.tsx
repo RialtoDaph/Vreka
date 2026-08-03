@@ -8,6 +8,7 @@ import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
 import PushNotifications from "@/components/asisten/PushNotifications";
+import StatusAslan from "@/components/asisten/StatusAslan";
 import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
@@ -398,6 +399,13 @@ export default function AsistenPage() {
           </div>
         </div>
       </header>
+
+      <StatusAslan
+        gmailConnected={!!gmailEmail}
+        telegramConnected={telegramLinked}
+        voiceSupported={voiceSupported}
+        onManage={() => setSettingsOpen(true)}
+      />
 
       <HudPanel className="flex-1 flex flex-col min-h-0" as="section">
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
