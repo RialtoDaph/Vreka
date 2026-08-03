@@ -161,6 +161,13 @@ export type PushSubscriptionRow = {
   created_at: string;
 };
 
+export type AssistantMemory = {
+  id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+};
+
 export type AssistantAuditLog = {
   id: string;
   user_id: string;
