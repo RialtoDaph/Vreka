@@ -73,6 +73,60 @@ export default function CanvasKerjaPage() {
     return () => stage.removeEventListener("wheel", onWheel);
   }, []);
 
+  // Pinch-to-zoom for touch devices. This runs as a raw capture-phase
+  // listener rather than a React onPointerDown/Move prop so it sees every
+  // pointer regardless of which child element it lands on -- a node's own
+  // pointerdown handler calls stopPropagation() (needed so a tap on a node
+  // starts a drag, not a canvas pan), which would otherwise hide a second
+  // finger from a handler attached further up the React tree.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const active = new Map<number, { x: number; y: number }>();
+    let pinchStartDist: number | null = null;
+    let pinchStartZoom = 1;
+
+    function distance(): number {
+      const pts = Array.from(active.values());
+      return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    }
+
+    function onDown(e: PointerEvent) {
+      active.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (active.size === 2) {
+        pinchStartDist = distance();
+        setZoom((z) => {
+          pinchStartZoom = z;
+          return z;
+        });
+        setPanning(null);
+        setDragging(null);
+      }
+    }
+    function onMove(e: PointerEvent) {
+      if (!active.has(e.pointerId)) return;
+      active.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (active.size === 2 && pinchStartDist) {
+        setZoom(clampZoom(pinchStartZoom * (distance() / pinchStartDist)));
+      }
+    }
+    function onUp(e: PointerEvent) {
+      active.delete(e.pointerId);
+      if (active.size < 2) pinchStartDist = null;
+    }
+
+    stage.addEventListener("pointerdown", onDown, { capture: true });
+    stage.addEventListener("pointermove", onMove, { capture: true });
+    stage.addEventListener("pointerup", onUp, { capture: true });
+    stage.addEventListener("pointercancel", onUp, { capture: true });
+    return () => {
+      stage.removeEventListener("pointerdown", onDown, { capture: true });
+      stage.removeEventListener("pointermove", onMove, { capture: true });
+      stage.removeEventListener("pointerup", onUp, { capture: true });
+      stage.removeEventListener("pointercancel", onUp, { capture: true });
+    };
+  }, []);
+
   async function addNode(kind: CanvasNodeKind) {
     const {
       data: { user },
@@ -152,11 +206,11 @@ export default function CanvasKerjaPage() {
     if (!error && data) setArrows((prev) => [...prev, data]);
   }
 
-  function onStageMouseDown(e: React.MouseEvent) {
+  function onStagePointerDown(e: React.PointerEvent) {
     setPanning({ startClientX: e.clientX, startClientY: e.clientY, startPanX: pan.x, startPanY: pan.y });
   }
 
-  function onNodeMouseDown(node: CanvasNode, e: React.MouseEvent) {
+  function onNodePointerDown(node: CanvasNode, e: React.PointerEvent) {
     e.stopPropagation();
     if (linkingFrom) {
       finishLink(node.id);
@@ -166,12 +220,12 @@ export default function CanvasKerjaPage() {
     setDragging({ nodeId: node.id, offsetX: world.x - node.x, offsetY: world.y - node.y });
   }
 
-  function onLinkPointMouseDown(nodeId: string, e: React.MouseEvent) {
+  function onLinkPointPointerDown(nodeId: string, e: React.PointerEvent) {
     e.stopPropagation();
     setLinkingFrom(nodeId);
   }
 
-  function onStageMouseMove(e: React.MouseEvent) {
+  function onStagePointerMove(e: React.PointerEvent) {
     if (panning) {
       setPan({
         x: panning.startPanX + (e.clientX - panning.startClientX),
@@ -193,7 +247,7 @@ export default function CanvasKerjaPage() {
     }
   }
 
-  function onStageMouseUp() {
+  function onStagePointerUp() {
     if (dragging) {
       const node = nodes.find((n) => n.id === dragging.nodeId);
       if (node) persistNodePosition(node);
@@ -211,11 +265,11 @@ export default function CanvasKerjaPage() {
       <div
         ref={stageRef}
         className="absolute inset-0"
-        style={{ cursor: panning ? "grabbing" : "default" }}
-        onMouseDown={onStageMouseDown}
-        onMouseMove={onStageMouseMove}
-        onMouseUp={onStageMouseUp}
-        onMouseLeave={onStageMouseUp}
+        style={{ cursor: panning ? "grabbing" : "default", touchAction: "none" }}
+        onPointerDown={onStagePointerDown}
+        onPointerMove={onStagePointerMove}
+        onPointerUp={onStagePointerUp}
+        onPointerLeave={onStagePointerUp}
       >
         <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ overflow: "visible" }}>
           <defs>
@@ -273,7 +327,7 @@ export default function CanvasKerjaPage() {
               <div
                 key={node.id}
                 data-node
-                onMouseDown={(e) => onNodeMouseDown(node, e)}
+                onPointerDown={(e) => onNodePointerDown(node, e)}
                 className="absolute flex flex-col p-2.5 rounded-md shadow-lg"
                 style={{
                   left: node.x,
@@ -284,6 +338,7 @@ export default function CanvasKerjaPage() {
                   border: `1px solid ${isSticky ? `${accent}55` : THEME.line}`,
                   borderLeft: `3px solid ${accent}`,
                   cursor: dragging?.nodeId === node.id ? "grabbing" : "grab",
+                  touchAction: "none",
                 }}
               >
                 <div className="flex items-center justify-between mb-1.5 text-xs" style={{ color: accent }}>
@@ -293,7 +348,7 @@ export default function CanvasKerjaPage() {
                       e.stopPropagation();
                       deleteNode(node.id);
                     }}
-                    onMouseDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                     aria-label={`Hapus kartu ${isSticky ? "sticky" : "tugas"}`}
                     className="bg-transparent border-none text-white/40 hover:text-white/70 cursor-pointer text-sm leading-none"
                   >
@@ -305,7 +360,7 @@ export default function CanvasKerjaPage() {
                     value={node.text}
                     onChange={(e) => updateNodeField(node.id, { text: e.target.value })}
                     onBlur={(e) => persistNodeField(node.id, { text: e.target.value })}
-                    onMouseDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                     placeholder="Tulis catatan..."
                     className="flex-1 w-full bg-transparent border-none text-slate-200 text-[13px] resize-none outline-none"
                   />
@@ -315,7 +370,7 @@ export default function CanvasKerjaPage() {
                       value={node.label ?? ""}
                       onChange={(e) => updateNodeField(node.id, { label: e.target.value })}
                       onBlur={(e) => persistNodeField(node.id, { label: e.target.value })}
-                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
                       placeholder="Label"
                       className="w-full bg-transparent border-none text-[9px] font-mono uppercase tracking-wider text-slate-400 outline-none mb-1"
                     />
@@ -323,16 +378,16 @@ export default function CanvasKerjaPage() {
                       value={node.text}
                       onChange={(e) => updateNodeField(node.id, { text: e.target.value })}
                       onBlur={(e) => persistNodeField(node.id, { text: e.target.value })}
-                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
                       placeholder="Judul tugas"
                       className="w-full bg-transparent border-none text-[13px] text-slate-200 outline-none"
                     />
                   </>
                 )}
                 <div
-                  onMouseDown={(e) => onLinkPointMouseDown(node.id, e)}
-                  className="absolute -right-1.5 -bottom-1.5 w-3 h-3 rounded-full border-2 z-10"
-                  style={{ background: THEME.cyanGlow, borderColor: THEME.void, cursor: "crosshair" }}
+                  onPointerDown={(e) => onLinkPointPointerDown(node.id, e)}
+                  className="absolute -right-1.5 -bottom-1.5 w-4 h-4 -m-0.5 rounded-full border-2 z-10"
+                  style={{ background: THEME.cyanGlow, borderColor: THEME.void, cursor: "crosshair", touchAction: "none" }}
                   aria-hidden="true"
                 />
               </div>
@@ -395,8 +450,9 @@ export default function CanvasKerjaPage() {
         </div>
       )}
 
-      <p className="absolute bottom-4 left-5 z-[2] font-mono text-[10px] text-slate-600 tracking-wide">
-        Drag kanvas kosong buat geser · drag titik cyan di pojok kartu buat sambung ke kartu lain · scroll buat zoom
+      <p className="absolute bottom-4 left-5 z-[2] font-mono text-[10px] text-slate-600 tracking-wide max-w-[calc(100%-40px)]">
+        Drag kanvas kosong buat geser · drag titik cyan di pojok kartu buat sambung ke kartu lain · scroll atau cubit
+        buat zoom
       </p>
     </div>
   );

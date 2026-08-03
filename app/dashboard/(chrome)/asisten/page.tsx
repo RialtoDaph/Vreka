@@ -371,7 +371,7 @@ export default function AsistenPage() {
             </h1>
           </div>
         </div>
-        <div className="flex items-end gap-3">
+        <div className="flex items-end gap-3 flex-wrap">
           {voiceSupported && (
             <button
               type="button"

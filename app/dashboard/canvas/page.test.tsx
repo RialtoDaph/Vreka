@@ -138,9 +138,27 @@ describe("CanvasKerjaPage", () => {
     expect(nodeEls).toHaveLength(2);
 
     const linkPoint = nodeEls[0].lastElementChild!;
-    fireEvent.mouseDown(linkPoint);
-    fireEvent.mouseDown(nodeEls[1]);
+    fireEvent.pointerDown(linkPoint);
+    fireEvent.pointerDown(nodeEls[1]);
 
     await waitFor(() => expect(container.querySelectorAll("line[marker-end]")).toHaveLength(1));
+  });
+
+  it("pinch-zooms via two simultaneous touch pointers", async () => {
+    mockSupabase({ nodes: [] });
+    const { default: CanvasKerjaPage } = await import("./page");
+    const { container } = render(<CanvasKerjaPage />);
+
+    const stage = container.querySelector("svg")!.parentElement!;
+    expect(await screen.findByText("100%")).toBeInTheDocument();
+
+    // Two fingers 20px apart, then spread to 100px apart (5x) -- clamped to
+    // MAX_ZOOM (2), i.e. 200%, since 1 * 5 exceeds the cap.
+    fireEvent.pointerDown(stage, { pointerId: 1, clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(stage, { pointerId: 2, clientX: 120, clientY: 100 });
+    fireEvent.pointerMove(stage, { pointerId: 1, clientX: 60, clientY: 100 });
+    fireEvent.pointerMove(stage, { pointerId: 2, clientX: 160, clientY: 100 });
+
+    await waitFor(() => expect(screen.getByText("200%")).toBeInTheDocument());
   });
 });
