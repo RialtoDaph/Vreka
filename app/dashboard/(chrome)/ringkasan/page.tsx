@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { computeStreak } from "@/lib/habits";
 import { todayKey } from "@/lib/date";
+import { formatDate } from "@/lib/format";
 import { buildDailyBriefing, type BriefingColor, type DailyBriefing } from "@/lib/dailyBriefing";
+import type { DailyBriefingRow } from "@/lib/types";
 import HudPanel from "@/components/HudPanel";
 import { ghostBtnClass, errorBannerClass } from "@/lib/ui";
 
@@ -31,6 +33,9 @@ export default function RingkasanPage() {
   const [playing, setPlaying] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  const [history, setHistory] = useState<DailyBriefingRow[]>([]);
+  const [openHistoryId, setOpenHistoryId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -133,6 +138,29 @@ export default function RingkasanPage() {
         calendarConnected: !!calendarRes.connected,
       });
       setBriefing(result);
+
+      // Snapshot today's real computed summary for "Riwayat Briefing" --
+      // opportunistic (whenever this page happens to load that day), never
+      // backfilled, so a day with no visit is just genuinely absent from
+      // the history instead of a fabricated entry.
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from("daily_briefings")
+          .upsert(
+            { user_id: user.id, briefing_date: today, preview: result.summaryText },
+            { onConflict: "user_id,briefing_date" }
+          );
+      }
+      const { data: historyRows } = await supabase
+        .from("daily_briefings")
+        .select("*")
+        .lt("briefing_date", today)
+        .order("briefing_date", { ascending: false })
+        .limit(14);
+      setHistory((historyRows ?? []) as DailyBriefingRow[]);
     } catch {
       setError("Gagal nyusun ringkasan. Coba refresh lagi.");
     } finally {
@@ -340,6 +368,39 @@ export default function RingkasanPage() {
                 </p>
               )}
             </HudPanel>
+          )}
+
+          {history.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2.5 mb-3.5">
+                <span className="flex-1 h-px bg-line" />
+                <span className="font-mono text-[10px] uppercase tracking-wider text-slate-600">
+                  Riwayat Briefing
+                </span>
+                <span className="flex-1 h-px bg-line" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {history.map((h) => {
+                  const open = openHistoryId === h.id;
+                  return (
+                    <div key={h.id}>
+                      <button
+                        onClick={() => setOpenHistoryId(open ? null : h.id)}
+                        className="w-full flex items-center justify-between gap-2.5 px-3.5 py-2.5 border border-line rounded-md bg-panel/50 text-left"
+                      >
+                        <span className="text-[12.5px] text-slate-300 capitalize">
+                          {formatDate(h.briefing_date)}
+                        </span>
+                        <span className="font-mono text-xs text-slate-500">{open ? "−" : "+"}</span>
+                      </button>
+                      {open && (
+                        <p className="text-xs text-slate-400 leading-relaxed mt-2 ml-3.5">{h.preview}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </>
       ) : null}
