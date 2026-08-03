@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Debt, DebtDirection } from "@/lib/types";
+import { Debt, DebtDirection, DebtPaymentCheck } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
+import { currentMonthKey } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
 import {
   inputClass,
@@ -25,10 +26,12 @@ const DIRECTION_FILTERS: { key: DirectionFilter; label: string }[] = [
 export default function DebtsTab() {
   const supabase = createClient();
   const [items, setItems] = useState<Debt[]>([]);
+  const [checks, setChecks] = useState<DebtPaymentCheck[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("semua");
 
@@ -37,6 +40,10 @@ export default function DebtsTab() {
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceDay, setRecurrenceDay] = useState("1");
+
+  const period = currentMonthKey();
 
   function resetForm() {
     setEditingId(null);
@@ -45,6 +52,8 @@ export default function DebtsTab() {
     setAmount("");
     setDueDate("");
     setNotes("");
+    setIsRecurring(false);
+    setRecurrenceDay("1");
   }
 
   function toggleForm() {
@@ -59,17 +68,23 @@ export default function DebtsTab() {
     setAmount(String(debt.amount).replace(".", ","));
     setDueDate(debt.due_date ?? "");
     setNotes(debt.notes ?? "");
+    setIsRecurring(debt.is_recurring);
+    setRecurrenceDay(String(debt.recurrence_day ?? 1));
     setShowForm(true);
   }
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase
-      .from("debts")
-      .select("*")
-      .order("status", { ascending: true })
-      .order("due_date", { ascending: true, nullsFirst: false });
-    setItems(data ?? []);
+    const [{ data: debtRows }, { data: checkRows }] = await Promise.all([
+      supabase
+        .from("debts")
+        .select("*")
+        .order("status", { ascending: true })
+        .order("due_date", { ascending: true, nullsFirst: false }),
+      supabase.from("debt_payment_checks").select("*").eq("period", period),
+    ]);
+    setItems(debtRows ?? []);
+    setChecks(checkRows ?? []);
     setLoading(false);
   }
 
@@ -85,6 +100,11 @@ export default function DebtsTab() {
       setError("Nominal atau nama pihak nggak valid. Cek lagi formatnya (misal 500.000).");
       return;
     }
+    const day = Number(recurrenceDay);
+    if (isRecurring && (!Number.isInteger(day) || day < 1 || day > 31)) {
+      setError("Tanggal jatuh tempo bulanan harus antara 1-31.");
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -92,6 +112,7 @@ export default function DebtsTab() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
+      setError("Sesi login habis. Refresh halaman terus coba lagi.");
       setSaving(false);
       return;
     }
@@ -100,8 +121,10 @@ export default function DebtsTab() {
       party_name: partyName,
       direction,
       amount: parsed,
-      due_date: dueDate || null,
+      due_date: isRecurring ? null : dueDate || null,
       notes: notes || null,
+      is_recurring: isRecurring,
+      recurrence_day: isRecurring ? day : null,
     };
 
     const { error: saveError } = editingId
@@ -134,14 +157,59 @@ export default function DebtsTab() {
     load();
   }
 
-  async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus catatan utang/piutang ini?")) return;
+  // Marks/unmarks *this cycle* paid for a recurring debt -- separate from
+  // toggleStatus, which closes out the debt entirely. A recurring debt
+  // stays "unpaid" (still an ongoing obligation) across many paid cycles.
+  async function toggleCheck(debt: Debt) {
+    if (togglingId) return;
+    setTogglingId(debt.id);
     setError(null);
-    const previous = items;
+    const existing = checks.find((c) => c.debt_id === debt.id);
+
+    if (existing) {
+      const { error: deleteError } = await supabase
+        .from("debt_payment_checks")
+        .delete()
+        .eq("id", existing.id);
+      if (deleteError) {
+        setError("Gagal batal-centang. Coba lagi.");
+      } else {
+        setChecks((prev) => prev.filter((c) => c.id !== existing.id));
+      }
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setError("Sesi login habis. Refresh halaman terus coba lagi.");
+        setTogglingId(null);
+        return;
+      }
+      const { data: check, error: insertError } = await supabase
+        .from("debt_payment_checks")
+        .insert({ user_id: user.id, debt_id: debt.id, period })
+        .select("*")
+        .single();
+      if (insertError || !check) {
+        setError("Gagal catat pembayaran. Coba lagi.");
+      } else {
+        setChecks((prev) => [...prev, check]);
+      }
+    }
+    setTogglingId(null);
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm("Yakin mau hapus catatan utang/piutang ini? Riwayat pembayarannya ikut hilang.")) return;
+    setError(null);
+    const previousItems = items;
+    const previousChecks = checks;
     setItems((prev) => prev.filter((i) => i.id !== id));
+    setChecks((prev) => prev.filter((c) => c.debt_id !== id));
     const { error: deleteError } = await supabase.from("debts").delete().eq("id", id);
     if (deleteError) {
-      setItems(previous);
+      setItems(previousItems);
+      setChecks(previousChecks);
       setError("Gagal hapus. Coba lagi.");
     }
   }
@@ -255,16 +323,18 @@ export default function DebtsTab() {
                   placeholder="500.000"
                 />
               </div>
-              <div>
-                <label htmlFor="debt-due-date" className={labelClass}>Jatuh Tempo (opsional)</label>
-                <input
-                  id="debt-due-date"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className={inputClass}
-                />
-              </div>
+              {!isRecurring && (
+                <div>
+                  <label htmlFor="debt-due-date" className={labelClass}>Jatuh Tempo (opsional)</label>
+                  <input
+                    id="debt-due-date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              )}
               <div>
                 <label htmlFor="debt-notes" className={labelClass}>Catatan (opsional)</label>
                 <input
@@ -275,6 +345,33 @@ export default function DebtsTab() {
                   className={inputClass}
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={isRecurring}
+                  onChange={(e) => setIsRecurring(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-cyan-glow"
+                />
+                Berulang tiap bulan (misal transfer bank tiap tanggal tertentu)
+              </label>
+              {isRecurring && (
+                <div className="mt-2.5 max-w-[10rem]">
+                  <label htmlFor="debt-recurrence-day" className={labelClass}>Tanggal tiap bulan</label>
+                  <input
+                    id="debt-recurrence-day"
+                    type="number"
+                    min={1}
+                    max={31}
+                    required
+                    value={recurrenceDay}
+                    onChange={(e) => setRecurrenceDay(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              )}
             </div>
 
             <button type="submit" disabled={saving} className={primaryBtnClass}>
@@ -293,23 +390,48 @@ export default function DebtsTab() {
           <p className="text-sm text-slate-500">Gak ada data di filter ini.</p>
         ) : (
           <ul className="divide-y divide-line/60">
-            {filteredItems.map((debt) => (
+            {filteredItems.map((debt) => {
+              const isChecked = checks.some((c) => c.debt_id === debt.id);
+              const isBusy = togglingId === debt.id;
+              const showCycleCheck = debt.is_recurring && debt.status === "unpaid";
+              return (
               <li
                 key={debt.id}
                 className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
               >
-                <div className="min-w-0">
-                  <p className="text-sm text-slate-200 truncate">
-                    {debt.party_name}
-                    {debt.status === "paid" && (
-                      <span className="ml-2 text-[10px] font-mono text-mint-glow border border-mint-glow/30 rounded-sm px-1.5 py-0.5">
-                        LUNAS
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-[11px] font-mono text-slate-600">
-                    {debt.due_date ? `Jatuh tempo ${formatDate(debt.due_date)}` : "Tanpa jatuh tempo"}
-                  </p>
+                <div className="min-w-0 flex items-center gap-3">
+                  {showCycleCheck && (
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={isBusy}
+                      onChange={() => toggleCheck(debt)}
+                      aria-label={`Sudah bayar ${debt.party_name} bulan ini`}
+                      className="h-4 w-4 shrink-0 cursor-pointer disabled:opacity-50 accent-cyan-glow"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-200 truncate">
+                      {debt.party_name}
+                      {debt.status === "paid" && (
+                        <span className="ml-2 text-[10px] font-mono text-mint-glow border border-mint-glow/30 rounded-sm px-1.5 py-0.5">
+                          LUNAS
+                        </span>
+                      )}
+                      {debt.is_recurring && isChecked && (
+                        <span className="ml-2 text-[10px] font-mono text-cyan-glow border border-cyan-glow/30 rounded-sm px-1.5 py-0.5">
+                          BULAN INI LUNAS
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[11px] font-mono text-slate-600">
+                      {debt.is_recurring
+                        ? `Berulang · tiap tanggal ${debt.recurrence_day}`
+                        : debt.due_date
+                          ? `Jatuh tempo ${formatDate(debt.due_date)}`
+                          : "Tanpa jatuh tempo"}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span
@@ -323,7 +445,11 @@ export default function DebtsTab() {
                     onClick={() => toggleStatus(debt)}
                     className="text-xs font-mono text-cyan-glow/80 hover:text-cyan-glow"
                   >
-                    {debt.status === "paid" ? "Buka lagi" : "Tandai lunas"}
+                    {debt.status === "paid"
+                      ? "Buka lagi"
+                      : debt.is_recurring
+                        ? "Tutup utang"
+                        : "Tandai lunas"}
                   </button>
                   <button onClick={() => startEdit(debt)} className={ghostBtnClass}>
                     Edit
@@ -333,7 +459,8 @@ export default function DebtsTab() {
                   </button>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </HudPanel>

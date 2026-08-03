@@ -46,6 +46,17 @@ export type Debt = {
   due_date: string | null;
   notes: string | null;
   created_at: string;
+  is_recurring: boolean;
+  recurrence_day: number | null;
+};
+
+export type DebtPaymentCheck = {
+  id: string;
+  user_id: string;
+  debt_id: string;
+  period: string;
+  paid_at: string;
+  created_at: string;
 };
 
 export type SavingsGoal = {
