@@ -30,6 +30,8 @@ export default async function OverviewPage() {
       data: { user },
     },
     { data: gmailCred },
+    { data: telegramLink },
+    { count: memoryCount },
   ] = await Promise.all([
     supabase
       .from("tasks")
@@ -49,6 +51,8 @@ export default async function OverviewPage() {
     supabase.from("journal_entries").select("*").order("entry_date", { ascending: false }),
     supabase.auth.getUser(),
     supabase.from("google_credentials").select("email_address, scope").maybeSingle(),
+    supabase.from("telegram_links").select("linked_at").not("linked_at", "is", null).maybeSingle(),
+    supabase.from("assistant_memories").select("*", { count: "exact", head: true }),
   ]);
 
   let calendarEvents: CalendarEvent[] = [];
@@ -69,6 +73,8 @@ export default async function OverviewPage() {
     }
   }
 
+  const voiceEnabled = !!process.env.ELEVENLABS_API_KEY;
+
   const memoryMapData = buildMemoryMapData({
     tasks: (tasks ?? []) as Task[],
     goals: (goals ?? []) as SavingsGoal[],
@@ -82,12 +88,22 @@ export default async function OverviewPage() {
     calendarEvents,
     calendarConnected,
     gmailEmail: gmailCred?.email_address ?? null,
-    voiceEnabled: !!process.env.ELEVENLABS_API_KEY,
+    voiceEnabled,
   });
+
+  // Real vitals for the Memory Map's system-status panel -- model is always
+  // on, so it's a flat +1 alongside however many of the other 3 real
+  // integrations (Gmail/Calendar counts as one grant, Telegram, voice) are
+  // actually connected.
+  const integrationsConnected =
+    1 + (gmailCred?.email_address ? 1 : 0) + (telegramLink?.linked_at ? 1 : 0) + (voiceEnabled ? 1 : 0);
 
   return (
     <>
-      <MemoryMapLoader data={memoryMapData} />
+      <MemoryMapLoader
+        data={memoryMapData}
+        vitals={{ memoryCount: memoryCount ?? 0, integrationsConnected, integrationsTotal: 4 }}
+      />
       {/* This route sits outside app/dashboard/(chrome)/layout.tsx (full-bleed
           layout, no Sidebar), so ⌘K used to silently do nothing here even
           though it works everywhere else in the dashboard. */}

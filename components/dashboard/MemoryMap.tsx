@@ -9,8 +9,15 @@ import { THEME } from "@/lib/theme";
 import { ASSISTANT_MODELS } from "@/lib/assistant/models";
 import SignOutButton from "@/components/SignOutButton";
 
+export type MemoryMapVitals = {
+  memoryCount: number;
+  integrationsConnected: number;
+  integrationsTotal: number;
+};
+
 type Props = {
   data: MemoryMapData;
+  vitals: MemoryMapVitals;
 };
 
 type FilterId = MemoryNodeType | "all";
@@ -50,7 +57,7 @@ const VOICE_PHASE_STYLE: Record<VoicePhase, { color: string; label: string }> = 
   error: { color: THEME.roseGlow, label: "Error" },
 };
 
-export default function MemoryMap({ data }: Props) {
+export default function MemoryMap({ data, vitals }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const labelLayerRef = useRef<HTMLDivElement>(null);
   const sceneApiRef = useRef<SceneApi | null>(null);
@@ -66,6 +73,9 @@ export default function MemoryMap({ data }: Props) {
   const [chatDraft, setChatDraft] = useState("");
   const [navOpen, setNavOpen] = useState(false);
   const [webglError, setWebglError] = useState(false);
+  // Strips the corner chrome (nav/search/status, filters, Riset Aslan) down
+  // to just the graph and the voice orb, for a cleaner look at a busy graph.
+  const [focusMode, setFocusMode] = useState(false);
   const [insight, setInsight] = useState<{ text: string; sources: { label: string; url: string }[] } | null>(
     null
   );
@@ -603,75 +613,113 @@ export default function MemoryMap({ data }: Props) {
         </div>
       )}
 
-      <div className="absolute top-5 left-5 z-[2] w-[230px]">
-        <button
-          onClick={() => setNavOpen((o) => !o)}
-          aria-expanded={navOpen}
-          aria-label="Buka menu navigasi"
-          className="flex items-center gap-2 mb-3.5 bg-transparent border-none cursor-pointer p-0 text-left"
-        >
-          <span className="w-[26px] h-[26px] rounded-full border-2 border-cyan-glow/50 flex items-center justify-center shrink-0">
-            <span className="w-2 h-2 rounded-full bg-cyan-glow pulse-dot" />
-          </span>
-          <div>
-            <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0 flex items-center gap-1.5">
-              VREKA
-              <span className="text-slate-400 text-[10px]">{navOpen ? "▲" : "▼"}</span>
-            </p>
-            <p className="font-mono text-[8px] tracking-[0.15em] text-slate-400 m-0">
-              {data.nodes.length} memori · {data.edges.length} koneksi
-            </p>
-          </div>
-        </button>
+      {!focusMode && (
+        <div className="absolute top-5 left-5 z-[2] w-[230px]">
+          <button
+            onClick={() => setNavOpen((o) => !o)}
+            aria-expanded={navOpen}
+            aria-label="Buka menu navigasi"
+            className="flex items-center gap-2 mb-3.5 bg-transparent border-none cursor-pointer p-0 text-left"
+          >
+            <span className="w-[26px] h-[26px] rounded-full border-2 border-cyan-glow/50 flex items-center justify-center shrink-0">
+              <span className="w-2 h-2 rounded-full bg-cyan-glow pulse-dot" />
+            </span>
+            <div>
+              <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0 flex items-center gap-1.5">
+                VREKA
+                <span className="text-slate-400 text-[10px]">{navOpen ? "▲" : "▼"}</span>
+              </p>
+              <p className="font-mono text-[8px] tracking-[0.15em] text-slate-400 m-0">
+                {data.nodes.length} memori · {data.edges.length} koneksi
+              </p>
+            </div>
+          </button>
 
-        {navOpen && (
-          <div className="mb-3.5 bg-panel/90 border border-line rounded-lg backdrop-blur-sm overflow-hidden">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-slate-300 hover:text-cyan-glow hover:bg-panel2 transition-colors border-b border-line/60"
-              >
-                <span aria-hidden="true">{item.icon}</span>
-                {item.label}
-              </Link>
-            ))}
-            <div className="px-3 py-2.5">
-              <SignOutButton />
+          {navOpen && (
+            <div className="mb-3.5 bg-panel/90 border border-line rounded-lg backdrop-blur-sm overflow-hidden">
+              {NAV.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-slate-300 hover:text-cyan-glow hover:bg-panel2 transition-colors border-b border-line/60"
+                >
+                  <span aria-hidden="true">{item.icon}</span>
+                  {item.label}
+                </Link>
+              ))}
+              <div className="px-3 py-2.5">
+                <SignOutButton />
+              </div>
+            </div>
+          )}
+
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari memori..."
+            className="w-full box-border bg-panel/75 border border-line text-slate-200 font-mono text-xs px-3 py-2.5 rounded-lg outline-none backdrop-blur-sm focus-visible:outline-cyan-glow mb-3.5"
+          />
+
+          <div className="bg-panel/75 border border-line rounded-lg px-3 py-2.5 backdrop-blur-sm">
+            <p className="font-mono text-[8.5px] tracking-[0.1em] text-slate-500 m-0 mb-1.5">
+              {"// SYSTEM.STATUS"}
+            </p>
+            <div className="flex items-center gap-1.5 font-mono text-[9.5px] mb-1">
+              <span className="text-slate-500 shrink-0">NODE</span>
+              <span className="text-amber-glow ml-auto">{data.nodes.length}</span>
+            </div>
+            <div className="flex items-center gap-1.5 font-mono text-[9.5px] mb-1">
+              <span className="text-slate-500 shrink-0">MEM</span>
+              <span className="text-cyan-glow ml-auto">{vitals.memoryCount}</span>
+            </div>
+            <div className="flex items-center gap-1.5 font-mono text-[9.5px]">
+              <span className="text-slate-500 shrink-0">INTG</span>
+              <span className="text-mint-glow ml-auto">
+                {vitals.integrationsConnected}/{vitals.integrationsTotal}
+              </span>
             </div>
           </div>
-        )}
-
-        <input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Cari memori..."
-          className="w-full box-border bg-panel/75 border border-line text-slate-200 font-mono text-xs px-3 py-2.5 rounded-lg outline-none backdrop-blur-sm focus-visible:outline-cyan-glow"
-        />
-      </div>
-
-      {!webglError && (
-        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-2">
-          <button
-            onClick={() => sceneApiRef.current?.fitView()}
-            className="flex items-center gap-1.5 bg-panel/75 border border-line text-slate-300 font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm hover:border-cyan-glow/40"
-          >
-            ⊙ Fit
-          </button>
-          <button
-            onClick={() => setSpin((s) => !s)}
-            className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm border ${
-              spin
-                ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-                : "bg-panel/75 border-line text-slate-300"
-            }`}
-          >
-            ◍ {spin ? "Auto-spin" : "Diam"}
-          </button>
         </div>
       )}
 
       {!webglError && (
+        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-2">
+          <button
+            onClick={() => setFocusMode((f) => !f)}
+            aria-pressed={focusMode}
+            title="Focus Mode"
+            className={`flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-sm border font-mono text-sm ${
+              focusMode
+                ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
+                : "bg-panel/75 border-line text-slate-300"
+            }`}
+          >
+            ◱
+          </button>
+          {!focusMode && (
+            <>
+              <button
+                onClick={() => sceneApiRef.current?.fitView()}
+                className="flex items-center gap-1.5 bg-panel/75 border border-line text-slate-300 font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm hover:border-cyan-glow/40"
+              >
+                ⊙ Fit
+              </button>
+              <button
+                onClick={() => setSpin((s) => !s)}
+                className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm border ${
+                  spin
+                    ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
+                    : "bg-panel/75 border-line text-slate-300"
+                }`}
+              >
+                ◍ {spin ? "Auto-spin" : "Diam"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {!webglError && !focusMode && (
         <div className="absolute top-5 right-5 z-[2] text-right">
           <p className="font-mono text-[9px] tracking-[0.15em] uppercase text-slate-400 mb-2">
             Filter
@@ -759,7 +807,7 @@ export default function MemoryMap({ data }: Props) {
         </span>
       </div>
 
-      {selectedNode && !insightDismissed && (insightLoading || insight || insightError) && (
+      {!focusMode && selectedNode && !insightDismissed && (insightLoading || insight || insightError) && (
         <div className="absolute bottom-24 left-5 z-[2] w-[270px] bg-panel/90 border border-line rounded-lg p-3.5 backdrop-blur-[10px] shadow-glow">
           <div className="flex items-center justify-between mb-2">
             <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow">

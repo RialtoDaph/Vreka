@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { MemoryMapData } from "@/lib/memoryMap";
+import type { MemoryMapVitals } from "./MemoryMap";
 
 const MemoryMap = dynamic(() => import("./MemoryMap"), {
   ssr: false,
@@ -14,6 +15,12 @@ const MemoryMap = dynamic(() => import("./MemoryMap"), {
   ),
 });
 
-export default function MemoryMapLoader({ data }: { data: MemoryMapData }) {
-  return <MemoryMap data={data} />;
+export default function MemoryMapLoader({
+  data,
+  vitals,
+}: {
+  data: MemoryMapData;
+  vitals: MemoryMapVitals;
+}) {
+  return <MemoryMap data={data} vitals={vitals} />;
 }
