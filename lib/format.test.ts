@@ -1,21 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { daysUntil, formatCurrency, formatDate, formatDateTime, parseAmount } from "./format";
 
-// id-ID currency formatting puts a NON-BREAKING space (U+00A0, not a plain
-// ASCII space) between the "Rp" symbol and the amount -- Intl/ICU output.
+// de-DE currency formatting puts a NON-BREAKING space (U+00A0, not a plain
+// ASCII space) between the amount and the "€" symbol -- Intl/ICU output.
 const NBSP = " ";
 
 describe("formatCurrency", () => {
-  it("formats a positive amount as IDR with id-ID grouping, rounded to whole Rupiah", () => {
-    expect(formatCurrency(1234500)).toBe(`Rp${NBSP}1.234.500`);
+  it("formats a positive amount as EUR with de-DE grouping", () => {
+    expect(formatCurrency(1234500)).toBe(`1.234.500,00${NBSP}€`);
   });
 
   it("formats zero", () => {
-    expect(formatCurrency(0)).toBe(`Rp${NBSP}0`);
+    expect(formatCurrency(0)).toBe(`0,00${NBSP}€`);
   });
 
   it("formats a negative amount", () => {
-    expect(formatCurrency(-50000)).toBe(`-Rp${NBSP}50.000`);
+    expect(formatCurrency(-50000)).toBe(`-50.000,00${NBSP}€`);
+  });
+
+  it("formats an amount with cents", () => {
+    expect(formatCurrency(1234.5)).toBe(`1.234,50${NBSP}€`);
   });
 });
 

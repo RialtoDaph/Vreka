@@ -27,7 +27,7 @@ describe("executeAssistantTool: search_records", () => {
         source: "transaction",
         id: "tx1",
         title: "Makan — Nasi goreng",
-        snippet: "Rp25.000 · 1 Agu 2026",
+        snippet: "25,00 € · 1 Agu 2026",
         date: "2026-08-01",
         href: "/dashboard/keuangan",
       },
@@ -39,7 +39,7 @@ describe("executeAssistantTool: search_records", () => {
     expect(searchAll).toHaveBeenCalledWith({}, "user-1", "listrik", 5);
     expect(res.ok).toBe(true);
     expect(res.result).toBe(
-      "- [To-do] Bayar listrik — todo\n- [Transaksi] Makan — Nasi goreng — Rp25.000 · 1 Agu 2026"
+      "- [To-do] Bayar listrik — todo\n- [Transaksi] Makan — Nasi goreng — 25,00 € · 1 Agu 2026"
     );
   });
 });

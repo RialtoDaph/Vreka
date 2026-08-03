@@ -286,7 +286,7 @@ export default function RecurringTab() {
                 </select>
               </div>
               <div>
-                <label htmlFor="recurring-amount" className={labelClass}>Nominal (Rp)</label>
+                <label htmlFor="recurring-amount" className={labelClass}>Nominal (€)</label>
                 <input
                   id="recurring-amount"
                   type="text"

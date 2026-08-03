@@ -274,13 +274,15 @@ export default function TransactionsTab() {
       .lte("occurred_on", lastDay)
       .order("occurred_on", { ascending: true });
     const rows = (data ?? []) as Transaction[];
-    // Round to whole Rupiah -- IDR has no meaningful fractional unit, and
-    // summing floats otherwise leaves artifacts like 244.34999999999997
-    // written straight into the exported file.
-    const income = Math.round(
+    // Round to whole cents -- EUR has a meaningful fractional unit (unlike
+    // the Rupiah this used to be), so this can't round to the nearest whole
+    // number anymore; it only exists to clean up float-sum artifacts like
+    // 244.34999999999997 before they land in the exported file.
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const income = round2(
       rows.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0)
     );
-    const expense = Math.round(
+    const expense = round2(
       rows.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0)
     );
 
@@ -288,7 +290,7 @@ export default function TransactionsTab() {
       ["Laporan Keuangan", exportMonth],
       ["Total Pemasukan", income],
       ["Total Pengeluaran", expense],
-      ["Saldo", income - expense],
+      ["Saldo", round2(income - expense)],
       [],
       ["Tanggal", "Tipe", "Kategori", "Catatan", "Jumlah"],
       ...rows.map((t) => [
@@ -296,7 +298,7 @@ export default function TransactionsTab() {
         t.type === "income" ? "Pemasukan" : "Pengeluaran",
         t.category,
         t.description ?? "",
-        Math.round(Number(t.amount)),
+        round2(Number(t.amount)),
       ]),
     ]);
     setExporting(false);
@@ -353,7 +355,7 @@ export default function TransactionsTab() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="tx-amount" className={labelClass}>Jumlah (Rp)</label>
+                <label htmlFor="tx-amount" className={labelClass}>Jumlah (€)</label>
                 <input
                   id="tx-amount"
                   type="text"

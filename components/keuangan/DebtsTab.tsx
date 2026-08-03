@@ -189,7 +189,7 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label htmlFor="debt-amount" className={labelClass}>Jumlah (Rp)</label>
+                <label htmlFor="debt-amount" className={labelClass}>Jumlah (€)</label>
                 <input
                   id="debt-amount"
                   type="text"
