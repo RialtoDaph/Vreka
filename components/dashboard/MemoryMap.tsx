@@ -81,6 +81,18 @@ export default function MemoryMap({ data, vitals }: Props) {
   useEffect(() => {
     setLastModuleHref(window.localStorage.getItem(LAST_MODULE_KEY));
   }, []);
+  // Memory Map is the one page where a nav icon opens a quick-peek overlay
+  // (the real route, iframed in a modal) instead of navigating away --
+  // every other page's nav just links out directly.
+  const [navOverlay, setNavOverlay] = useState<string | null>(null);
+  useEffect(() => {
+    if (!navOverlay) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setNavOverlay(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navOverlay]);
   // Strips the corner chrome (nav/search/status, filters, Riset Aslan) down
   // to just the graph and the voice orb, for a cleaner look at a busy graph.
   const [focusMode, setFocusMode] = useState(false);
@@ -992,11 +1004,14 @@ export default function MemoryMap({ data, vitals }: Props) {
       {!focusMode && (
         <div className="absolute bottom-24 right-5 z-[2] flex gap-1 bg-panel/85 border border-line rounded-md p-1 backdrop-blur-sm">
           {NAV.map((item) => (
-            <Link
+            <button
               key={item.href}
-              href={item.href}
               title={item.label}
-              onClick={() => window.localStorage.setItem(LAST_MODULE_KEY, item.href)}
+              onClick={() => {
+                window.localStorage.setItem(LAST_MODULE_KEY, item.href);
+                setLastModuleHref(item.href);
+                setNavOverlay(item.href);
+              }}
               className="relative flex items-center justify-center w-7 h-7 rounded-[3px] text-slate-400 text-sm hover:text-cyan-glow hover:bg-panel2"
             >
               <span aria-hidden="true">{item.icon}</span>
@@ -1009,8 +1024,40 @@ export default function MemoryMap({ data, vitals }: Props) {
                   aria-hidden="true"
                 />
               )}
-            </Link>
+            </button>
           ))}
+        </div>
+      )}
+
+      {navOverlay && (
+        <div
+          className="fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-center justify-center"
+          onClick={() => setNavOverlay(null)}
+        >
+          <div
+            className="relative w-[75vw] h-[75vh] bg-void border border-line rounded-lg overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="absolute top-2.5 left-4 z-[2] font-mono text-[10.5px] text-slate-500">
+              Memory Map ▸ <span className="text-cyan-glow">{NAV.find((n) => n.href === navOverlay)?.label}</span>
+            </span>
+            <a
+              href={navOverlay}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute top-2.5 right-[52px] z-[2] flex items-center gap-1.5 h-[30px] px-3 rounded-full border border-line bg-panel/90 text-slate-400 font-mono text-[10.5px] uppercase tracking-wider no-underline"
+            >
+              Buka penuh ↗
+            </a>
+            <button
+              onClick={() => setNavOverlay(null)}
+              aria-label="Tutup preview"
+              className="absolute top-2.5 right-2.5 z-[2] w-[30px] h-[30px] rounded-full border border-line bg-panel/90 text-slate-400 text-sm"
+            >
+              ×
+            </button>
+            <iframe src={navOverlay} title={NAV.find((n) => n.href === navOverlay)?.label ?? "Preview"} className="w-full h-full border-none" />
+          </div>
         </div>
       )}
 
