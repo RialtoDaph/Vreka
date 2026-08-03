@@ -6,6 +6,9 @@ import { getCalendarAccessToken } from "@/lib/google/credentials";
 import { listUpcomingEvents, type CalendarEvent } from "@/lib/google/calendar";
 import { Task, SavingsGoal, Debt, StudyNote, Budget, Habit, HabitCheck, JournalEntry } from "@/lib/types";
 import { daysUntil } from "@/lib/format";
+import { buildDailyActivity } from "@/lib/assistantActivity";
+
+const SPARKLINE_DAYS = 12;
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +36,7 @@ export default async function OverviewPage() {
     { data: gmailCred },
     { data: telegramLink },
     { count: memoryCount },
+    { data: recentAuditLogs },
   ] = await Promise.all([
     supabase
       .from("tasks")
@@ -54,6 +58,10 @@ export default async function OverviewPage() {
     supabase.from("google_credentials").select("email_address, scope").maybeSingle(),
     supabase.from("telegram_links").select("linked_at").not("linked_at", "is", null).maybeSingle(),
     supabase.from("assistant_memories").select("*", { count: "exact", head: true }),
+    supabase
+      .from("assistant_audit_log")
+      .select("created_at")
+      .gte("created_at", new Date(now.getTime() - SPARKLINE_DAYS * 86400000).toISOString()),
   ]);
 
   let calendarEvents: CalendarEvent[] = [];
@@ -103,11 +111,19 @@ export default async function OverviewPage() {
     (t: Task) => t.deadline && (daysUntil(t.deadline) ?? 0) < 0
   );
 
+  const dailyActivity = buildDailyActivity(recentAuditLogs ?? [], SPARKLINE_DAYS).map((d) => d.count);
+
   return (
     <>
       <MemoryMapLoader
         data={memoryMapData}
-        vitals={{ memoryCount: memoryCount ?? 0, integrationsConnected, integrationsTotal: 4, hasOverdueTask }}
+        vitals={{
+          memoryCount: memoryCount ?? 0,
+          integrationsConnected,
+          integrationsTotal: 4,
+          hasOverdueTask,
+          dailyActivity,
+        }}
       />
       {/* This route sits outside app/dashboard/(chrome)/layout.tsx (full-bleed
           layout, no Sidebar), so ⌘K used to silently do nothing here even
