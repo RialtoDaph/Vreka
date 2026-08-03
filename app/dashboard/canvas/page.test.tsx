@@ -144,6 +144,59 @@ describe("CanvasKerjaPage", () => {
     await waitFor(() => expect(container.querySelectorAll("line[marker-end]")).toHaveLength(1));
   });
 
+  it("still completes a link when the pointer is released between arming and clicking the target", async () => {
+    // A real click on the link dot fires pointerdown *and* pointerup before
+    // the user ever clicks the target node -- the pointerup used to clear
+    // linkingFrom on the stage handler, silently breaking every real-world
+    // (as opposed to single-gesture-test) attempt to link two cards.
+    mockSupabase({ nodes: [STICKY, TASK] });
+    const { default: CanvasKerjaPage } = await import("./page");
+    const { container } = render(<CanvasKerjaPage />);
+
+    await screen.findByDisplayValue("Catatan awal");
+    const nodeEls = container.querySelectorAll("[data-node]");
+    const linkPoint = nodeEls[0].lastElementChild!;
+
+    fireEvent.pointerDown(linkPoint);
+    fireEvent.pointerUp(linkPoint);
+    fireEvent.pointerDown(nodeEls[1]);
+
+    await waitFor(() => expect(container.querySelectorAll("line[marker-end]")).toHaveLength(1));
+  });
+
+  it("cancels an armed link when clicking empty canvas instead of a node", async () => {
+    mockSupabase({ nodes: [STICKY, TASK] });
+    const { default: CanvasKerjaPage } = await import("./page");
+    const { container } = render(<CanvasKerjaPage />);
+
+    await screen.findByDisplayValue("Catatan awal");
+    const nodeEls = container.querySelectorAll("[data-node]");
+    const linkPoint = nodeEls[0].lastElementChild!;
+    const stage = container.querySelector("svg")!.parentElement!;
+
+    fireEvent.pointerDown(linkPoint);
+    fireEvent.pointerUp(linkPoint);
+    fireEvent.pointerDown(stage, { clientX: 500, clientY: 500 });
+    fireEvent.pointerDown(nodeEls[1]);
+
+    expect(container.querySelectorAll("line[marker-end]")).toHaveLength(0);
+  });
+
+  it("recolors a sticky note by clicking a color swatch", async () => {
+    mockSupabase({ nodes: [STICKY] });
+    const { default: CanvasKerjaPage } = await import("./page");
+    const { container } = render(<CanvasKerjaPage />);
+
+    await screen.findByDisplayValue("Catatan awal");
+    const nodeEl = container.querySelector("[data-node]") as HTMLElement;
+    // jsdom normalizes hex to rgb() in the serialized inline style.
+    expect(nodeEl.style.borderLeft).toContain("rgb(75, 232, 255)");
+
+    fireEvent.click(screen.getByLabelText("Warna #ffb454"));
+
+    await waitFor(() => expect(nodeEl.style.borderLeft).toContain("rgb(255, 180, 84)"));
+  });
+
   it("pinch-zooms via two simultaneous touch pointers", async () => {
     mockSupabase({ nodes: [] });
     const { default: CanvasKerjaPage } = await import("./page");

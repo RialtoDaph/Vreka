@@ -177,12 +177,17 @@ export default function CanvasKerjaPage() {
     await supabase.from("canvas_nodes").delete().eq("id", id);
   }
 
-  function updateNodeField(id: string, patch: Partial<Pick<CanvasNode, "text" | "label">>) {
+  function updateNodeField(id: string, patch: Partial<Pick<CanvasNode, "text" | "label" | "color">>) {
     setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n)));
   }
 
-  async function persistNodeField(id: string, patch: Partial<Pick<CanvasNode, "text" | "label">>) {
+  async function persistNodeField(id: string, patch: Partial<Pick<CanvasNode, "text" | "label" | "color">>) {
     await supabase.from("canvas_nodes").update(patch).eq("id", id);
+  }
+
+  function setNodeColor(id: string, color: string) {
+    updateNodeField(id, { color });
+    persistNodeField(id, { color });
   }
 
   async function persistNodePosition(node: CanvasNode) {
@@ -207,6 +212,13 @@ export default function CanvasKerjaPage() {
   }
 
   function onStagePointerDown(e: React.PointerEvent) {
+    // A click on empty canvas while a link is armed cancels it instead of
+    // starting a pan -- otherwise there'd be no way to back out of linking
+    // mode without picking some other (wrong) node.
+    if (linkingFrom) {
+      setLinkingFrom(null);
+      return;
+    }
     setPanning({ startClientX: e.clientX, startClientY: e.clientY, startPanX: pan.x, startPanY: pan.y });
   }
 
@@ -254,7 +266,11 @@ export default function CanvasKerjaPage() {
     }
     setDragging(null);
     setPanning(null);
-    setLinkingFrom(null);
+    // Linking is a two-click gesture (down on the source's link dot to arm
+    // it, then down on the target node to complete it via finishLink) --
+    // clearing linkingFrom here too would wipe the armed state the instant
+    // the arming click's own pointerup bubbles up, before the second click
+    // ever lands.
   }
 
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
@@ -343,6 +359,26 @@ export default function CanvasKerjaPage() {
               >
                 <div className="flex items-center justify-between mb-1.5 text-xs" style={{ color: accent }}>
                   <span aria-hidden="true">{isSticky ? "✎" : "▤"}</span>
+                  {isSticky && (
+                    <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                      {STICKY_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNodeColor(node.id, c);
+                          }}
+                          aria-label={`Warna ${c}`}
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{
+                            background: c,
+                            outline: node.color === c ? `1px solid ${THEME.void}` : "none",
+                            boxShadow: node.color === c ? `0 0 0 1.5px ${c}` : "none",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -451,8 +487,8 @@ export default function CanvasKerjaPage() {
       )}
 
       <p className="absolute bottom-4 left-5 z-[2] font-mono text-[10px] text-slate-600 tracking-wide max-w-[calc(100%-40px)]">
-        Drag kanvas kosong buat geser · drag titik cyan di pojok kartu buat sambung ke kartu lain · scroll atau cubit
-        buat zoom
+        Drag kanvas kosong buat geser · klik titik cyan di pojok kartu lalu klik kartu lain buat sambung · klik titik
+        warna buat ganti warna sticky · scroll atau cubit buat zoom
       </p>
     </div>
   );

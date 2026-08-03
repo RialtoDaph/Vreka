@@ -1035,31 +1035,35 @@ export default function MemoryMap({ data, vitals }: Props) {
           onClick={() => setNavOverlay(null)}
         >
           <div
-            className="relative w-[75vw] h-[75vh] bg-void border border-line rounded-lg overflow-hidden shadow-2xl"
+            className="relative w-[75vw] h-[75vh] bg-void border border-line rounded-lg overflow-hidden shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="absolute top-2.5 left-4 z-[2] font-mono text-[10.5px] text-slate-500">
-              Memory Map ▸ <span className="text-cyan-glow">{NAV.find((n) => n.href === navOverlay)?.label}</span>
-            </span>
-            <a
-              href={navOverlay}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute top-2.5 right-[52px] z-[2] flex items-center gap-1.5 h-[30px] px-3 rounded-full border border-line bg-panel/90 text-slate-400 font-mono text-[10.5px] uppercase tracking-wider no-underline"
-            >
-              Buka penuh ↗
-            </a>
-            <button
-              onClick={() => setNavOverlay(null)}
-              aria-label="Tutup preview"
-              className="absolute top-2.5 right-2.5 z-[2] w-[30px] h-[30px] rounded-full border border-line bg-panel/90 text-slate-400 text-sm"
-            >
-              ×
-            </button>
+            <div className="shrink-0 h-10 flex items-center justify-between gap-3 px-4 border-b border-line bg-panel/90">
+              <span className="font-mono text-[10.5px] text-slate-500 truncate">
+                Memory Map ▸ <span className="text-cyan-glow">{NAV.find((n) => n.href === navOverlay)?.label}</span>
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <a
+                  href={navOverlay}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 h-[26px] px-3 rounded-full border border-line bg-panel2 text-slate-400 font-mono text-[10.5px] uppercase tracking-wider no-underline hover:border-cyan-glow/40"
+                >
+                  Buka penuh ↗
+                </a>
+                <button
+                  onClick={() => setNavOverlay(null)}
+                  aria-label="Tutup preview"
+                  className="w-[26px] h-[26px] rounded-full border border-line bg-panel2 text-slate-400 text-sm hover:border-cyan-glow/40"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
             <iframe
               src={`${navOverlay}?embed=1`}
               title={NAV.find((n) => n.href === navOverlay)?.label ?? "Preview"}
-              className="w-full h-full border-none"
+              className="flex-1 w-full border-none"
             />
           </div>
         </div>
