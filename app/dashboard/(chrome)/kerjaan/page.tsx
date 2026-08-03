@@ -99,6 +99,7 @@ export default function KerjaanPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
+      setError("Sesi login habis. Refresh halaman terus coba lagi.");
       setSaving(false);
       return;
     }
@@ -173,7 +174,10 @@ export default function KerjaanPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setError("Sesi login habis. Refresh halaman terus coba lagi.");
+      return;
+    }
     const { data, error: insertError } = await supabase
       .from("task_subtasks")
       .insert({ user_id: user.id, task_id: taskId, title: subtaskTitle })

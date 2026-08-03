@@ -132,6 +132,7 @@ export default function PelajaranPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
+      setError("Sesi login habis. Refresh halaman terus coba lagi.");
       setSaving(false);
       return;
     }
@@ -233,7 +234,10 @@ export default function PelajaranPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setError("Sesi login habis. Refresh halaman terus coba lagi.");
+      return;
+    }
     const { data, error: insertError } = await supabase
       .from("study_resources")
       .insert({ user_id: user.id, note_id: noteId, label, url })

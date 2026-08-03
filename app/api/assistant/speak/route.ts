@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getElevenLabsClient, DEFAULT_VOICE_ID, TTS_MODEL_ID } from "@/lib/assistant/voice";
+import { getElevenLabsClient, sanitizeForSpeech, DEFAULT_VOICE_ID, TTS_MODEL_ID } from "@/lib/assistant/voice";
 
 export const dynamic = "force-dynamic";
 
@@ -23,10 +23,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null);
-  const text = typeof body?.text === "string" ? body.text.trim() : "";
-  if (!text) {
+  const rawText = typeof body?.text === "string" ? body.text.trim() : "";
+  if (!rawText) {
     return NextResponse.json({ error: "Teks kosong." }, { status: 400 });
   }
+  const text = sanitizeForSpeech(rawText);
 
   try {
     const voiceId = process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID;

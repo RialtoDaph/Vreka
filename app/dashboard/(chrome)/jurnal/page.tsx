@@ -68,6 +68,7 @@ export default function JurnalPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
+      setError("Sesi login habis. Refresh halaman terus coba lagi.");
       setSaving(false);
       return;
     }
