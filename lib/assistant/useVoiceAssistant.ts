@@ -34,6 +34,10 @@ export function useVoiceAssistant() {
   const [supported, setSupported] = useState(false);
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Aslan's replies only ever got spoken aloud -- nothing rendered them as
+  // text, so a muted/unheard reply looked exactly like nothing happened at
+  // all. Exposed so callers (the Memory Map's voice dial) can show a caption.
+  const [lastReply, setLastReply] = useState<string | null>(null);
 
   const stoppedRef = useRef(true);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -303,6 +307,7 @@ export function useVoiceAssistant() {
         });
         const reply = res.ok ? await res.text() : "Maaf, ada masalah pas mikir.";
         if (stoppedRef.current) break;
+        setLastReply(reply);
         setPhase("speaking");
         pendingBlob = await speakWithBargeIn(reply);
       } catch {
@@ -316,6 +321,7 @@ export function useVoiceAssistant() {
     if (stoppedRef.current) {
       stoppedRef.current = false;
       setErrorMsg(null);
+      setLastReply(null);
       runLoop();
     } else {
       stoppedRef.current = true;
@@ -331,8 +337,9 @@ export function useVoiceAssistant() {
     if (!trimmed || !stoppedRef.current) return;
     stoppedRef.current = false;
     setErrorMsg(null);
+    setLastReply(null);
     runLoop(trimmed);
   }
 
-  return { supported, phase, errorMsg, toggle, sendText, audioRef, model };
+  return { supported, phase, errorMsg, toggle, sendText, audioRef, model, lastReply };
 }

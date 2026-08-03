@@ -75,7 +75,6 @@ export default function MemoryMap({ data, vitals }: Props) {
   const [spin, setSpin] = useState(
     () => typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
-  const [chatDraft, setChatDraft] = useState("");
   const [navOpen, setNavOpen] = useState(false);
   const [webglError, setWebglError] = useState(false);
   const [lastModuleHref, setLastModuleHref] = useState<string | null>(null);
@@ -92,19 +91,11 @@ export default function MemoryMap({ data, vitals }: Props) {
   const [insightError, setInsightError] = useState<string | null>(null);
   const [insightDismissed, setInsightDismissed] = useState(false);
 
-  const { phase: voicePhase, toggle: toggleVoice, sendText, audioRef, model: voiceModel } =
+  const { phase: voicePhase, toggle: toggleVoice, audioRef, model: voiceModel, lastReply } =
     useVoiceAssistant();
   const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
   const voiceBusy = voicePhase !== "idle" && voicePhase !== "error";
   const voiceModelLabel = ASSISTANT_MODELS.find((m) => m.id === voiceModel)?.label ?? voiceModel;
-
-  function submitChat(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = chatDraft.trim();
-    if (!trimmed || voiceBusy) return;
-    sendText(trimmed);
-    setChatDraft("");
-  }
 
   // At least one type must stay active -- turning off the last one would
   // hide every leaf node with no way back short of the "Semua" reset.
@@ -945,6 +936,14 @@ export default function MemoryMap({ data, vitals }: Props) {
         <span className="flex items-center gap-1.5 bg-panel/75 border border-line rounded-full px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.15em] text-slate-300 backdrop-blur-sm">
           ◆ {voiceModelLabel}
         </span>
+        {lastReply && (
+          <div className="w-[240px] bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm shadow-glow">
+            <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow mb-1.5">
+              🗨 Aslan bilang
+            </p>
+            <p className="text-[12px] leading-relaxed text-slate-300 m-0">{lastReply}</p>
+          </div>
+        )}
       </div>
 
       {!focusMode && selectedNode && !insightDismissed && (insightLoading || insight || insightError) && (
@@ -1014,26 +1013,6 @@ export default function MemoryMap({ data, vitals }: Props) {
           ))}
         </div>
       )}
-
-      <form
-        onSubmit={submitChat}
-        className="absolute bottom-5 left-5 right-5 z-[2] flex items-center gap-2.5 max-w-[900px] mx-auto"
-      >
-        <input
-          value={chatDraft}
-          onChange={(e) => setChatDraft(e.target.value)}
-          disabled={voiceBusy}
-          placeholder="Tanya Aslan sesuatu..."
-          className="flex-1 bg-panel/85 border border-line text-slate-200 font-mono text-[13px] px-[18px] py-3.5 rounded-full outline-none backdrop-blur-[10px] disabled:opacity-60 focus-visible:outline-cyan-glow"
-        />
-        <button
-          type="submit"
-          disabled={voiceBusy || !chatDraft.trim()}
-          className="w-11 h-11 shrink-0 rounded-full border border-line bg-panel/85 text-cyan-glow backdrop-blur-[10px] disabled:opacity-60"
-        >
-          ➤
-        </button>
-      </form>
 
       <audio ref={audioRef} className="hidden" />
     </div>
