@@ -76,4 +76,33 @@ describe("JurnalPage", () => {
     const button = await screen.findByText("Simpan Catatan");
     expect(button).toBeDisabled();
   });
+
+  it("shows a streak badge when today and yesterday both have entries", async () => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    mockSupabase([
+      { id: "e1", entry_date: today.toISOString().slice(0, 10), content: "Hari ini", created_at: "t", updated_at: "t" },
+      {
+        id: "e2",
+        entry_date: yesterday.toISOString().slice(0, 10),
+        content: "Kemarin",
+        created_at: "t",
+        updated_at: "t",
+      },
+    ]);
+    const { default: JurnalPage } = await import("./page");
+    render(<JurnalPage />);
+
+    expect(await screen.findByText("2 hari beruntun")).toBeInTheDocument();
+  });
+
+  it("hides the streak badge when there is no current streak", async () => {
+    mockSupabase([]);
+    const { default: JurnalPage } = await import("./page");
+    render(<JurnalPage />);
+
+    await screen.findByText("Simpan Catatan");
+    expect(screen.queryByText(/hari beruntun/)).not.toBeInTheDocument();
+  });
 });
