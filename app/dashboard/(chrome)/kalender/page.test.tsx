@@ -14,7 +14,12 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function mockSupabase(taskRows: unknown[], debtRows: unknown[], goalRows: unknown[]) {
+function mockSupabase(
+  taskRows: unknown[] = [],
+  debtRows: unknown[] = [],
+  goalRows: unknown[] = [],
+  sessionRows: unknown[] = []
+) {
   vi.doMock("@/lib/supabase/client", () => ({
     createClient: () => ({
       from: (table: string) => {
@@ -30,11 +35,7 @@ function mockSupabase(taskRows: unknown[], debtRows: unknown[], goalRows: unknow
         if (table === "debts") {
           return {
             select: () => ({
-              eq: () => ({
-                not: () => ({
-                  gte: () => ({ lte: () => Promise.resolve({ data: debtRows, error: null }) }),
-                }),
-              }),
+              eq: () => Promise.resolve({ data: debtRows, error: null }),
             }),
           };
         }
@@ -47,48 +48,74 @@ function mockSupabase(taskRows: unknown[], debtRows: unknown[], goalRows: unknow
             }),
           };
         }
+        if (table === "study_sessions") {
+          return {
+            select: () => ({
+              gte: () => ({ lt: () => Promise.resolve({ data: sessionRows, error: null }) }),
+            }),
+          };
+        }
         throw new Error(`unexpected table: ${table}`);
       },
     }),
   }));
 }
 
+function mockDisconnectedCalendar() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
+  );
+}
+
 describe("KalenderPage", () => {
-  it("shows today's task deadline, debt due date, and savings goal deadline in the agenda", async () => {
+  it("shows today's task deadline, debt due date, and savings goal deadline when the day is opened", async () => {
     const today = todayStr();
     mockSupabase(
       [{ title: "Kirim laporan", deadline: `${today}T10:00:00Z` }],
-      [{ party_name: "Budi", direction: "i_owe", due_date: today }],
+      [{ party_name: "Budi", direction: "i_owe", due_date: today, is_recurring: false, recurrence_day: null }],
       [{ name: "Dana Darurat", deadline: today }]
     );
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
-    );
+    mockDisconnectedCalendar();
 
     const { default: KalenderPage } = await import("./page");
     render(<KalenderPage />);
 
-    expect(await screen.findByText("Kirim laporan")).toBeInTheDocument();
-    expect(screen.getByText("Bayar Budi")).toBeInTheDocument();
-    expect(screen.getByText("Dana Darurat")).toBeInTheDocument();
+    fireEvent.click(await screen.findByLabelText(today));
+
+    // Item labels can legitimately appear twice -- once as a compact chip
+    // in the day cell, once in the opened day's full detail list -- so
+    // assert presence rather than a single unique match.
+    expect(await screen.findAllByText("Kirim laporan")).not.toHaveLength(0);
+    expect(screen.getAllByText("Bayar Budi")).not.toHaveLength(0);
+    expect(screen.getAllByText("Dana Darurat")).not.toHaveLength(0);
     expect(screen.getByText(/belum di-connect/)).toBeInTheDocument();
   });
 
-  it("shows the empty state for a day with nothing scheduled", async () => {
-    mockSupabase([], [], []);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
-    );
+  it("shows an empty state for a day with nothing scheduled", async () => {
+    mockSupabase();
+    mockDisconnectedCalendar();
 
     const { default: KalenderPage } = await import("./page");
     render(<KalenderPage />);
 
-    expect(await screen.findByText("Nggak ada apa-apa di hari ini.")).toBeInTheDocument();
+    fireEvent.click(await screen.findByLabelText(todayStr()));
+
+    expect(await screen.findByText("Tidak ada aktivitas.")).toBeInTheDocument();
   });
 
-  it("switches the agenda when a different day in the grid is selected", async () => {
+  it("no day modal is open until a day cell is clicked", async () => {
+    mockSupabase();
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    await screen.findByLabelText(todayStr());
+    expect(screen.queryByText("Tidak ada aktivitas.")).not.toBeInTheDocument();
+  });
+
+  it("switches the agenda when a different day in the grid is opened", async () => {
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -99,69 +126,88 @@ describe("KalenderPage", () => {
       return;
     }
 
-    mockSupabase([{ title: "Besok punya deadline", deadline: `${tomorrowKey}T09:00:00Z` }], [], []);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
-    );
+    mockSupabase([{ title: "Besok punya deadline", deadline: `${tomorrowKey}T09:00:00Z` }]);
+    mockDisconnectedCalendar();
 
     const { default: KalenderPage } = await import("./page");
     render(<KalenderPage />);
-
-    expect(await screen.findByText("Nggak ada apa-apa di hari ini.")).toBeInTheDocument();
 
     // aria-label is the ISO date key, so this is unambiguous even when a
     // padding day from an adjacent month shows the same day-of-month number.
-    fireEvent.click(screen.getByLabelText(tomorrowKey));
+    fireEvent.click(await screen.findByLabelText(tomorrowKey));
 
-    expect(await screen.findByText("Besok punya deadline")).toBeInTheDocument();
+    expect(await screen.findAllByText("Besok punya deadline")).not.toHaveLength(0);
   });
 
-  it("caps a busy day's dots at 3 and shows a +N overflow count for the rest", async () => {
+  it("caps a busy day's chips at 2 and shows a +N lagi overflow count for the rest", async () => {
     const today = todayStr();
-    mockSupabase(
-      [
-        { title: "Tugas 1", deadline: `${today}T08:00:00Z` },
-        { title: "Tugas 2", deadline: `${today}T09:00:00Z` },
-        { title: "Tugas 3", deadline: `${today}T10:00:00Z` },
-        { title: "Tugas 4", deadline: `${today}T11:00:00Z` },
-      ],
-      [],
-      []
-    );
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
-    );
-
-    const { default: KalenderPage } = await import("./page");
-    render(<KalenderPage />);
-
-    const dayCell = await screen.findByLabelText(today);
-    expect(dayCell.querySelectorAll(".rounded-full")).toHaveLength(3);
-    expect(dayCell).toHaveTextContent("+1");
-  });
-
-  it("doesn't show an overflow count for a day with 3 or fewer items", async () => {
-    const today = todayStr();
-    mockSupabase(
-      [
-        { title: "Tugas 1", deadline: `${today}T08:00:00Z` },
-        { title: "Tugas 2", deadline: `${today}T09:00:00Z` },
-      ],
-      [],
-      []
-    );
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
-    );
+    mockSupabase([
+      { title: "Tugas 1", deadline: `${today}T08:00:00Z` },
+      { title: "Tugas 2", deadline: `${today}T09:00:00Z` },
+      { title: "Tugas 3", deadline: `${today}T10:00:00Z` },
+      { title: "Tugas 4", deadline: `${today}T11:00:00Z` },
+    ]);
+    mockDisconnectedCalendar();
 
     const { default: KalenderPage } = await import("./page");
     render(<KalenderPage />);
 
     const dayCell = await screen.findByLabelText(today);
     expect(dayCell.querySelectorAll(".rounded-full")).toHaveLength(2);
-    expect(dayCell).not.toHaveTextContent("+");
+    expect(dayCell).toHaveTextContent("+2 lagi");
+  });
+
+  it("doesn't show an overflow count for a day with 2 or fewer items", async () => {
+    const today = todayStr();
+    mockSupabase([
+      { title: "Tugas 1", deadline: `${today}T08:00:00Z` },
+      { title: "Tugas 2", deadline: `${today}T09:00:00Z` },
+    ]);
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    const dayCell = await screen.findByLabelText(today);
+    expect(dayCell.querySelectorAll(".rounded-full")).toHaveLength(2);
+    expect(dayCell).not.toHaveTextContent("lagi");
+  });
+
+  it("shows a recurring debt on its recurrence day this month", async () => {
+    const now = new Date();
+    const occursOn = new Date(now.getFullYear(), now.getMonth(), 15);
+    // Skip if day 15 doesn't land in this visible month (shouldn't happen,
+    // but guards against an unlikely calendar edge case).
+    if (occursOn.getMonth() !== now.getMonth()) return;
+    const occursKey = occursOn.toISOString().slice(0, 10);
+
+    mockSupabase(
+      [],
+      [{ party_name: "Bank Transfer", direction: "i_owe", due_date: null, is_recurring: true, recurrence_day: 15 }]
+    );
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    fireEvent.click(await screen.findByLabelText(occursKey));
+    expect(await screen.findAllByText("Bayar Bank Transfer")).not.toHaveLength(0);
+  });
+
+  it("shows a study session as a Pelajaran item on the day it happened", async () => {
+    const today = todayStr();
+    mockSupabase([], [], [], [
+      { created_at: `${today}T14:00:00Z`, study_notes: [{ title: "Bahasa Jerman" }] },
+    ]);
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    fireEvent.click(await screen.findByLabelText(today));
+    expect(await screen.findAllByText("Belajar Bahasa Jerman")).not.toHaveLength(0);
+    // "· Pelajaran" (the item's category line) rather than a bare
+    // "Pelajaran" match, which would also hit the legend row below the grid.
+    expect(screen.getByText(/· Pelajaran/)).toBeInTheDocument();
   });
 });
