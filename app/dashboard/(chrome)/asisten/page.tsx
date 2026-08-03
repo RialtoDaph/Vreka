@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
 import { ASSISTANT_MODELS, DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
+import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
@@ -13,6 +14,14 @@ import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
+
+const VOICE_PHASE_STYLE: Record<VoicePhase, { label: string; text: string; dot: string; border: string }> = {
+  idle: { label: "Online", text: "text-cyan-glow", dot: "bg-cyan-glow", border: "border-cyan-glow/50" },
+  listening: { label: "Lagi dengerin...", text: "text-mint-glow", dot: "bg-mint-glow", border: "border-mint-glow/50" },
+  processing: { label: "Mikir...", text: "text-amber-glow", dot: "bg-amber-glow", border: "border-amber-glow/50" },
+  speaking: { label: "Ngomong...", text: "text-mint-glow", dot: "bg-mint-glow", border: "border-mint-glow/50" },
+  error: { label: "Error", text: "text-rose-glow", dot: "bg-rose-glow", border: "border-rose-glow/50" },
+};
 
 export default function AsistenPage() {
   const supabase = createClient();
@@ -26,14 +35,15 @@ export default function AsistenPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const [voiceMode, setVoiceMode] = useState(false);
-  const [voiceSupported, setVoiceSupported] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioPlayerRef = useRef<HTMLAudioElement>(null);
+  const {
+    supported: voiceSupported,
+    phase: voicePhase,
+    errorMsg: voiceError,
+    toggle: toggleVoice,
+    audioRef: voiceAudioRef,
+    lastReply: voiceLastReply,
+  } = useVoiceAssistant();
+  const voiceActive = voicePhase !== "idle";
 
   const [gmailEmail, setGmailEmail] = useState<string | null>(null);
   const [gmailLoading, setGmailLoading] = useState(true);
@@ -51,9 +61,6 @@ export default function AsistenPage() {
   useEffect(() => {
     const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
     if (isValidAssistantModel(saved)) setModel(saved);
-    setVoiceSupported(
-      typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia
-    );
 
     const params = new URLSearchParams(window.location.search);
     const gmailError = params.get("gmail_error");
@@ -165,14 +172,18 @@ export default function AsistenPage() {
     window.localStorage.setItem(MODEL_STORAGE_KEY, value);
   }
 
-  async function load() {
-    setLoading(true);
+  async function refreshMessages() {
     const { data } = await supabase
       .from("assistant_messages")
       .select("*")
       .order("created_at", { ascending: true })
       .limit(100);
     setMessages(data ?? []);
+  }
+
+  async function load() {
+    setLoading(true);
+    await refreshMessages();
     setLoading(false);
   }
 
@@ -181,41 +192,23 @@ export default function AsistenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Voice turns are handled entirely inside useVoiceAssistant (its own
+  // record -> transcribe -> chat -> speak loop) rather than through
+  // sendMessage(), so this page's own message list doesn't get the usual
+  // optimistic update -- it only learns a turn happened via `lastReply`.
+  // runAssistantChat persists both sides of that turn via next/server's
+  // after() *after* the response is already sent, so there's an inherent
+  // small lag before a fresh fetch here is guaranteed to see it.
+  useEffect(() => {
+    if (!voiceLastReply) return;
+    const timeout = setTimeout(refreshMessages, 700);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceLastReply]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending, recording, transcribing, speaking]);
-
-  async function playAudioBlob(blob: Blob) {
-    const audio = audioPlayerRef.current;
-    if (!audio) return;
-    const url = URL.createObjectURL(blob);
-    await new Promise<void>((resolve) => {
-      audio.src = url;
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        resolve();
-      };
-      audio.play().catch(() => resolve());
-    });
-  }
-
-  async function speakText(text: string) {
-    setSpeaking(true);
-    try {
-      const res = await fetch("/api/assistant/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      await playAudioBlob(blob);
-    } catch {
-      // gagal ngomong bukan hal fatal — teksnya udah kekirim di chat
-    } finally {
-      setSpeaking(false);
-    }
-  }
+  }, [messages, sending, voicePhase]);
 
   async function sendMessage(text: string) {
     if (!text || sending) return;
@@ -283,10 +276,6 @@ export default function AsistenPage() {
           );
         }
       }
-
-      if (voiceMode && assistantText) {
-        await speakText(assistantText);
-      }
     } catch (err) {
       // A user-triggered stop throws an AbortError -- that's not a failure,
       // just keep whatever partial reply had already streamed in.
@@ -312,60 +301,6 @@ export default function AsistenPage() {
     await sendMessage(text);
   }
 
-  async function handleVoiceBlob(blob: Blob) {
-    setTranscribing(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.append("audio", blob, "voice.webm");
-      const res = await fetch("/api/assistant/transcribe", { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Gagal transkrip suara.");
-        return;
-      }
-      const text = (data.text ?? "").trim();
-      if (!text) {
-        setError("Nggak kedengeran ngomong apa-apa, coba lagi.");
-        return;
-      }
-      await sendMessage(text);
-    } catch {
-      setError("Gagal transkrip suara. Coba lagi.");
-    } finally {
-      setTranscribing(false);
-    }
-  }
-
-  async function startRecording() {
-    setError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
-        handleVoiceBlob(blob);
-      };
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      setRecording(true);
-    } catch {
-      setError("Nggak bisa akses mikrofon. Izinin dulu akses mic di browser.");
-    }
-  }
-
-  function stopRecording() {
-    mediaRecorderRef.current?.stop();
-    setRecording(false);
-  }
-
-  const voiceBusy = transcribing || sending || speaking;
-
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
       <header className="flex items-end justify-between gap-3 flex-wrap">
@@ -388,10 +323,10 @@ export default function AsistenPage() {
           {voiceSupported && (
             <button
               type="button"
-              onClick={() => setVoiceMode((v) => !v)}
-              className={voiceMode ? primaryBtnClass : ghostBtnClass}
+              onClick={toggleVoice}
+              className={voiceActive ? primaryBtnClass : ghostBtnClass}
             >
-              {voiceMode ? "🎤 Mode Suara" : "💬 Mode Teks"}
+              {voiceActive ? "⏹ Stop Mode Suara" : "🎤 Mode Suara"}
             </button>
           )}
           <div>
@@ -454,7 +389,7 @@ export default function AsistenPage() {
               </div>
             ))
           )}
-          {((sending && awaitingFirstChunk) || transcribing) && (
+          {sending && awaitingFirstChunk && (
             <div className="flex items-end gap-2 justify-start">
               <img
                 src="/aslan.png"
@@ -462,7 +397,7 @@ export default function AsistenPage() {
                 className="w-7 h-7 rounded-full border border-cyan-glow/40 shrink-0"
               />
               <div className="max-w-[85%] rounded-sm px-3 py-2 text-sm border bg-panel2 border-line text-slate-500 font-mono">
-                {transcribing ? "Mentranskrip suara..." : "Mikir..."}
+                Mikir...
               </div>
             </div>
           )}
@@ -475,7 +410,7 @@ export default function AsistenPage() {
           </p>
         )}
 
-        <audio ref={audioPlayerRef} className="hidden" />
+        <audio ref={voiceAudioRef} className="hidden" />
 
         {sending && (
           <div className="flex justify-center mt-3">
@@ -490,31 +425,23 @@ export default function AsistenPage() {
           </div>
         )}
 
-        {voiceMode ? (
+        {voiceActive ? (
           <div className="flex flex-col items-center gap-2 mt-4 pt-4 border-t border-line">
             <button
               type="button"
-              onClick={recording ? stopRecording : startRecording}
-              disabled={voiceBusy && !recording}
-              className={`w-16 h-16 rounded-full border-2 flex items-center justify-center text-2xl transition-colors ${
-                recording
-                  ? "bg-rose-glow/20 border-rose-glow text-rose-glow animate-pulse"
-                  : "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow disabled:opacity-40"
-              }`}
+              onClick={toggleVoice}
+              aria-label="Hentikan mode suara"
+              className={`w-16 h-16 rounded-full border-2 flex items-center justify-center text-2xl transition-colors bg-panel2 ${VOICE_PHASE_STYLE[voicePhase].border} ${VOICE_PHASE_STYLE[voicePhase].text} ${voicePhase === "listening" || voicePhase === "speaking" ? "animate-pulse" : ""}`}
             >
               🎤
             </button>
-            <p className="text-xs font-mono text-slate-500 uppercase tracking-wider">
-              {recording
-                ? "Lagi ngerekam — tekan lagi buat kirim"
-                : speaking
-                  ? "AI lagi ngomong..."
-                  : transcribing
-                    ? "Mentranskrip..."
-                    : sending
-                      ? "Mikir..."
-                      : "Tekan buat ngomong"}
+            <p
+              className={`text-xs font-mono uppercase tracking-wider flex items-center gap-1.5 ${VOICE_PHASE_STYLE[voicePhase].text}`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${VOICE_PHASE_STYLE[voicePhase].dot}`} />
+              {VOICE_PHASE_STYLE[voicePhase].label}
             </p>
+            {voiceError && <p className="text-xs text-rose-glow">{voiceError}</p>}
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex gap-2 mt-4 pt-4 border-t border-line">

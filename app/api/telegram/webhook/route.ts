@@ -3,9 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { runAssistantChat } from "@/lib/assistant/run";
 import { sendTelegramMessage, type TelegramUpdate } from "@/lib/telegram/bot";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/assistant/models";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+const TELEGRAM_RATE_LIMIT = 20;
+const TELEGRAM_RATE_WINDOW_MS = 5 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   const secret = request.headers.get("x-telegram-bot-api-secret-token");
@@ -84,6 +88,12 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     await sendTelegramMessage(chatId, "Maaf, asisten lagi nggak bisa dipakai (server belum dikonfigurasi).");
+    return NextResponse.json({ ok: true });
+  }
+
+  const limit = checkRateLimit(`telegram:${chatId}`, TELEGRAM_RATE_LIMIT, TELEGRAM_RATE_WINDOW_MS);
+  if (!limit.ok) {
+    await sendTelegramMessage(chatId, "Kebanyakan pesan, tunggu bentar ya.");
     return NextResponse.json({ ok: true });
   }
 
