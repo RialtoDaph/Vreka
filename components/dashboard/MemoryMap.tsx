@@ -1056,7 +1056,11 @@ export default function MemoryMap({ data, vitals }: Props) {
             >
               ×
             </button>
-            <iframe src={navOverlay} title={NAV.find((n) => n.href === navOverlay)?.label ?? "Preview"} className="w-full h-full border-none" />
+            <iframe
+              src={`${navOverlay}?embed=1`}
+              title={NAV.find((n) => n.href === navOverlay)?.label ?? "Preview"}
+              className="w-full h-full border-none"
+            />
           </div>
         </div>
       )}
