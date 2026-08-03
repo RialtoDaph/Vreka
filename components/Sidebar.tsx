@@ -11,6 +11,7 @@ const NAV = [
   { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },
   { href: "/dashboard/kalender", label: "Kalender", icon: "▦" },
   { href: "/dashboard/jurnal", label: "Jurnal", icon: "✎" },
+  { href: "/dashboard/timeline", label: "Timeline", icon: "⧗" },
   { href: "/dashboard/asisten", label: "Aslan", icon: "✦" },
 ];
 

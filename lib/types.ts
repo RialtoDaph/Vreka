@@ -195,3 +195,15 @@ export type CanvasArrow = {
   to_node_id: string;
   created_at: string;
 };
+
+export type MilestoneCategory = "pendidikan" | "karier" | "keluarga" | "lainnya";
+
+export type LifeMilestone = {
+  id: string;
+  user_id: string;
+  title: string;
+  occurred_on: string;
+  category: MilestoneCategory;
+  description: string | null;
+  created_at: string;
+};
