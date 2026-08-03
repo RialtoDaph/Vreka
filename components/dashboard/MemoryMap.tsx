@@ -14,6 +14,7 @@ export type MemoryMapVitals = {
   integrationsConnected: number;
   integrationsTotal: number;
   hasOverdueTask: boolean;
+  dailyActivity: number[];
 };
 
 type Props = {
@@ -38,6 +39,8 @@ const FILTERS: { id: MemoryNodeType; label: string; dot: string }[] = [
 const ALL_TYPES = FILTERS.map((f) => f.id);
 
 const INITIAL_ORBIT = { theta: 0.6, phi: 1.15, radius: 320 };
+
+const LAST_MODULE_KEY = "aslan-last-module";
 
 const NAV = [
   { href: "/dashboard/ringkasan", label: "Ringkasan", icon: "☀" },
@@ -75,6 +78,10 @@ export default function MemoryMap({ data, vitals }: Props) {
   const [chatDraft, setChatDraft] = useState("");
   const [navOpen, setNavOpen] = useState(false);
   const [webglError, setWebglError] = useState(false);
+  const [lastModuleHref, setLastModuleHref] = useState<string | null>(null);
+  useEffect(() => {
+    setLastModuleHref(window.localStorage.getItem(LAST_MODULE_KEY));
+  }, []);
   // Strips the corner chrome (nav/search/status, filters, Riset Aslan) down
   // to just the graph and the voice orb, for a cleaner look at a busy graph.
   const [focusMode, setFocusMode] = useState(false);
@@ -777,20 +784,34 @@ export default function MemoryMap({ data, vitals }: Props) {
                 {vitals.integrationsConnected}/{vitals.integrationsTotal}
               </span>
             </div>
+            {vitals.dailyActivity.length > 0 && (
+              <div className="flex items-end gap-[2px] h-[22px] mt-2 pt-2 border-t border-line">
+                {vitals.dailyActivity.map((count, i) => {
+                  const max = Math.max(1, ...vitals.dailyActivity);
+                  const h = Math.max(2, Math.round((count / max) * 22));
+                  return (
+                    <span
+                      key={i}
+                      title={`${count} aksi`}
+                      className="block w-1 bg-cyan-glow/25 rounded-[1px]"
+                      style={{ height: h }}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {!webglError && (
-        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[2] flex items-center gap-2">
+        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[2] flex gap-1 bg-panel/85 border border-line rounded-lg p-1 backdrop-blur-sm">
           <button
             onClick={() => setFocusMode((f) => !f)}
             aria-pressed={focusMode}
             title="Focus Mode"
-            className={`flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-sm border font-mono text-sm ${
-              focusMode
-                ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-                : "bg-panel/75 border-line text-slate-300"
+            className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
+              focusMode ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-slate-400"
             }`}
           >
             ◱
@@ -799,19 +820,20 @@ export default function MemoryMap({ data, vitals }: Props) {
             <>
               <button
                 onClick={() => sceneApiRef.current?.fitView()}
-                className="flex items-center gap-1.5 bg-panel/75 border border-line text-slate-300 font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm hover:border-cyan-glow/40"
+                title="Fit"
+                className="flex items-center justify-center w-7 h-7 rounded-[5px] border border-transparent text-slate-400 font-mono text-sm hover:text-slate-200"
               >
-                ⊙ Fit
+                ⊙
               </button>
               <button
                 onClick={() => setSpin((s) => !s)}
-                className={`flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] px-3.5 py-2 rounded-full backdrop-blur-sm border ${
-                  spin
-                    ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-                    : "bg-panel/75 border-line text-slate-300"
+                aria-pressed={spin}
+                title={spin ? "Auto-spin" : "Diam"}
+                className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
+                  spin ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-slate-400"
                 }`}
               >
-                ◍ {spin ? "Auto-spin" : "Diam"}
+                ◍
               </button>
             </>
           )}
@@ -965,6 +987,31 @@ export default function MemoryMap({ data, vitals }: Props) {
               <p className="font-mono text-[9px] text-slate-600 m-0">Klik node lain buat gali topik itu</p>
             </>
           )}
+        </div>
+      )}
+
+      {!focusMode && (
+        <div className="absolute bottom-24 right-5 z-[2] flex gap-1 bg-panel/85 border border-line rounded-md p-1 backdrop-blur-sm">
+          {NAV.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              title={item.label}
+              onClick={() => window.localStorage.setItem(LAST_MODULE_KEY, item.href)}
+              className="relative flex items-center justify-center w-7 h-7 rounded-[3px] text-slate-400 text-sm hover:text-cyan-glow hover:bg-panel2"
+            >
+              <span aria-hidden="true">{item.icon}</span>
+              {lastModuleHref === item.href && (
+                <span className="absolute top-0.5 right-0.5 w-[5px] h-[5px] rounded-full bg-mint-glow" aria-hidden="true" />
+              )}
+              {item.href === "/dashboard/kerjaan" && vitals.hasOverdueTask && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-rose-glow border border-void"
+                  aria-hidden="true"
+                />
+              )}
+            </Link>
+          ))}
         </div>
       )}
 
