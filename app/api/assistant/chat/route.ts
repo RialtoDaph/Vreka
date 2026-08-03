@@ -2,8 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runAssistantChat } from "@/lib/assistant/run";
 import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
+
+const CHAT_RATE_LIMIT = 30;
+const CHAT_RATE_WINDOW_MS = 5 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -13,6 +17,14 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Belum login." }, { status: 401 });
+  }
+
+  const limit = checkRateLimit(`chat:${user.id}`, CHAT_RATE_LIMIT, CHAT_RATE_WINDOW_MS);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Kebanyakan pesan, tunggu bentar ya." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const body = await request.json().catch(() => null);

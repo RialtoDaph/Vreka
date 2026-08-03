@@ -7,6 +7,7 @@ import { listUpcomingEvents } from "@/lib/google/calendar";
 import { sendTelegramMessage } from "@/lib/telegram/bot";
 import { sendPushToUser } from "@/lib/push";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -44,6 +45,14 @@ export async function GET(request: NextRequest) {
   // becoming the literal string "Bearer undefined".
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const limit = checkRateLimit("cron:daily-digest", 5, 10 * 60 * 1000);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Rate limited." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const admin = createAdminClient();

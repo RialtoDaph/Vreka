@@ -116,6 +116,21 @@ describe("GET /api/cron/daily-digest", () => {
     expect(res.status).toBe(401);
   });
 
+  it("returns 429 once the rate limit is hit", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    mockAdmin({});
+    mockGoogle();
+    mockTelegram();
+    const { GET } = await import("./route");
+    for (let i = 0; i < 5; i++) {
+      const res = await GET(req("test-secret"));
+      expect(res.status).toBe(200);
+    }
+    const res = await GET(req("test-secret"));
+    expect(res.status).toBe(429);
+  });
+
   it("does nothing when neither ANTHROPIC_API_KEY nor TELEGRAM_BOT_TOKEN is configured", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "");

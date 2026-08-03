@@ -181,6 +181,22 @@ describe("POST /api/assistant/chat", () => {
     expect(streamSpy).toHaveBeenCalledTimes(2);
   });
 
+  it("returns 429 once the per-user rate limit is hit", async () => {
+    mockSupabaseServer({ id: "user-rl" });
+    mockAfter();
+    mockTools();
+    mockAnthropic([{ deltas: ["ok"], response: { stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] } }]);
+
+    const { POST } = await import("./route");
+    for (let i = 0; i < 30; i++) {
+      const res = await POST(makeRequest({ message: `pesan ke-${i}` }));
+      expect(res.status).toBe(200);
+    }
+    const res = await POST(makeRequest({ message: "pesan ke-31" }));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
+  });
+
   it("returns 500 with a JSON error when ANTHROPIC_API_KEY is missing", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     mockSupabaseServer({ id: "user-1" });

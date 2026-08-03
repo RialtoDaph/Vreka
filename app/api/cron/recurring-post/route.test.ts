@@ -218,4 +218,15 @@ describe("GET /api/cron/recurring-post", () => {
 
     expect(body).toEqual({ results: [] });
   });
+
+  it("returns 429 once the rate limit is hit", async () => {
+    mockAdmin({ dueItems: [] });
+    const { GET } = await import("./route");
+    for (let i = 0; i < 5; i++) {
+      const res = await GET(req("test-secret"));
+      expect(res.status).toBe(200);
+    }
+    const res = await GET(req("test-secret"));
+    expect(res.status).toBe(429);
+  });
 });
