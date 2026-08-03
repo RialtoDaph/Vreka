@@ -12,6 +12,7 @@ import DebtsTab from "@/components/keuangan/DebtsTab";
 import SavingsTab from "@/components/keuangan/SavingsTab";
 import AnalyticsTab from "@/components/keuangan/AnalyticsTab";
 import BudgetsTab from "@/components/keuangan/BudgetsTab";
+import { ghostBtnClass } from "@/lib/ui";
 
 const TABS = [
   { key: "transaksi", label: "Transaksi" },
@@ -28,6 +29,12 @@ export default function KeuanganPage() {
   const supabase = createClient();
   const [tab, setTab] = useState<TabKey>("transaksi");
   const [stats, setStats] = useState<KeuanganStats | null>(null);
+
+  const [research, setResearch] = useState<{ text: string; sources: { label: string; url: string }[] } | null>(
+    null
+  );
+  const [researchLoading, setResearchLoading] = useState(false);
+  const [researchError, setResearchError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadStats() {
@@ -73,6 +80,24 @@ export default function KeuanganPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function askResearch() {
+    setResearchLoading(true);
+    setResearchError(null);
+    try {
+      const res = await fetch("/api/assistant/market-research", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) {
+        setResearchError(json.error ?? "Gagal ambil riset pasar.");
+        return;
+      }
+      setResearch({ text: json.text, sources: Array.isArray(json.sources) ? json.sources : [] });
+    } catch {
+      setResearchError("Gagal ambil riset pasar.");
+    } finally {
+      setResearchLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header>
@@ -117,6 +142,52 @@ export default function KeuanganPage() {
           </HudPanel>
         </div>
       )}
+
+      <HudPanel>
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <h2 className="font-display font-semibold text-white tracking-wide text-sm">
+            Riset Pasar
+          </h2>
+          {!research && !researchLoading && (
+            <button onClick={askResearch} className={ghostBtnClass}>
+              Minta riset
+            </button>
+          )}
+          {research && !researchLoading && (
+            <button onClick={askResearch} className={ghostBtnClass}>
+              ↻ Refresh
+            </button>
+          )}
+        </div>
+        {researchLoading && <p className="text-xs font-mono text-slate-500">Nyari info...</p>}
+        {researchError && <p className="text-xs text-rose-glow">{researchError}</p>}
+        {research && (
+          <>
+            <p className="text-sm text-slate-300 leading-relaxed mb-2">{research.text}</p>
+            {research.sources.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {research.sources.map((s) => (
+                  <a
+                    key={s.url}
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-[10px] border border-cyan-glow/30 text-cyan-glow rounded-full px-2 py-0.5 bg-cyan-glow/[.06] hover:bg-cyan-glow/10"
+                  >
+                    {s.label}
+                  </a>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {!research && !researchLoading && !researchError && (
+          <p className="text-xs text-slate-600">
+            Harga emas, kurs USD/EUR, dan satu berita teknologi -- buat bahan mikir nabung & investasi (web
+            search real-time, bukan basa-basi).
+          </p>
+        )}
+      </HudPanel>
 
       <div className="flex gap-1 border-b border-line text-sm font-mono overflow-x-auto">
         {TABS.map((t) => (

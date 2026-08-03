@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.resetModules();
+  vi.unstubAllGlobals();
 });
 
 // Every child tab component fetches its own data via createClient() on
@@ -64,5 +65,46 @@ describe("KeuanganPage stat cards", () => {
     render(<KeuanganPage />);
 
     expect(await screen.findByText("TransactionsTab")).toBeInTheDocument();
+  });
+
+  it("lets the user ask Aslan for market research", async () => {
+    mockSupabase([], []);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            text: "Emas naik tipis, USD/EUR stabil di kisaran 1.08.",
+            sources: [{ label: "kitco.com", url: "https://www.kitco.com/gold-price" }],
+          }),
+        })
+      )
+    );
+
+    const { default: KeuanganPage } = await import("./page");
+    render(<KeuanganPage />);
+
+    fireEvent.click(await screen.findByText("Minta riset"));
+    expect(
+      await screen.findByText("Emas naik tipis, USD/EUR stabil di kisaran 1.08.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("kitco.com")).toBeInTheDocument();
+  });
+
+  it("shows an error message when market research fails", async () => {
+    mockSupabase([], []);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({ ok: false, json: async () => ({ error: "Gagal ambil riset pasar." }) })
+      )
+    );
+
+    const { default: KeuanganPage } = await import("./page");
+    render(<KeuanganPage />);
+
+    fireEvent.click(await screen.findByText("Minta riset"));
+    expect(await screen.findByText("Gagal ambil riset pasar.")).toBeInTheDocument();
   });
 });
