@@ -15,6 +15,20 @@ import {
 
 type QuizQuestion = { question: string; options: string[]; correct_index: number };
 
+// Only one study timer can run at a time (see the `disabled` guard on the
+// "Mulai Sesi" button below), so a single key is enough -- no need to
+// namespace it per note.
+const TIMER_STORAGE_KEY = "vreka-pelajaran-timer";
+
+function clearSavedTimer() {
+  try {
+    window.localStorage.removeItem(TIMER_STORAGE_KEY);
+  } catch {
+    // Private browsing / storage disabled -- the timer just won't survive
+    // a refresh, which is the pre-existing behavior anyway.
+  }
+}
+
 export default function PelajaranPage() {
   const supabase = createClient();
   const [items, setItems] = useState<StudyNote[]>([]);
@@ -73,6 +87,36 @@ export default function PelajaranPage() {
     }, 1000);
     return () => clearInterval(interval);
   }, [activeTimerNoteId, timerStart]);
+
+  // Restores a timer that was still running when the tab got closed or
+  // refreshed, instead of just silently losing the in-progress session.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(TIMER_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { noteId?: string; startedAt?: number };
+      if (!saved.noteId || !saved.startedAt) return;
+      setActiveTimerNoteId(saved.noteId);
+      setTimerStart(saved.startedAt);
+      setElapsedSeconds(Math.floor((Date.now() - saved.startedAt) / 1000));
+    } catch {
+      // Corrupted entry -- ignore it rather than crashing the page.
+    }
+  }, []);
+
+  // A restored timer can point at a note that was deleted (or belongs to
+  // another account) while the tab was closed -- without this, "Mulai
+  // Sesi" on every other note stays disabled forever with no visible timer
+  // to stop.
+  useEffect(() => {
+    if (!activeTimerNoteId || items.length === 0) return;
+    if (!items.some((n) => n.id === activeTimerNoteId)) {
+      setActiveTimerNoteId(null);
+      setTimerStart(null);
+      setElapsedSeconds(0);
+      clearSavedTimer();
+    }
+  }, [items, activeTimerNoteId]);
 
   useEffect(() => {
     load();
@@ -144,9 +188,16 @@ export default function PelajaranPage() {
   }
 
   function startTimer(noteId: string) {
+    const startedAt = Date.now();
     setActiveTimerNoteId(noteId);
-    setTimerStart(Date.now());
+    setTimerStart(startedAt);
     setElapsedSeconds(0);
+    try {
+      window.localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify({ noteId, startedAt }));
+    } catch {
+      // Storage unavailable -- timer still works for this tab session, it
+      // just won't survive a refresh.
+    }
   }
 
   async function stopTimer(note: StudyNote) {
@@ -171,6 +222,7 @@ export default function PelajaranPage() {
     setActiveTimerNoteId(null);
     setTimerStart(null);
     setElapsedSeconds(0);
+    clearSavedTimer();
   }
 
   async function handleAddResource(noteId: string) {

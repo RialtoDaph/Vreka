@@ -116,4 +116,52 @@ describe("KalenderPage", () => {
 
     expect(await screen.findByText("Besok punya deadline")).toBeInTheDocument();
   });
+
+  it("caps a busy day's dots at 3 and shows a +N overflow count for the rest", async () => {
+    const today = todayStr();
+    mockSupabase(
+      [
+        { title: "Tugas 1", deadline: `${today}T08:00:00Z` },
+        { title: "Tugas 2", deadline: `${today}T09:00:00Z` },
+        { title: "Tugas 3", deadline: `${today}T10:00:00Z` },
+        { title: "Tugas 4", deadline: `${today}T11:00:00Z` },
+      ],
+      [],
+      []
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
+    );
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    const dayCell = await screen.findByLabelText(today);
+    expect(dayCell.querySelectorAll(".rounded-full")).toHaveLength(3);
+    expect(dayCell).toHaveTextContent("+1");
+  });
+
+  it("doesn't show an overflow count for a day with 3 or fewer items", async () => {
+    const today = todayStr();
+    mockSupabase(
+      [
+        { title: "Tugas 1", deadline: `${today}T08:00:00Z` },
+        { title: "Tugas 2", deadline: `${today}T09:00:00Z` },
+      ],
+      [],
+      []
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
+    );
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    const dayCell = await screen.findByLabelText(today);
+    expect(dayCell.querySelectorAll(".rounded-full")).toHaveLength(2);
+    expect(dayCell).not.toHaveTextContent("+");
+  });
 });
