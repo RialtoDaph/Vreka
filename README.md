@@ -126,6 +126,18 @@ di-setup:
 Setelah aktif, dapet notifikasi ringkasan pagi bareng jadwal cron yang sama
 (saldo, jumlah anggaran mepet, tugas due/telat).
 
+## Sentry (opsional — biar error di server/client ketahuan tanpa grep log manual)
+
+Sepenuhnya nggak aktif kalau env var-nya kosong (nggak ada overhead
+tambahan). Buat aktifin:
+
+1. Bikin project gratis di [sentry.io](https://sentry.io).
+2. Set di Vercel: `SENTRY_DSN` dan `NEXT_PUBLIC_SENTRY_DSN` (nilainya sama
+   persis — yang satu dibaca server, yang satu browser).
+3. Opsional, biar stack trace di Sentry kebaca (bukan kode yang udah
+   di-minify): `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` (Auth
+   Tokens ada di Settings project Sentry-nya).
+
 ## Modul
 
 - **Keuangan** — transaksi (pemasukan/pengeluaran), pos tetap (manual atau
