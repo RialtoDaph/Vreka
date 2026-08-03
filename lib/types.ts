@@ -214,3 +214,11 @@ export type LifeMilestone = {
   description: string | null;
   created_at: string;
 };
+
+export type DailyBriefingRow = {
+  id: string;
+  user_id: string;
+  briefing_date: string;
+  preview: string;
+  created_at: string;
+};

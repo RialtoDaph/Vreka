@@ -24,6 +24,7 @@ export default function AsistenPage() {
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [voiceMode, setVoiceMode] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
@@ -236,12 +237,15 @@ export default function AsistenPage() {
     const assistantId = `assistant-${Date.now()}`;
     let assistantText = "";
     let started = false;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, model }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -283,12 +287,21 @@ export default function AsistenPage() {
       if (voiceMode && assistantText) {
         await speakText(assistantText);
       }
-    } catch {
-      setError("Gagal menghubungi asisten. Coba lagi.");
+    } catch (err) {
+      // A user-triggered stop throws an AbortError -- that's not a failure,
+      // just keep whatever partial reply had already streamed in.
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        setError("Gagal menghubungi asisten. Coba lagi.");
+      }
     } finally {
+      abortControllerRef.current = null;
       setSending(false);
       setAwaitingFirstChunk(false);
     }
+  }
+
+  function stopGenerating() {
+    abortControllerRef.current?.abort();
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -463,6 +476,19 @@ export default function AsistenPage() {
         )}
 
         <audio ref={audioPlayerRef} className="hidden" />
+
+        {sending && (
+          <div className="flex justify-center mt-3">
+            <button
+              type="button"
+              onClick={stopGenerating}
+              className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-rose-glow border border-rose-glow/40 bg-rose-glow/10 rounded-full px-4 py-2"
+            >
+              <span className="w-2 h-2 rounded-sm bg-rose-glow" aria-hidden="true" />
+              Stop generating
+            </button>
+          </div>
+        )}
 
         {voiceMode ? (
           <div className="flex flex-col items-center gap-2 mt-4 pt-4 border-t border-line">

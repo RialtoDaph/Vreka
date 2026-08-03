@@ -17,10 +17,11 @@ type SupabaseData = {
   overdueTasks?: unknown[];
   habits?: unknown[];
   habitChecks?: unknown[];
+  dailyBriefings?: unknown[];
 };
 
 // Thenable + fluent chain -- matches whatever combination of
-// .select/.gte/.lt/.neq/.not the page chains per table.
+// .select/.gte/.lt/.neq/.not/.order/.limit/.upsert the page chains per table.
 function chainable(data: unknown[]) {
   const obj: Record<string, unknown> = {
     select: () => obj,
@@ -28,6 +29,9 @@ function chainable(data: unknown[]) {
     lt: () => obj,
     neq: () => obj,
     not: () => obj,
+    order: () => obj,
+    limit: () => obj,
+    upsert: () => Promise.resolve({ data: null, error: null }),
     then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve),
   };
   return obj;
@@ -36,11 +40,13 @@ function chainable(data: unknown[]) {
 function mockSupabase(rows: SupabaseData) {
   vi.doMock("@/lib/supabase/client", () => ({
     createClient: () => ({
+      auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
       from: (table: string) => {
         if (table === "transactions") return chainable(rows.txMonth ?? []);
         if (table === "budgets") return chainable(rows.budgets ?? []);
         if (table === "habits") return chainable(rows.habits ?? []);
         if (table === "habit_checks") return chainable(rows.habitChecks ?? []);
+        if (table === "daily_briefings") return chainable(rows.dailyBriefings ?? []);
         if (table === "tasks") {
           // Distinguish the due-today vs overdue query by call order --
           // page.tsx issues due first, then overdue.
@@ -125,5 +131,30 @@ describe("RingkasanPage", () => {
     fireEvent.click(screen.getByText("↻ Refresh"));
 
     await waitFor(() => expect(taskCallCount).toBeGreaterThan(2));
+  });
+
+  it("shows past briefing history, collapsed until clicked", async () => {
+    mockSupabase({
+      dailyBriefings: [
+        { id: "b1", briefing_date: "2026-08-02", preview: "Fokus: laporan mingguan, saldo naik." },
+      ],
+    });
+    const { default: RingkasanPage } = await import("./page");
+    render(<RingkasanPage />);
+
+    expect(await screen.findByText("Riwayat Briefing")).toBeInTheDocument();
+    expect(screen.queryByText("Fokus: laporan mingguan, saldo naik.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("02 Agu 2026"));
+    expect(screen.getByText("Fokus: laporan mingguan, saldo naik.")).toBeInTheDocument();
+  });
+
+  it("hides the history section when there's no past briefing", async () => {
+    mockSupabase({});
+    const { default: RingkasanPage } = await import("./page");
+    render(<RingkasanPage />);
+
+    await screen.findByText(/Nggak ada deadline mendesak hari ini\./);
+    expect(screen.queryByText("Riwayat Briefing")).not.toBeInTheDocument();
   });
 });
