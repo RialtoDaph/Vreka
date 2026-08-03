@@ -32,6 +32,7 @@ const FILTERS: { id: FilterId; label: string; dot: string }[] = [
 const INITIAL_ORBIT = { theta: 0.6, phi: 1.15, radius: 320 };
 
 const NAV = [
+  { href: "/dashboard/ringkasan", label: "Ringkasan", icon: "☀" },
   { href: "/dashboard/keuangan", label: "Keuangan", icon: "⌬" },
   { href: "/dashboard/kerjaan", label: "Kerjaan", icon: "▤" },
   { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },

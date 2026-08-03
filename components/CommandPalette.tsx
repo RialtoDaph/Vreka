@@ -16,7 +16,13 @@ const SOURCE_ICON: Record<SearchResultItem["source"], string> = {
 };
 
 const COMMANDS: Command[] = [
-  { label: "Memory Map", href: "/dashboard", icon: "◈", keywords: "overview ringkasan graph" },
+  { label: "Memory Map", href: "/dashboard", icon: "◈", keywords: "overview graph" },
+  {
+    label: "Ringkasan",
+    href: "/dashboard/ringkasan",
+    icon: "☀",
+    keywords: "ringkasan harian briefing pagi prioritas",
+  },
   {
     label: "Keuangan",
     href: "/dashboard/keuangan",
