@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
 import { ASSISTANT_MODELS, DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
@@ -14,6 +14,96 @@ import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
+
+// Long assistant replies used to render as one continuously-growing bubble
+// -- split into roughly-this-many-characters-per-page chunks (on paragraph
+// boundaries where possible) instead, and only for replies actually long
+// enough to need it, so a normal short reply stays a plain bubble.
+const REPLY_PAGE_CHAR_TARGET = 500;
+
+function paginateReply(text: string): string[] {
+  if (text.length <= REPLY_PAGE_CHAR_TARGET) return [text];
+  const paragraphs = text.split(/\n{2,}/);
+  const pages: string[] = [];
+  let current = "";
+  for (const para of paragraphs) {
+    if (current && current.length + para.length + 2 > REPLY_PAGE_CHAR_TARGET) {
+      pages.push(current);
+      current = para;
+    } else {
+      current = current ? `${current}\n\n${para}` : para;
+    }
+  }
+  if (current) pages.push(current);
+  return pages.length > 0 ? pages : [text];
+}
+
+// A long assistant reply becomes a small paginated card (page dots + arrow
+// buttons, swipeable on touch) instead of one tall scrolling wall of text.
+function AssistantReplyCard({ content }: { content: string }) {
+  const pages = useMemo(() => paginateReply(content), [content]);
+  const [page, setPage] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const clampedPage = Math.min(page, pages.length - 1);
+
+  if (pages.length <= 1) {
+    return <div className="whitespace-pre-wrap">{content}</div>;
+  }
+
+  function goTo(next: number) {
+    setPage(Math.max(0, Math.min(pages.length - 1, next)));
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  }
+
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const endX = e.changedTouches[0]?.clientX ?? touchStartX.current;
+    const delta = endX - touchStartX.current;
+    touchStartX.current = null;
+    if (delta > 40) goTo(clampedPage - 1);
+    else if (delta < -40) goTo(clampedPage + 1);
+  }
+
+  return (
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="whitespace-pre-wrap">{pages[clampedPage]}</div>
+      <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-line/50">
+        <button
+          type="button"
+          onClick={() => goTo(clampedPage - 1)}
+          disabled={clampedPage === 0}
+          aria-label="Slide sebelumnya"
+          className="w-6 h-6 rounded-full border border-line text-slate-400 hover:text-slate-200 disabled:opacity-30 text-xs shrink-0"
+        >
+          ‹
+        </button>
+        <div className="flex items-center gap-1">
+          {pages.map((_, i) => (
+            <span
+              key={i}
+              className={`w-1.5 h-1.5 rounded-full ${i === clampedPage ? "bg-cyan-glow" : "bg-line"}`}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => goTo(clampedPage + 1)}
+          disabled={clampedPage === pages.length - 1}
+          aria-label="Slide berikutnya"
+          className="w-6 h-6 rounded-full border border-line text-slate-400 hover:text-slate-200 disabled:opacity-30 text-xs shrink-0"
+        >
+          ›
+        </button>
+      </div>
+      <p className="text-[10px] font-mono text-slate-600 text-center mt-1">
+        {clampedPage + 1}/{pages.length}
+      </p>
+    </div>
+  );
+}
 
 const VOICE_PHASE_STYLE: Record<VoicePhase, { label: string; text: string; dot: string; border: string }> = {
   idle: { label: "Online", text: "text-cyan-glow", dot: "bg-cyan-glow", border: "border-cyan-glow/50" },
@@ -378,13 +468,13 @@ export default function AsistenPage() {
                   />
                 )}
                 <div
-                  className={`max-w-[85%] rounded-sm px-3 py-2 text-sm whitespace-pre-wrap border ${
+                  className={`max-w-[85%] rounded-sm px-3 py-2 text-sm border ${
                     m.role === "user"
-                      ? "bg-cyan-glow/10 border-cyan-glow/40 text-slate-100"
+                      ? "bg-cyan-glow/10 border-cyan-glow/40 text-slate-100 whitespace-pre-wrap"
                       : "bg-panel2 border-line text-slate-200"
                   }`}
                 >
-                  {m.content}
+                  {m.role === "user" ? m.content : <AssistantReplyCard content={m.content} />}
                 </div>
               </div>
             ))

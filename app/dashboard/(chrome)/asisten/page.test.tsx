@@ -156,4 +156,45 @@ describe("AsistenPage", () => {
     await screen.findByPlaceholderText("Tanya atau minta dicatetin sesuatu...");
     expect(screen.queryByText("🎤 Mode Suara")).not.toBeInTheDocument();
   });
+
+  it("renders a short assistant reply as a plain bubble with no pagination chrome", async () => {
+    mockSupabase([
+      { id: "1", user_id: "user-1", role: "assistant", content: "Oke, siap!", created_at: new Date().toISOString() },
+    ]);
+    mockVoice();
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    expect(await screen.findByText("Oke, siap!")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Slide berikutnya")).not.toBeInTheDocument();
+  });
+
+  it("splits a long assistant reply into swipeable/paginated slides", async () => {
+    // getByText normalizes (trims) the rendered text, so these can't have
+    // trailing whitespace or the exact-match comparison would never hit.
+    const paraOne = "Bagian pertama. ".repeat(25).trim(); // ~400 chars
+    const paraTwo = "Bagian kedua. ".repeat(25).trim(); // ~350 chars
+    mockSupabase([
+      {
+        id: "1",
+        user_id: "user-1",
+        role: "assistant",
+        content: `${paraOne}\n\n${paraTwo}`,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    mockVoice();
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    expect(await screen.findByText("1/2")).toBeInTheDocument();
+    expect(screen.getByText(paraOne)).toBeInTheDocument();
+    expect(screen.queryByText(paraTwo)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Slide berikutnya"));
+
+    expect(await screen.findByText("2/2")).toBeInTheDocument();
+    expect(screen.getByText(paraTwo)).toBeInTheDocument();
+    expect(screen.queryByText(paraOne)).not.toBeInTheDocument();
+  });
 });

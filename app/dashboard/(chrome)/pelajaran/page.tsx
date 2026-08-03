@@ -29,6 +29,147 @@ function clearSavedTimer() {
   }
 }
 
+const POMODORO_STORAGE_KEY = "vreka-pelajaran-pomodoro";
+const POMODORO_WORK_SECONDS = 25 * 60;
+const POMODORO_BREAK_SECONDS = 5 * 60;
+
+type PomodoroPhase = "work" | "break";
+type PomodoroSaved = { phase: PomodoroPhase; endAt: number };
+
+function formatClock(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// Standalone 25/5 Pomodoro widget, independent of any single note (unlike
+// the per-note stopwatch below) -- pinned near the top of the page so it's
+// the first thing visible, not buried inside a note card.
+function PomodoroTimer() {
+  const [phase, setPhase] = useState<PomodoroPhase>("work");
+  const [running, setRunning] = useState(false);
+  const [endAt, setEndAt] = useState<number | null>(null);
+  const [remaining, setRemaining] = useState(POMODORO_WORK_SECONDS);
+  const [cycles, setCycles] = useState(0);
+
+  // Restore a running timer across refresh, same endAt-timestamp approach
+  // as the per-note session timer uses.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(POMODORO_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<PomodoroSaved>;
+      if (!saved.endAt || (saved.phase !== "work" && saved.phase !== "break")) return;
+      const left = Math.round((saved.endAt - Date.now()) / 1000);
+      if (left <= 0) {
+        window.localStorage.removeItem(POMODORO_STORAGE_KEY);
+        return;
+      }
+      setPhase(saved.phase);
+      setEndAt(saved.endAt);
+      setRemaining(left);
+      setRunning(true);
+    } catch {
+      // Corrupted entry -- ignore rather than crashing the page.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!running || !endAt) return;
+    // Fake-timer test runs (and real backgrounded-tab throttling) can fire
+    // several queued 1s ticks in a burst before React re-renders and this
+    // effect's cleanup clears the interval -- without this guard each of
+    // those stale ticks re-runs the completion branch, over-counting cycles.
+    let completed = false;
+    const interval = setInterval(() => {
+      if (completed) return;
+      const left = Math.round((endAt - Date.now()) / 1000);
+      if (left > 0) {
+        setRemaining(left);
+        return;
+      }
+      completed = true;
+      clearInterval(interval);
+      const next: PomodoroPhase = phase === "work" ? "break" : "work";
+      setRunning(false);
+      setEndAt(null);
+      setPhase(next);
+      setRemaining(next === "work" ? POMODORO_WORK_SECONDS : POMODORO_BREAK_SECONDS);
+      if (phase === "work") setCycles((c) => c + 1);
+      try {
+        window.localStorage.removeItem(POMODORO_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [running, endAt, phase]);
+
+  function start() {
+    const target = Date.now() + remaining * 1000;
+    setEndAt(target);
+    setRunning(true);
+    try {
+      window.localStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify({ phase, endAt: target }));
+    } catch {
+      // ignore
+    }
+  }
+
+  function pause() {
+    setRunning(false);
+    setEndAt(null);
+    try {
+      window.localStorage.removeItem(POMODORO_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }
+
+  function reset() {
+    setRunning(false);
+    setEndAt(null);
+    setPhase("work");
+    setRemaining(POMODORO_WORK_SECONDS);
+    try {
+      window.localStorage.removeItem(POMODORO_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }
+
+  const isBreak = phase === "break";
+  const fullDuration = isBreak ? POMODORO_BREAK_SECONDS : POMODORO_WORK_SECONDS;
+
+  return (
+    <HudPanel glow className="flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+          {isBreak ? "⏸ Waktunya istirahat" : "🍅 Fokus Pomodoro"}
+          {cycles > 0 ? ` · ${cycles} sesi selesai` : ""}
+        </p>
+        <p className={`font-mono text-3xl font-bold ${isBreak ? "text-mint-glow" : "text-cyan-glow"}`}>
+          {formatClock(remaining)}
+        </p>
+      </div>
+      <div className="flex gap-2">
+        {running ? (
+          <button onClick={pause} className={ghostBtnClass}>
+            Jeda
+          </button>
+        ) : (
+          <button onClick={start} className={primaryBtnClass}>
+            {remaining === fullDuration ? "Mulai" : "Lanjut"}
+          </button>
+        )}
+        <button onClick={reset} className={ghostBtnClass}>
+          Reset
+        </button>
+      </div>
+    </HudPanel>
+  );
+}
+
 export default function PelajaranPage() {
   const supabase = createClient();
   const [items, setItems] = useState<StudyNote[]>([]);
@@ -42,6 +183,11 @@ export default function PelajaranPage() {
   const [category, setCategory] = useState("");
   const [content, setContent] = useState("");
   const [progress, setProgress] = useState(0);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editContent, setEditContent] = useState("");
 
   const [quizNoteId, setQuizNoteId] = useState<string | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
@@ -174,6 +320,45 @@ export default function PelajaranPage() {
       setItems(previous);
       setError("Gagal update progress. Coba lagi.");
     }
+  }
+
+  function startEdit(note: StudyNote) {
+    setError(null);
+    setEditingId(note.id);
+    setEditTitle(note.title);
+    setEditCategory(note.category);
+    setEditContent(note.content ?? "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(note: StudyNote) {
+    const nextTitle = editTitle.trim();
+    if (!nextTitle) return;
+    setError(null);
+    const nextCategory = editCategory.trim() || "Umum";
+    const nextContent = editContent.trim() || null;
+    const { error: updateError } = await supabase
+      .from("study_notes")
+      .update({
+        title: nextTitle,
+        category: nextCategory,
+        content: nextContent,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", note.id);
+    if (updateError) {
+      setError("Gagal update topik. Coba lagi.");
+      return;
+    }
+    setItems((prev) =>
+      prev.map((n) =>
+        n.id === note.id ? { ...n, title: nextTitle, category: nextCategory, content: nextContent } : n
+      )
+    );
+    setEditingId(null);
   }
 
   async function handleDelete(id: string) {
@@ -313,6 +498,8 @@ export default function PelajaranPage() {
         </button>
       </header>
 
+      <PomodoroTimer />
+
       {error && <p className={errorBannerClass}>{error}</p>}
 
       {showForm && (
@@ -380,19 +567,65 @@ export default function PelajaranPage() {
         <div className="grid sm:grid-cols-2 gap-4">
           {items.map((note) => {
             const expanded = expandedId === note.id;
+            const editing = editingId === note.id;
             return (
               <HudPanel key={note.id}>
-                <div className="flex justify-between items-start mb-2 gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-slate-100 truncate">
-                      {note.title}
-                    </h3>
-                    <p className="text-[11px] font-mono text-slate-600">{note.category}</p>
+                {editing ? (
+                  <div className="space-y-2 mb-3">
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      className={`${inputClass} text-sm`}
+                      placeholder="Judul topik"
+                    />
+                    <input
+                      type="text"
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      className={`${inputClass} text-sm`}
+                      placeholder="Kategori"
+                    />
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className={`${inputClass} text-sm min-h-20`}
+                      placeholder="Catatan"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button onClick={cancelEdit} className={ghostBtnClass}>
+                        Batal
+                      </button>
+                      <button
+                        onClick={() => saveEdit(note)}
+                        disabled={!editTitle.trim()}
+                        className={primaryBtnClass}
+                      >
+                        Simpan
+                      </button>
+                    </div>
                   </div>
-                  <button onClick={() => handleDelete(note.id)} className={dangerBtnClass}>
-                    Hapus
-                  </button>
-                </div>
+                ) : (
+                  <div className="flex justify-between items-start mb-2 gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-slate-100 truncate">
+                        {note.title}
+                      </h3>
+                      <p className="text-[11px] font-mono text-slate-600">{note.category}</p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        onClick={() => startEdit(note)}
+                        className="text-xs font-mono text-cyan-glow/80 hover:text-cyan-glow"
+                      >
+                        Edit
+                      </button>
+                      <button onClick={() => handleDelete(note.id)} className={dangerBtnClass}>
+                        Hapus
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="h-1.5 bg-panel2 rounded-full overflow-hidden mb-2">
                   <div
