@@ -84,10 +84,14 @@ export default function TimelineKehidupanPage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setError("Sesi login habis. Refresh halaman terus coba lagi.");
+      return;
+    }
     const { data, error: insertError } = await supabase
       .from("life_milestones")
       .insert({

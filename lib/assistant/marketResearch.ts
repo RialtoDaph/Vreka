@@ -19,7 +19,7 @@ export async function getMarketResearch(apiKey: string, model: string): Promise<
       {
         role: "user",
         content:
-          "Cari info pasar terkini yang relevan buat orang yang lagi nabung & mikirin investasi: harga emas hari ini (tren naik/turun singkat), kurs USD/EUR hari ini, dan satu berita industri teknologi yang cukup signifikan minggu ini. Ringkas jadi 3-4 kalimat total (Bahasa Indonesia santai), to the point, tanpa basa-basi pembuka. Wajib pake web search buat semua angka/berita ini -- kalau salah satu nggak ketemu, bilang aja nggak ketemu, jangan ngarang.",
+          "Cari info pasar terkini yang relevan buat orang yang lagi nabung & mikirin investasi: harga emas hari ini (tren naik/turun singkat), kurs USD/EUR hari ini, dan satu berita industri teknologi yang cukup signifikan minggu ini. Ringkas jadi 3-4 kalimat total (Bahasa Indonesia santai), to the point, tanpa basa-basi pembuka. Wajib pake web search buat semua angka/berita ini -- kalau salah satu nggak ketemu, bilang aja nggak ketemu, jangan ngarang. Jangan sebut atau rujuk foto/gambar apa pun (misal \"lihat foto 1\") -- panel ini cuma nampilin teks, jadi jelasin semuanya pake kata-kata aja.",
       },
     ],
     ...modelRequestExtras(model),

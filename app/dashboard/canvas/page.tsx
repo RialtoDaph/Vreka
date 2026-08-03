@@ -7,7 +7,7 @@ import type { CanvasArrow, CanvasNode, CanvasNodeKind } from "@/lib/types";
 import { arrowEndpoints, clampZoom, toWorldPoint, zoomFromWheel, type Pan } from "@/lib/canvas";
 import { THEME } from "@/lib/theme";
 
-const STICKY_COLORS = [THEME.cyanGlow, THEME.amberGlow, THEME.roseGlow, THEME.mintGlow, THEME.violetGlow];
+const CARD_COLORS = [THEME.cyanGlow, THEME.amberGlow, THEME.roseGlow, THEME.mintGlow, THEME.violetGlow];
 
 const INITIAL_PAN: Pan = { x: 0, y: 0 };
 
@@ -26,6 +26,7 @@ export default function CanvasKerjaPage() {
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [arrows, setArrows] = useState<CanvasArrow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [pan, setPan] = useState<Pan>(INITIAL_PAN);
   const [zoom, setZoom] = useState(1);
@@ -128,15 +129,19 @@ export default function CanvasKerjaPage() {
   }, []);
 
   async function addNode(kind: CanvasNodeKind) {
+    setError(null);
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setError("Sesi login habis. Refresh halaman terus coba lagi.");
+      return;
+    }
     const world = toWorldPoint(220, 220, pan, zoom);
     // Two separate insert() calls rather than one call fed a union payload --
     // Supabase's generated insert type rejects a value whose shape varies by
     // branch, since it can't narrow which row type applies.
-    const { data, error } =
+    const { data, error: insertError } =
       kind === "sticky"
         ? await supabase
             .from("canvas_nodes")
@@ -148,7 +153,7 @@ export default function CanvasKerjaPage() {
               w: 200,
               h: 150,
               text: "",
-              color: STICKY_COLORS[nodes.length % STICKY_COLORS.length],
+              color: CARD_COLORS[nodes.length % CARD_COLORS.length],
               label: null,
             })
             .select("*")
@@ -168,7 +173,11 @@ export default function CanvasKerjaPage() {
             })
             .select("*")
             .single();
-    if (!error && data) setNodes((prev) => [...prev, data]);
+    if (insertError || !data) {
+      setError("Gagal nambah kartu. Coba lagi.");
+      return;
+    }
+    setNodes((prev) => [...prev, data]);
   }
 
   async function deleteNode(id: string) {
@@ -338,7 +347,7 @@ export default function CanvasKerjaPage() {
         >
           {nodes.map((node) => {
             const isSticky = node.kind === "sticky";
-            const accent = isSticky ? (node.color ?? THEME.cyanGlow) : THEME.cyanGlow;
+            const accent = node.color ?? THEME.cyanGlow;
             return (
               <div
                 key={node.id}
@@ -359,26 +368,24 @@ export default function CanvasKerjaPage() {
               >
                 <div className="flex items-center justify-between mb-1.5 text-xs" style={{ color: accent }}>
                   <span aria-hidden="true">{isSticky ? "✎" : "▤"}</span>
-                  {isSticky && (
-                    <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
-                      {STICKY_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setNodeColor(node.id, c);
-                          }}
-                          aria-label={`Warna ${c}`}
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{
-                            background: c,
-                            outline: node.color === c ? `1px solid ${THEME.void}` : "none",
-                            boxShadow: node.color === c ? `0 0 0 1.5px ${c}` : "none",
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                    {CARD_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNodeColor(node.id, c);
+                        }}
+                        aria-label={`Warna ${c}`}
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{
+                          background: c,
+                          outline: node.color === c ? `1px solid ${THEME.void}` : "none",
+                          boxShadow: node.color === c ? `0 0 0 1.5px ${c}` : "none",
+                        }}
+                      />
+                    ))}
+                  </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -457,6 +464,11 @@ export default function CanvasKerjaPage() {
             ← Kerjaan
           </Link>
         </div>
+        {error && (
+          <p className="max-w-[260px] text-[11px] text-rose-glow bg-rose-glow/10 border border-rose-glow/30 rounded-sm px-2.5 py-1.5">
+            {error}
+          </p>
+        )}
       </div>
 
       <div className="absolute top-5 right-5 z-[2] flex gap-1.5">
@@ -488,7 +500,7 @@ export default function CanvasKerjaPage() {
 
       <p className="absolute bottom-4 left-5 z-[2] font-mono text-[10px] text-slate-600 tracking-wide max-w-[calc(100%-40px)]">
         Drag kanvas kosong buat geser · klik titik cyan di pojok kartu lalu klik kartu lain buat sambung · klik titik
-        warna buat ganti warna sticky · scroll atau cubit buat zoom
+        warna buat ganti warna kartu · scroll atau cubit buat zoom
       </p>
     </div>
   );

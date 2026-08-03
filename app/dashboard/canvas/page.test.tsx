@@ -197,6 +197,20 @@ describe("CanvasKerjaPage", () => {
     await waitFor(() => expect(nodeEl.style.borderLeft).toContain("rgb(255, 180, 84)"));
   });
 
+  it("recolors a task card too, not just stickies", async () => {
+    mockSupabase({ nodes: [TASK] });
+    const { default: CanvasKerjaPage } = await import("./page");
+    const { container } = render(<CanvasKerjaPage />);
+
+    await screen.findByDisplayValue("Deploy ke prod");
+    const nodeEl = container.querySelector("[data-node]") as HTMLElement;
+    expect(nodeEl.style.borderLeft).toContain("rgb(75, 232, 255)");
+
+    fireEvent.click(screen.getByLabelText("Warna #b98bff"));
+
+    await waitFor(() => expect(nodeEl.style.borderLeft).toContain("rgb(185, 139, 255)"));
+  });
+
   it("pinch-zooms via two simultaneous touch pointers", async () => {
     mockSupabase({ nodes: [] });
     const { default: CanvasKerjaPage } = await import("./page");

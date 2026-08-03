@@ -302,7 +302,7 @@ export default function AsistenPage() {
   }
 
   return (
-    <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
+    <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] overflow-y-auto">
       <header className="flex items-end justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <img
