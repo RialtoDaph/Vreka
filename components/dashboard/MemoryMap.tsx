@@ -13,6 +13,7 @@ export type MemoryMapVitals = {
   memoryCount: number;
   integrationsConnected: number;
   integrationsTotal: number;
+  hasOverdueTask: boolean;
 };
 
 type Props = {
@@ -20,14 +21,12 @@ type Props = {
   vitals: MemoryMapVitals;
 };
 
-type FilterId = MemoryNodeType | "all";
-
 type SceneApi = {
   fitView: () => void;
+  focusOnNode: (id: string) => void;
 };
 
-const FILTERS: { id: FilterId; label: string; dot: string }[] = [
-  { id: "all", label: "Semua", dot: THEME.neutral400 },
+const FILTERS: { id: MemoryNodeType; label: string; dot: string }[] = [
   { id: "task", label: "Kerjaan", dot: TYPE_META.task.color },
   { id: "finance", label: "Keuangan", dot: TYPE_META.finance.color },
   { id: "note", label: "Pelajaran", dot: TYPE_META.note.color },
@@ -35,6 +34,8 @@ const FILTERS: { id: FilterId; label: string; dot: string }[] = [
   { id: "journal", label: "Jurnal", dot: TYPE_META.journal.color },
   { id: "contact", label: "Kontak", dot: TYPE_META.contact.color },
 ];
+
+const ALL_TYPES = FILTERS.map((f) => f.id);
 
 const INITIAL_ORBIT = { theta: 0.6, phi: 1.15, radius: 320 };
 
@@ -64,7 +65,8 @@ export default function MemoryMap({ data, vitals }: Props) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<FilterId>("all");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [activeTypes, setActiveTypes] = useState<Set<MemoryNodeType>>(() => new Set(ALL_TYPES));
   // Respects prefers-reduced-motion for the initial auto-spin state -- the
   // user can still turn it back on manually via the "Auto-spin" toggle.
   const [spin, setSpin] = useState(
@@ -97,24 +99,50 @@ export default function MemoryMap({ data, vitals }: Props) {
     setChatDraft("");
   }
 
+  // At least one type must stay active -- turning off the last one would
+  // hide every leaf node with no way back short of the "Semua" reset.
+  function toggleType(id: MemoryNodeType) {
+    setActiveTypes((prev) => {
+      if (prev.has(id) && prev.size === 1) return prev;
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   // Read by the render loop without forcing the mount effect to depend on
   // (and rebuild the whole three.js scene for) every keystroke/toggle.
   const selectedIdRef = useRef(selectedId);
-  const searchQueryRef = useRef(searchQuery);
-  const activeFilterRef = useRef(activeFilter);
+  const searchQueryRef = useRef(debouncedSearchQuery);
+  const activeTypesRef = useRef(activeTypes);
   const spinRef = useRef(spin);
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
   useEffect(() => {
-    searchQueryRef.current = searchQuery;
-  }, [searchQuery]);
+    searchQueryRef.current = debouncedSearchQuery;
+  }, [debouncedSearchQuery]);
   useEffect(() => {
-    activeFilterRef.current = activeFilter;
-  }, [activeFilter]);
+    activeTypesRef.current = activeTypes;
+  }, [activeTypes]);
   useEffect(() => {
     spinRef.current = spin;
   }, [spin]);
+
+  // ~200ms debounce so the dim/hide recompute (read every render frame) isn't
+  // driven straight off every keystroke.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  // Camera quick-jump: ease toward whatever got selected. Only fires on a
+  // new selection, not on deselect -- an auto-snap-back on close would be
+  // disorienting, so the camera just stays wherever the user left it.
+  useEffect(() => {
+    if (selectedId) sceneApiRef.current?.focusOnNode(selectedId);
+  }, [selectedId]);
 
   // "Riset Aslan" -- a short contextual note (backed by the web_search
   // server tool) about whatever node is selected, shown in the panel below.
@@ -289,11 +317,15 @@ export default function MemoryMap({ data, vitals }: Props) {
       return set;
     }
 
+    // Hubs sit outside the type filter (there's no "hub" toggle -- they're
+    // the graph's backbone, not filterable content) but still respect
+    // search, so typing a hub's own name can dim everything else down to it.
     function isVisible(id: string): boolean {
       const n = byId[id];
       const q = searchQueryRef.current.trim().toLowerCase();
-      const f = activeFilterRef.current;
-      return (f === "all" || n.type === f) && (!q || n.label.toLowerCase().includes(q));
+      const matchesSearch = !q || n.label.toLowerCase().includes(q);
+      if (n.type === "hub") return matchesSearch;
+      return activeTypesRef.current.has(n.type) && matchesSearch;
     }
 
     function projectLabels(focus: Set<string> | null) {
@@ -415,13 +447,21 @@ export default function MemoryMap({ data, vitals }: Props) {
       for (const [aId, bId] of data.edges) {
         const a = physics[aId];
         const b = physics[bId];
-        if (a && b) {
+        // A filtered-out endpoint hides the whole edge (not just dims it) --
+        // collapsing both ends onto the same point renders as a zero-length,
+        // invisible segment without needing a per-segment material/shader.
+        const filterHidden = !isVisible(aId) || !isVisible(bId);
+        if (a && b && !filterHidden) {
           edgePositions[i] = a.x;
           edgePositions[i + 1] = a.y;
           edgePositions[i + 2] = a.z;
           edgePositions[i + 3] = b.x;
           edgePositions[i + 4] = b.y;
           edgePositions[i + 5] = b.z;
+        } else if (a) {
+          edgePositions[i] = edgePositions[i + 3] = a.x;
+          edgePositions[i + 1] = edgePositions[i + 4] = a.y;
+          edgePositions[i + 2] = edgePositions[i + 5] = a.z;
         }
         i += 6;
       }
@@ -439,8 +479,9 @@ export default function MemoryMap({ data, vitals }: Props) {
         fp.userData.phase = (fp.userData.phase + fp.userData.speed * dt) % 1;
         const tt = fp.userData.phase as number;
         fp.position.set(a.x + (b.x - a.x) * tt, a.y + (b.y - a.y) * tt, a.z + (b.z - a.z) * tt);
+        const filterHidden = !isVisible(aId) || !isVisible(bId);
         const dimEdge = focus ? !(focus.has(aId) && focus.has(bId)) : false;
-        (fp.material as THREE.MeshBasicMaterial).opacity = dimEdge ? 0.03 : 0.35;
+        (fp.material as THREE.MeshBasicMaterial).opacity = filterHidden ? 0 : dimEdge ? 0.03 : 0.35;
       });
 
       renderer.render(scene, camera);
@@ -458,6 +499,7 @@ export default function MemoryMap({ data, vitals }: Props) {
     function onPointerDown(e: PointerEvent) {
       dragging = { x: e.clientX, y: e.clientY, moved: false };
       renderer.domElement.style.cursor = "grabbing";
+      markInteraction();
     }
     function onPointerMove(e: PointerEvent) {
       const r = renderer.domElement.getBoundingClientRect();
@@ -483,6 +525,7 @@ export default function MemoryMap({ data, vitals }: Props) {
       e.preventDefault();
       orbit.radius = Math.max(90, Math.min(700, orbit.radius + e.deltaY * 0.4));
       applyCamera();
+      markInteraction();
     }
 
     renderer.domElement.addEventListener("pointerdown", onPointerDown);
@@ -530,9 +573,37 @@ export default function MemoryMap({ data, vitals }: Props) {
       const targetRadius = Math.max(140, Math.min(650, maxDist * 2.6 + 90));
       animateOrbitTo(INITIAL_ORBIT.theta, INITIAL_ORBIT.phi, targetRadius);
     }
-    sceneApiRef.current = { fitView };
+
+    // Quick-jump toward a selected node. The camera always looks at the
+    // origin (re-aiming look-at itself would be a bigger change to the
+    // orbit model), so this approximates "frame that node" by orbiting to
+    // face its direction from the origin and pulling the radius in
+    // proportional to how far out it sits -- not pixel-perfect centering,
+    // but a real ease toward where the node actually is rather than a no-op.
+    function focusOnNode(id: string) {
+      const p = physics[id];
+      if (!p) return;
+      const dist = Math.hypot(p.x, p.y, p.z) || 1;
+      const targetTheta = Math.atan2(p.x, p.z);
+      const targetPhi = Math.acos(Math.max(-1, Math.min(1, p.y / dist)));
+      const targetRadius = Math.max(90, Math.min(320, dist * 1.8 + 60));
+      animateOrbitTo(targetTheta, targetPhi, targetRadius, 600);
+    }
+    sceneApiRef.current = { fitView, focusOnNode };
+
+    // Idle auto-fit: ease back to the full-graph framing after 12s of no
+    // camera input, so a node quick-jump or a manual drag doesn't leave the
+    // view stuck off-center forever. Fires once per idle stretch (not every
+    // frame past the threshold) and resets on the next drag/zoom.
+    let lastInteractionAt = performance.now();
+    let idleFitDone = false;
+    function markInteraction() {
+      lastInteractionAt = performance.now();
+      idleFitDone = false;
+    }
 
     let raf = 0;
+    let lastHoverCheck = 0;
     function loop() {
       // Backgrounded tabs still get throttled rAF callbacks eventually, but
       // there's no reason to keep running full physics + a WebGL render for
@@ -547,7 +618,17 @@ export default function MemoryMap({ data, vitals }: Props) {
         orbit.theta += 0.0012;
         applyCamera();
       }
-      if (!dragging) pickNode(false);
+      const frameNow = performance.now();
+      // Hover raycasting doesn't need to run at full frame rate -- ~13fps is
+      // plenty responsive for a hover highlight and cuts the per-frame cost.
+      if (!dragging && frameNow - lastHoverCheck > 75) {
+        pickNode(false);
+        lastHoverCheck = frameNow;
+      }
+      if (!dragging && !idleFitDone && frameNow - lastInteractionAt > 12000) {
+        fitView();
+        idleFitDone = true;
+      }
       syncScene();
       raf = requestAnimationFrame(loop);
     }
@@ -592,6 +673,14 @@ export default function MemoryMap({ data, vitals }: Props) {
   const linkCount = selectedId
     ? data.edges.filter(([a, b]) => a === selectedId || b === selectedId).length
     : 0;
+  // A leaf's `link` points at its parent hub id; hubs have none. Only leaves
+  // get a breadcrumb third level + a back button to reopen the hub's popup.
+  const parentHub = selectedNode?.link ? (data.nodes.find((n) => n.id === selectedNode.link) ?? null) : null;
+  const breadcrumb = selectedNode
+    ? parentHub
+      ? `Memory Map ▸ ${parentHub.label} ▸ ${selectedNode.label}`
+      : `Memory Map ▸ ${selectedNode.label}`
+    : "";
 
   return (
     <div className="relative h-dvh bg-void overflow-hidden">
@@ -621,8 +710,15 @@ export default function MemoryMap({ data, vitals }: Props) {
             aria-label="Buka menu navigasi"
             className="flex items-center gap-2 mb-3.5 bg-transparent border-none cursor-pointer p-0 text-left"
           >
-            <span className="w-[26px] h-[26px] rounded-full border-2 border-cyan-glow/50 flex items-center justify-center shrink-0">
+            <span className="relative w-[26px] h-[26px] rounded-full border-2 border-cyan-glow/50 flex items-center justify-center shrink-0">
               <span className="w-2 h-2 rounded-full bg-cyan-glow pulse-dot" />
+              {vitals.hasOverdueTask && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-rose-glow"
+                  aria-label="Ada tugas telat"
+                  title="Ada tugas telat"
+                />
+              )}
             </span>
             <div>
               <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0 flex items-center gap-1.5">
@@ -641,10 +737,13 @@ export default function MemoryMap({ data, vitals }: Props) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center gap-2.5 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-slate-300 hover:text-cyan-glow hover:bg-panel2 transition-colors border-b border-line/60"
+                  className="relative flex items-center gap-2.5 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-slate-300 hover:text-cyan-glow hover:bg-panel2 transition-colors border-b border-line/60"
                 >
                   <span aria-hidden="true">{item.icon}</span>
                   {item.label}
+                  {item.href === "/dashboard/kerjaan" && vitals.hasOverdueTask && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-glow ml-auto" aria-hidden="true" />
+                  )}
                 </Link>
               ))}
               <div className="px-3 py-2.5">
@@ -725,17 +824,27 @@ export default function MemoryMap({ data, vitals }: Props) {
             Filter
           </p>
           <div className="flex flex-col gap-1.5 items-end">
+            <button
+              onClick={() => setActiveTypes(new Set(ALL_TYPES))}
+              className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
+              style={{ color: activeTypes.size === ALL_TYPES.length ? THEME.cyanGlow : THEME.neutral400 }}
+            >
+              Semua
+            </button>
             {FILTERS.map((f) => {
-              const active = activeFilter === f.id;
+              const active = activeTypes.has(f.id);
               return (
                 <button
                   key={f.id}
-                  onClick={() => setActiveFilter(f.id)}
+                  onClick={() => toggleType(f.id)}
                   className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
                   style={{ color: active ? THEME.cyanGlow : THEME.neutral400 }}
                 >
                   {f.label}
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: f.dot }} />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: f.dot, opacity: active ? 1 : 0.35 }}
+                  />
                 </button>
               );
             })}
@@ -745,6 +854,7 @@ export default function MemoryMap({ data, vitals }: Props) {
 
       {selectedNode && (
         <div className="absolute top-0 right-0 bottom-0 w-[300px] bg-panel/90 border-l border-line backdrop-blur-[10px] p-5 z-[3] overflow-y-auto">
+          <p className="font-mono text-[9.5px] text-slate-500 mb-2.5 truncate">{breadcrumb}</p>
           <div className="flex items-center justify-between mb-4">
             <span
               className="font-mono text-[9px] uppercase tracking-[0.15em] border rounded-[3px] px-[7px] py-0.5"
@@ -780,6 +890,14 @@ export default function MemoryMap({ data, vitals }: Props) {
             >
               Lihat semua →
             </a>
+          )}
+          {parentHub && (
+            <button
+              onClick={() => setSelectedId(parentHub.id)}
+              className="mt-3.5 w-full bg-transparent border border-line text-slate-400 font-mono text-[11px] uppercase tracking-wider py-2 rounded-sm hover:text-slate-200 hover:border-slate-500"
+            >
+              ← Kembali ke {parentHub.label}
+            </button>
           )}
         </div>
       )}

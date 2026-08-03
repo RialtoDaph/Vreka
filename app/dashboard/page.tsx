@@ -5,6 +5,7 @@ import { buildMemoryMapData } from "@/lib/memoryMap";
 import { getCalendarAccessToken } from "@/lib/google/credentials";
 import { listUpcomingEvents, type CalendarEvent } from "@/lib/google/calendar";
 import { Task, SavingsGoal, Debt, StudyNote, Budget, Habit, HabitCheck, JournalEntry } from "@/lib/types";
+import { daysUntil } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -98,11 +99,15 @@ export default async function OverviewPage() {
   const integrationsConnected =
     1 + (gmailCred?.email_address ? 1 : 0) + (telegramLink?.linked_at ? 1 : 0) + (voiceEnabled ? 1 : 0);
 
+  const hasOverdueTask = (tasks ?? []).some(
+    (t: Task) => t.deadline && (daysUntil(t.deadline) ?? 0) < 0
+  );
+
   return (
     <>
       <MemoryMapLoader
         data={memoryMapData}
-        vitals={{ memoryCount: memoryCount ?? 0, integrationsConnected, integrationsTotal: 4 }}
+        vitals={{ memoryCount: memoryCount ?? 0, integrationsConnected, integrationsTotal: 4, hasOverdueTask }}
       />
       {/* This route sits outside app/dashboard/(chrome)/layout.tsx (full-bleed
           layout, no Sidebar), so ⌘K used to silently do nothing here even
