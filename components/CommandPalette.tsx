@@ -16,7 +16,13 @@ const SOURCE_ICON: Record<SearchResultItem["source"], string> = {
 };
 
 const COMMANDS: Command[] = [
-  { label: "Memory Map", href: "/dashboard", icon: "◈", keywords: "overview ringkasan graph" },
+  { label: "Memory Map", href: "/dashboard", icon: "◈", keywords: "overview graph" },
+  {
+    label: "Ringkasan",
+    href: "/dashboard/ringkasan",
+    icon: "☀",
+    keywords: "ringkasan harian briefing pagi prioritas",
+  },
   {
     label: "Keuangan",
     href: "/dashboard/keuangan",
@@ -27,6 +33,12 @@ const COMMANDS: Command[] = [
   { label: "Pelajaran", href: "/dashboard/pelajaran", icon: "◎", keywords: "kuis catatan belajar timer resource" },
   { label: "Kalender", href: "/dashboard/kalender", icon: "▦", keywords: "jadwal deadline agenda" },
   { label: "Jurnal", href: "/dashboard/jurnal", icon: "✎", keywords: "diary catatan harian refleksi" },
+  {
+    label: "Timeline",
+    href: "/dashboard/timeline",
+    icon: "⧗",
+    keywords: "timeline kehidupan milestone biografi riwayat hidup",
+  },
   { label: "Aslan", href: "/dashboard/asisten", icon: "✦", keywords: "chat asisten ai gmail telegram export aktivitas" },
 ];
 

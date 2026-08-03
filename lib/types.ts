@@ -161,6 +161,13 @@ export type PushSubscriptionRow = {
   created_at: string;
 };
 
+export type AssistantMemory = {
+  id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+};
+
 export type AssistantAuditLog = {
   id: string;
   user_id: string;
@@ -168,5 +175,42 @@ export type AssistantAuditLog = {
   input: Record<string, unknown>;
   result_ok: boolean;
   result_summary: string | null;
+  created_at: string;
+};
+
+export type CanvasNodeKind = "sticky" | "task";
+
+export type CanvasNode = {
+  id: string;
+  user_id: string;
+  kind: CanvasNodeKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text: string;
+  color: string | null;
+  label: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CanvasArrow = {
+  id: string;
+  user_id: string;
+  from_node_id: string;
+  to_node_id: string;
+  created_at: string;
+};
+
+export type MilestoneCategory = "pendidikan" | "karier" | "keluarga" | "lainnya";
+
+export type LifeMilestone = {
+  id: string;
+  user_id: string;
+  title: string;
+  occurred_on: string;
+  category: MilestoneCategory;
+  description: string | null;
   created_at: string;
 };

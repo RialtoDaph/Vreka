@@ -32,11 +32,13 @@ const FILTERS: { id: FilterId; label: string; dot: string }[] = [
 const INITIAL_ORBIT = { theta: 0.6, phi: 1.15, radius: 320 };
 
 const NAV = [
+  { href: "/dashboard/ringkasan", label: "Ringkasan", icon: "☀" },
   { href: "/dashboard/keuangan", label: "Keuangan", icon: "⌬" },
   { href: "/dashboard/kerjaan", label: "Kerjaan", icon: "▤" },
   { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },
   { href: "/dashboard/kalender", label: "Kalender", icon: "▦" },
   { href: "/dashboard/jurnal", label: "Jurnal", icon: "✎" },
+  { href: "/dashboard/timeline", label: "Timeline", icon: "⧗" },
   { href: "/dashboard/asisten", label: "Aslan", icon: "✦" },
 ];
 
@@ -64,6 +66,12 @@ export default function MemoryMap({ data }: Props) {
   const [chatDraft, setChatDraft] = useState("");
   const [navOpen, setNavOpen] = useState(false);
   const [webglError, setWebglError] = useState(false);
+  const [insight, setInsight] = useState<{ text: string; sources: { label: string; url: string }[] } | null>(
+    null
+  );
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
+  const [insightDismissed, setInsightDismissed] = useState(false);
 
   const { phase: voicePhase, toggle: toggleVoice, sendText, audioRef, model: voiceModel } =
     useVoiceAssistant();
@@ -97,6 +105,46 @@ export default function MemoryMap({ data }: Props) {
   useEffect(() => {
     spinRef.current = spin;
   }, [spin]);
+
+  // "Riset Aslan" -- a short contextual note (backed by the web_search
+  // server tool) about whatever node is selected, shown in the panel below.
+  // Re-fires on every new selection and aborts the previous in-flight
+  // request rather than racing it; an aborted request's own callback bails
+  // out instead of touching loading/error state, so it can't clobber
+  // whatever the newer selection's effect run already set.
+  useEffect(() => {
+    if (!selectedId) {
+      setInsight(null);
+      setInsightError(null);
+      setInsightLoading(false);
+      return;
+    }
+    const node = data.nodes.find((n) => n.id === selectedId);
+    if (!node) return;
+    const controller = new AbortController();
+    setInsight(null);
+    setInsightError(null);
+    setInsightDismissed(false);
+    setInsightLoading(true);
+    fetch("/api/assistant/node-insight", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ typeLabel: node.typeLabel, label: node.label, fields: node.fields }),
+      signal: controller.signal,
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.error) setInsightError(String(json.error));
+        else setInsight({ text: json.text, sources: Array.isArray(json.sources) ? json.sources : [] });
+        setInsightLoading(false);
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setInsightError("Gagal ambil riset.");
+        setInsightLoading(false);
+      });
+    return () => controller.abort();
+  }, [selectedId, data.nodes]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -710,6 +758,49 @@ export default function MemoryMap({ data }: Props) {
           ◆ {voiceModelLabel}
         </span>
       </div>
+
+      {selectedNode && !insightDismissed && (insightLoading || insight || insightError) && (
+        <div className="absolute bottom-24 left-5 z-[2] w-[270px] bg-panel/90 border border-line rounded-lg p-3.5 backdrop-blur-[10px] shadow-glow">
+          <div className="flex items-center justify-between mb-2">
+            <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow">
+              <span className="w-[5px] h-[5px] rounded-full bg-cyan-glow pulse-dot" />
+              Riset Aslan
+            </span>
+            <button
+              onClick={() => setInsightDismissed(true)}
+              className="bg-transparent border-none text-slate-400 text-sm leading-none cursor-pointer"
+              aria-label="Tutup riset"
+            >
+              ×
+            </button>
+          </div>
+          {insightLoading && <p className="font-mono text-[10px] text-slate-500 m-0">Mikir...</p>}
+          {insightError && !insightLoading && (
+            <p className="text-[11.5px] text-rose-glow m-0">{insightError}</p>
+          )}
+          {insight && !insightLoading && (
+            <>
+              <p className="text-[12.5px] leading-relaxed text-slate-300 mb-2.5 mt-0">{insight.text}</p>
+              {insight.sources.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {insight.sources.map((s) => (
+                    <a
+                      key={s.url}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-[9.5px] no-underline border border-cyan-glow/30 text-cyan-glow rounded-full px-2 py-0.5 bg-cyan-glow/[.06] hover:bg-cyan-glow/10"
+                    >
+                      {s.label}
+                    </a>
+                  ))}
+                </div>
+              )}
+              <p className="font-mono text-[9px] text-slate-600 m-0">Klik node lain buat gali topik itu</p>
+            </>
+          )}
+        </div>
+      )}
 
       <form
         onSubmit={submitChat}

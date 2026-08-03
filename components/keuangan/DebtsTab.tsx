@@ -14,6 +14,14 @@ import {
   errorBannerClass,
 } from "@/lib/ui";
 
+type DirectionFilter = "semua" | DebtDirection;
+
+const DIRECTION_FILTERS: { key: DirectionFilter; label: string }[] = [
+  { key: "semua", label: "Semua" },
+  { key: "i_owe", label: "Aku Berutang" },
+  { key: "owed_to_me", label: "Piutang ke Aku" },
+];
+
 export default function DebtsTab() {
   const supabase = createClient();
   const [items, setItems] = useState<Debt[]>([]);
@@ -22,6 +30,7 @@ export default function DebtsTab() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("semua");
 
   const [partyName, setPartyName] = useState("");
   const [direction, setDirection] = useState<DebtDirection>("i_owe");
@@ -137,6 +146,20 @@ export default function DebtsTab() {
     }
   }
 
+  // Totals reflect only what's still owed -- a paid-off debt shouldn't
+  // keep inflating "total utang/piutang", it just stays in the list below
+  // (struck through, tagged LUNAS) for the record.
+  const unpaid = items.filter((d) => d.status === "unpaid");
+  const totalUtang = unpaid
+    .filter((d) => d.direction === "i_owe")
+    .reduce((sum, d) => sum + Number(d.amount), 0);
+  const totalPiutang = unpaid
+    .filter((d) => d.direction === "owed_to_me")
+    .reduce((sum, d) => sum + Number(d.amount), 0);
+  const filteredItems = items.filter(
+    (d) => directionFilter === "semua" || d.direction === directionFilter
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -146,6 +169,37 @@ export default function DebtsTab() {
       </div>
 
       {error && <p className={errorBannerClass}>{error}</p>}
+
+      <div className="grid sm:grid-cols-2 gap-3.5">
+        <HudPanel>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
+            Total Utang (kamu berutang)
+          </p>
+          <p className="font-mono text-xl font-bold text-rose-glow">{formatCurrency(totalUtang)}</p>
+        </HudPanel>
+        <HudPanel>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
+            Total Piutang (kamu ditagih)
+          </p>
+          <p className="font-mono text-xl font-bold text-mint-glow">{formatCurrency(totalPiutang)}</p>
+        </HudPanel>
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        {DIRECTION_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setDirectionFilter(f.key)}
+            className={`px-4 py-1.5 font-mono text-[11.5px] uppercase tracking-wider rounded-full border transition-colors ${
+              directionFilter === f.key
+                ? "border-cyan-glow/60 bg-cyan-glow/10 text-cyan-glow"
+                : "border-line text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
 
       {showForm && (
         <HudPanel>
@@ -189,7 +243,7 @@ export default function DebtsTab() {
                 />
               </div>
               <div>
-                <label htmlFor="debt-amount" className={labelClass}>Jumlah (Rp)</label>
+                <label htmlFor="debt-amount" className={labelClass}>Jumlah (€)</label>
                 <input
                   id="debt-amount"
                   type="text"
@@ -235,9 +289,11 @@ export default function DebtsTab() {
           <p className="text-sm text-slate-500">Memuat...</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-slate-500">Belum ada utang/piutang tercatat.</p>
+        ) : filteredItems.length === 0 ? (
+          <p className="text-sm text-slate-500">Gak ada data di filter ini.</p>
         ) : (
           <ul className="divide-y divide-line/60">
-            {items.map((debt) => (
+            {filteredItems.map((debt) => (
               <li
                 key={debt.id}
                 className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"

@@ -29,7 +29,7 @@ const CACHED_TOOLS: Anthropic.ToolUnion[] = ALL_TOOLS.map((tool, i) =>
 // Opus 5 / Sonnet 5 do. Adaptive thinking is left off on purpose: it made
 // Aslan noticeably slower to start replying without a clear quality win for
 // the kind of short, tool-driven turns this assistant mostly handles.
-function modelRequestExtras(model: string) {
+export function modelRequestExtras(model: string) {
   if (model === "claude-haiku-4-5") return {};
   return { output_config: { effort: "low" as const } };
 }

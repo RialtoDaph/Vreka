@@ -168,7 +168,7 @@ export default function SavingsTab() {
                 />
               </div>
               <div>
-                <label htmlFor="savings-target" className={labelClass}>Target (Rp)</label>
+                <label htmlFor="savings-target" className={labelClass}>Target (€)</label>
                 <input
                   id="savings-target"
                   type="text"

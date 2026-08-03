@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Habit, HabitCheck } from "@/lib/types";
-import { computeStreak } from "@/lib/habits";
+import { buildHeatmapCells, computeStreak } from "@/lib/habits";
 import { todayKey } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, ghostBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
+
+type HeatmapRange = 7 | 30;
 
 export default function HabitsPanel() {
   const supabase = createClient();
@@ -16,6 +18,7 @@ export default function HabitsPanel() {
   const [newTitle, setNewTitle] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [heatmapRange, setHeatmapRange] = useState<HeatmapRange>(7);
 
   async function load() {
     setLoading(true);
@@ -114,6 +117,21 @@ export default function HabitsPanel() {
     <HudPanel>
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-display font-semibold text-white tracking-wide">Kebiasaan</h2>
+        {habits.length > 0 && (
+          <div className="flex gap-0.5 border border-line rounded-md p-0.5">
+            {([7, 30] as HeatmapRange[]).map((r) => (
+              <button
+                key={r}
+                onClick={() => setHeatmapRange(r)}
+                className={`px-2.5 py-1 font-mono text-[10px] uppercase rounded-[3px] ${
+                  heatmapRange === r ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-500"
+                }`}
+              >
+                {r} hari
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && <p className={`${errorBannerClass} mb-3`}>{error}</p>}
@@ -141,21 +159,38 @@ export default function HabitsPanel() {
             const periods = new Set((checksByHabit[habit.id] ?? []).map((c) => c.period));
             const checkedToday = periods.has(todayKey());
             const streak = computeStreak(periods);
+            const cells = buildHeatmapCells(periods, heatmapRange);
+            const cols = heatmapRange === 7 ? 7 : 15;
             return (
-              <li key={habit.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={checkedToday}
-                  onChange={() => toggleToday(habit)}
-                  className="h-4 w-4 shrink-0 cursor-pointer accent-cyan-glow"
-                />
-                <span className="text-sm text-slate-200 flex-1 truncate">{habit.title}</span>
-                {streak > 0 && (
-                  <span className="text-xs font-mono text-amber-glow shrink-0">🔥 {streak} hari</span>
-                )}
-                <button onClick={() => handleDelete(habit.id)} className={dangerBtnClass}>
-                  Hapus
-                </button>
+              <li key={habit.id} className="py-2.5 first:pt-0 last:pb-0">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={checkedToday}
+                    onChange={() => toggleToday(habit)}
+                    className="h-4 w-4 shrink-0 cursor-pointer accent-cyan-glow"
+                  />
+                  <span className="text-sm text-slate-200 flex-1 truncate">{habit.title}</span>
+                  {streak > 0 && (
+                    <span className="text-xs font-mono text-amber-glow shrink-0">🔥 {streak} hari</span>
+                  )}
+                  <button onClick={() => handleDelete(habit.id)} className={dangerBtnClass}>
+                    Hapus
+                  </button>
+                </div>
+                <div
+                  className="grid gap-[3px] mt-2 ml-7"
+                  style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, maxWidth: 220 }}
+                >
+                  {cells.map((done, i) => (
+                    <span
+                      key={i}
+                      title={done ? "Selesai" : "Nggak dicentang"}
+                      className={`aspect-square rounded-[2px] ${done ? "bg-cyan-glow" : "bg-line"}`}
+                      style={{ opacity: done ? 1 : 0.6 }}
+                    />
+                  ))}
+                </div>
               </li>
             );
           })}

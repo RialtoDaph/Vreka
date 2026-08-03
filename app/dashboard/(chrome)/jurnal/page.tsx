@@ -6,6 +6,7 @@ import { JournalEntry } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { todayKey } from "@/lib/date";
 import { promptForDate } from "@/lib/journalPrompts";
+import { buildHeatmapCells, computeStreak } from "@/lib/habits";
 import HudPanel from "@/components/HudPanel";
 import { inputClass, primaryBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
@@ -26,6 +27,10 @@ export default function JurnalPage() {
     () => promptForDate(new Date(`${selectedDate}T00:00:00`)),
     [selectedDate]
   );
+
+  const entryPeriods = useMemo(() => new Set(entries.map((e) => e.entry_date)), [entries]);
+  const streak = computeStreak(entryPeriods);
+  const heatmapCells = useMemo(() => buildHeatmapCells(entryPeriods, 30), [entryPeriods]);
 
   async function load() {
     setLoading(true);
@@ -107,13 +112,21 @@ export default function JurnalPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
-          Jurnal
-        </p>
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
-          Catatan Harian
-        </h1>
+      <header className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
+            Jurnal
+          </p>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+            Catatan Harian
+          </h1>
+        </div>
+        {streak > 0 && (
+          <div className="flex items-center gap-2 border border-amber-glow/35 bg-amber-glow/10 rounded-full px-3.5 py-2">
+            <span aria-hidden="true">🔥</span>
+            <span className="font-mono text-sm font-semibold text-amber-glow">{streak} hari beruntun</span>
+          </div>
+        )}
       </header>
 
       {error && <p className={errorBannerClass}>{error}</p>}
@@ -148,7 +161,22 @@ export default function JurnalPage() {
           className={`${inputClass} min-h-32`}
           placeholder="Tulis apa aja..."
         />
-        <div className="flex justify-end mt-3">
+
+        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mt-4 mb-2">
+          30 hari terakhir
+        </p>
+        <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
+          {heatmapCells.map((done, i) => (
+            <span
+              key={i}
+              title={done ? "Ada catatan" : "Nggak nulis"}
+              className={`aspect-square rounded-[2px] ${done ? "bg-amber-glow" : "bg-line"}`}
+              style={{ opacity: done ? 1 : 0.5 }}
+            />
+          ))}
+        </div>
+
+        <div className="flex justify-end mt-4">
           <button onClick={handleSave} disabled={saving || !content.trim()} className={primaryBtnClass}>
             {saving ? "Menyimpan..." : selectedEntry ? "Update Catatan" : "Simpan Catatan"}
           </button>

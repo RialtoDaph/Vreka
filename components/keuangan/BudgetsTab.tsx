@@ -168,7 +168,7 @@ export default function BudgetsTab() {
                 </select>
               </div>
               <div>
-                <label htmlFor="budget-limit" className={labelClass}>Batas Bulanan (Rp)</label>
+                <label htmlFor="budget-limit" className={labelClass}>Batas Bulanan (€)</label>
                 <input
                   id="budget-limit"
                   type="text"

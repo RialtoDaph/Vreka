@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { computeStreak } from "./habits";
+import { buildHeatmapCells, computeStreak } from "./habits";
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -84,5 +84,46 @@ describe("computeStreak", () => {
 
       expect(computeStreak(new Set(["2026-08-02", "2026-08-01", "2026-07-31"]))).toBe(3);
     });
+  });
+});
+
+describe("buildHeatmapCells", () => {
+  it("returns `days` cells, oldest first, today last", () => {
+    const cells = buildHeatmapCells(new Set([daysAgo(0)]), 7);
+    expect(cells).toHaveLength(7);
+    expect(cells).toEqual([false, false, false, false, false, false, true]);
+  });
+
+  it("marks every day false for an empty check set", () => {
+    expect(buildHeatmapCells(new Set(), 30)).toEqual(Array(30).fill(false));
+  });
+
+  it("marks every day true when the whole range was checked", () => {
+    const periods = new Set(Array.from({ length: 7 }, (_, i) => daysAgo(i)));
+    expect(buildHeatmapCells(periods, 7)).toEqual(Array(7).fill(true));
+  });
+
+  it("places a mid-range check at the right index", () => {
+    // 7-day window, oldest-first: index 3 is 3 days before today.
+    const cells = buildHeatmapCells(new Set([daysAgo(3)]), 7);
+    expect(cells).toEqual([false, false, false, true, false, false, false]);
+  });
+
+  it("supports a 30-day window", () => {
+    const cells = buildHeatmapCells(new Set([daysAgo(29), daysAgo(0)]), 30);
+    expect(cells).toHaveLength(30);
+    expect(cells[0]).toBe(true);
+    expect(cells[29]).toBe(true);
+    expect(cells.slice(1, 29).every((c) => c === false)).toBe(true);
+  });
+
+  it("stays timezone-safe across a UTC day boundary (same WIB regression as computeStreak)", () => {
+    process.env.TZ = "Asia/Jakarta";
+    vi.useFakeTimers();
+    // 17:30 UTC on Aug 1 is already 00:30 WIB on Aug 2.
+    vi.setSystemTime(new Date("2026-08-01T17:30:00Z"));
+
+    const cells = buildHeatmapCells(new Set(["2026-08-02"]), 7);
+    expect(cells[6]).toBe(true); // today (local) is checked
   });
 });

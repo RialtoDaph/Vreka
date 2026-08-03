@@ -23,6 +23,7 @@ const TYPE_META: Record<CalItemType, { dot: string; text: string; badge: string 
 };
 
 const WEEKDAYS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+const MAX_VISIBLE_DOTS = 3;
 
 export default function KalenderPage() {
   const supabase = createClient();
@@ -214,7 +215,7 @@ export default function KalenderPage() {
             {monthLabel}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => shiftMonth(-1)} className={ghostBtnClass}>
             ← Bulan Lalu
           </button>
@@ -261,7 +262,8 @@ export default function KalenderPage() {
             const inMonth = isSameMonth(day, visibleMonth);
             const isToday = key === dateKey(new Date());
             const isSelected = key === dateKey(selectedDay);
-            const typesPresent = Array.from(new Set(items.map((i) => i.type)));
+            const visibleItems = items.slice(0, MAX_VISIBLE_DOTS);
+            const overflow = items.length - MAX_VISIBLE_DOTS;
             return (
               <button
                 key={key}
@@ -278,10 +280,13 @@ export default function KalenderPage() {
                 <span className={`text-xs font-mono ${isToday ? "text-cyan-glow" : "text-slate-300"}`}>
                   {day.getDate()}
                 </span>
-                <span className="flex gap-0.5 flex-wrap">
-                  {typesPresent.map((t) => (
-                    <span key={t} className={`w-1.5 h-1.5 rounded-full ${TYPE_META[t].dot}`} />
+                <span className="flex gap-0.5 flex-wrap items-center">
+                  {visibleItems.map((item, i) => (
+                    <span key={i} className={`w-1.5 h-1.5 rounded-full ${TYPE_META[item.type].dot}`} />
                   ))}
+                  {overflow > 0 && (
+                    <span className="text-[8px] font-mono text-slate-500 leading-none">+{overflow}</span>
+                  )}
                 </span>
               </button>
             );
