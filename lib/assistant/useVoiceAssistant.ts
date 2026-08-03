@@ -23,7 +23,23 @@ const MIC_CONSTRAINTS: MediaTrackConstraints = {
   autoGainControl: true,
 };
 
-export type VoicePhase = "idle" | "listening" | "processing" | "speaking" | "error";
+// Web Speech API's continuous-recognition interface isn't in lib.dom.d.ts --
+// only the bits used for passive wake-word listening are typed here.
+interface MinimalSpeechRecognition extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+type SpeechRecognitionCtor = new () => MinimalSpeechRecognition;
+
+const WAKE_PHRASE = "aslan";
+
+export type VoicePhase = "idle" | "wake-listening" | "listening" | "processing" | "speaking" | "error";
 
 /**
  * Shared state machine behind talking to Aslan — used by both the bottom-bar
@@ -46,10 +62,18 @@ export function useVoiceAssistant() {
   // (not a ref) so they actually re-render when the model is known.
   const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
 
+  const [handsFreeSupported, setHandsFreeSupported] = useState(false);
+  const [handsFreeMode, setHandsFreeMode] = useState(false);
+  // Mirrors handsFreeMode inside callbacks (recognition event handlers,
+  // runLoop) that close over stale state otherwise.
+  const handsFreeModeRef = useRef(false);
+  const recognitionRef = useRef<MinimalSpeechRecognition | null>(null);
+
   useEffect(() => {
     setSupported(
       typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia
     );
+    setHandsFreeSupported(!!getSpeechRecognitionCtor());
     const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
     if (isValidAssistantModel(saved)) {
       modelRef.current = saved;
@@ -57,6 +81,7 @@ export function useVoiceAssistant() {
     }
     return () => {
       stoppedRef.current = true;
+      recognitionRef.current?.stop();
     };
   }, []);
 
@@ -65,6 +90,84 @@ export function useVoiceAssistant() {
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     );
+  }
+
+  function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+    const w = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    };
+    return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+  }
+
+  // Passively listens for "aslan" without sending any audio to the server --
+  // only once the wake phrase is heard does the normal record/transcribe
+  // loop (and its server round-trips) kick in.
+  function startWakeListening() {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return;
+    const recognition = new Ctor();
+    recognition.lang = "id-ID";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = (event.results[i][0]?.transcript ?? "").toLowerCase();
+        if (transcript.includes(WAKE_PHRASE)) {
+          recognitionRef.current = null;
+          recognition.stop();
+          stoppedRef.current = false;
+          setErrorMsg(null);
+          setLastReply(null);
+          runLoop();
+          return;
+        }
+      }
+    };
+    recognition.onerror = (event) => {
+      if (event.error === "no-speech" || event.error === "aborted") return;
+      recognitionRef.current = null;
+      handsFreeModeRef.current = false;
+      setHandsFreeMode(false);
+      setErrorMsg("Wake-word listening kena error. Coba nyalain lagi mode hands-free.");
+      setPhase("error");
+    };
+    recognition.onend = () => {
+      // Some browsers auto-stop continuous recognition after a bit of
+      // silence -- restart it as long as we're still meant to be passively
+      // listening (and haven't already moved into an active conversation).
+      if (recognitionRef.current === recognition && handsFreeModeRef.current && stoppedRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          // already started / not restartable -- drop it silently
+        }
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setPhase("wake-listening");
+    } catch {
+      recognitionRef.current = null;
+    }
+  }
+
+  function toggleHandsFree() {
+    if (!handsFreeModeRef.current) {
+      handsFreeModeRef.current = true;
+      setHandsFreeMode(true);
+      if (stoppedRef.current) startWakeListening();
+    } else {
+      handsFreeModeRef.current = false;
+      setHandsFreeMode(false);
+      const recognition = recognitionRef.current;
+      recognitionRef.current = null;
+      recognition?.stop();
+      if (stoppedRef.current) setPhase("idle");
+    }
   }
 
   // Biar Quick Commands (atau tombol lain di halaman manapun) bisa mulai/stop
@@ -314,11 +417,22 @@ export function useVoiceAssistant() {
         // gagal ngehubungin Aslan, lanjut coba lagi dari listening
       }
     }
-    setPhase("idle");
+    // Only this trailing block (not toggle()'s stop branch) decides the
+    // post-conversation phase, since toggle() only flips stoppedRef and the
+    // while loop above may still be mid-await when that happens -- deciding
+    // it in two places would race.
+    if (handsFreeModeRef.current) {
+      startWakeListening();
+    } else {
+      setPhase("idle");
+    }
   }
 
   function toggle() {
     if (stoppedRef.current) {
+      const recognition = recognitionRef.current;
+      recognitionRef.current = null;
+      recognition?.stop();
       stoppedRef.current = false;
       setErrorMsg(null);
       setLastReply(null);
@@ -326,7 +440,6 @@ export function useVoiceAssistant() {
     } else {
       stoppedRef.current = true;
       audioRef.current?.pause();
-      setPhase("idle");
     }
   }
 
@@ -335,11 +448,26 @@ export function useVoiceAssistant() {
   function sendText(message: string) {
     const trimmed = message.trim();
     if (!trimmed || !stoppedRef.current) return;
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    recognition?.stop();
     stoppedRef.current = false;
     setErrorMsg(null);
     setLastReply(null);
     runLoop(trimmed);
   }
 
-  return { supported, phase, errorMsg, toggle, sendText, audioRef, model, lastReply };
+  return {
+    supported,
+    phase,
+    errorMsg,
+    toggle,
+    sendText,
+    audioRef,
+    model,
+    lastReply,
+    handsFreeSupported,
+    handsFreeMode,
+    toggleHandsFree,
+  };
 }

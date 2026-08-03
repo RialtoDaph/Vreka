@@ -107,11 +107,93 @@ function AssistantReplyCard({ content }: { content: string }) {
 
 const VOICE_PHASE_STYLE: Record<VoicePhase, { label: string; text: string; dot: string; border: string }> = {
   idle: { label: "Online", text: "text-cyan-glow", dot: "bg-cyan-glow", border: "border-cyan-glow/50" },
+  "wake-listening": { label: "Nunggu 'Aslan'...", text: "text-cyan-glow", dot: "bg-cyan-glow", border: "border-cyan-glow/50" },
   listening: { label: "Lagi dengerin...", text: "text-mint-glow", dot: "bg-mint-glow", border: "border-mint-glow/50" },
   processing: { label: "Mikir...", text: "text-amber-glow", dot: "bg-amber-glow", border: "border-amber-glow/50" },
   speaking: { label: "Ngomong...", text: "text-mint-glow", dot: "bg-mint-glow", border: "border-mint-glow/50" },
   error: { label: "Error", text: "text-rose-glow", dot: "bg-rose-glow", border: "border-rose-glow/50" },
 };
+
+// One button in the 5-icon toolbar (real-time mode / screen share / tools /
+// hands-free / voice) -- icon-only with an aria-label since there's no room
+// for text labels at this size.
+function ToolbarIconButton({
+  icon,
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={`w-10 h-10 rounded-full border flex items-center justify-center text-base transition-colors shrink-0 ${
+        active
+          ? "border-cyan-glow bg-cyan-glow/10 text-cyan-glow shadow-glow"
+          : disabled
+            ? "border-line/50 text-slate-700 cursor-not-allowed"
+            : "border-line text-slate-400 hover:text-slate-200 hover:border-cyan-glow/40"
+      }`}
+    >
+      {icon}
+    </button>
+  );
+}
+
+// A LINK/UNLINK integration card in the AI Core panel's integrations grid.
+function IntegrationCard({
+  title,
+  status,
+  detail,
+  action,
+}: {
+  title: string;
+  status: "connected" | "disconnected" | "info";
+  detail: string;
+  action?: React.ReactNode;
+}) {
+  const dot = status === "connected" ? "bg-mint-glow" : status === "disconnected" ? "bg-slate-600" : "bg-cyan-glow";
+  return (
+    <div className="border border-line rounded-sm p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 flex items-center gap-1.5 min-w-0">
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+          <span className="truncate">{title}</span>
+        </p>
+        {status !== "info" && (
+          <span
+            className={`text-[9px] font-mono uppercase tracking-wider shrink-0 ${
+              status === "connected" ? "text-mint-glow" : "text-slate-600"
+            }`}
+          >
+            {status === "connected" ? "LINKED" : "UNLINKED"}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-slate-300 truncate">{detail}</p>
+      {action}
+    </div>
+  );
+}
+
+function StatCell({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="border border-line rounded-sm px-3 py-2.5">
+      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1">{label}</p>
+      <p className="font-display text-lg text-white">{value}</p>
+    </div>
+  );
+}
 
 export default function AsistenPage() {
   const supabase = createClient();
@@ -132,8 +214,14 @@ export default function AsistenPage() {
     toggle: toggleVoice,
     audioRef: voiceAudioRef,
     lastReply: voiceLastReply,
+    handsFreeSupported,
+    handsFreeMode,
+    toggleHandsFree,
   } = useVoiceAssistant();
-  const voiceActive = voicePhase !== "idle";
+  // wake-listening is a passive background state (no mic recording, no
+  // server round-trips yet) -- it shouldn't take over the page the way an
+  // actual conversation does, so it's excluded from "voice call in progress".
+  const voiceActive = voicePhase !== "idle" && voicePhase !== "wake-listening";
 
   const [gmailEmail, setGmailEmail] = useState<string | null>(null);
   const [gmailLoading, setGmailLoading] = useState(true);
@@ -147,6 +235,32 @@ export default function AsistenPage() {
   const [telegramError, setTelegramError] = useState<string | null>(null);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Real counts only, same rule as StatusAslan's header pill -- no fabricated
+  // latency/uptime numbers in the AI Core stat grid.
+  const [memoryCount, setMemoryCount] = useState<number | null>(null);
+  const [actionsToday, setActionsToday] = useState<number | null>(null);
+  const [totalMessages, setTotalMessages] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function loadAiCoreStats() {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const [{ count: memCount }, { count: actionCount }, { count: msgCount }] = await Promise.all([
+        supabase.from("assistant_memories").select("*", { count: "exact", head: true }),
+        supabase
+          .from("assistant_audit_log")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", todayStart.toISOString()),
+        supabase.from("assistant_messages").select("*", { count: "exact", head: true }),
+      ]);
+      setMemoryCount(memCount ?? 0);
+      setActionsToday(actionCount ?? 0);
+      setTotalMessages(msgCount ?? 0);
+    }
+    loadAiCoreStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
@@ -391,6 +505,10 @@ export default function AsistenPage() {
     await sendMessage(text);
   }
 
+  // Same 4-system count StatusAslan's header pill uses: Aslan itself always
+  // counts, plus the three actually-optional integrations.
+  const connectedCount = [true, !!gmailEmail, telegramLinked, voiceSupported].filter(Boolean).length;
+
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] overflow-y-auto">
       <header className="flex items-end justify-between gap-3 flex-wrap">
@@ -410,15 +528,32 @@ export default function AsistenPage() {
           </div>
         </div>
         <div className="flex items-end gap-3 flex-wrap">
-          {voiceSupported && (
-            <button
-              type="button"
-              onClick={toggleVoice}
-              className={voiceActive ? primaryBtnClass : ghostBtnClass}
-            >
-              {voiceActive ? "⏹ Stop Mode Suara" : "🎤 Mode Suara"}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <ToolbarIconButton icon="📡" label="Mode GPT Real-Time (segera hadir)" disabled />
+            <ToolbarIconButton icon="🖥️" label="Mode Screen Share (segera hadir)" disabled />
+            <ToolbarIconButton
+              icon="🧰"
+              label="Tools & Integrasi"
+              active={settingsOpen}
+              onClick={() => setSettingsOpen((o) => !o)}
+            />
+            {handsFreeSupported && (
+              <ToolbarIconButton
+                icon="👂"
+                label={handsFreeMode ? "Matiin mode hands-free" : "Nyalain mode hands-free (panggil 'Aslan')"}
+                active={handsFreeMode}
+                onClick={toggleHandsFree}
+              />
+            )}
+            {voiceSupported && (
+              <ToolbarIconButton
+                icon="🎤"
+                label={voiceActive ? "Stop mode suara" : "Mode suara"}
+                active={voiceActive}
+                onClick={toggleVoice}
+              />
+            )}
+          </div>
           <div>
             <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
               Model
@@ -437,6 +572,13 @@ export default function AsistenPage() {
           </div>
         </div>
       </header>
+
+      {voicePhase === "wake-listening" && (
+        <p className="text-xs font-mono text-cyan-glow flex items-center gap-1.5 -mt-3">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow animate-pulse" />
+          Mode hands-free aktif — bilang &quot;Aslan&quot; buat mulai ngobrol.
+        </p>
+      )}
 
       <StatusAslan
         gmailConnected={!!gmailEmail}
@@ -555,85 +697,111 @@ export default function AsistenPage() {
           onClick={() => setSettingsOpen((o) => !o)}
           className="text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-300"
         >
-          {settingsOpen ? "▾" : "▸"} Pengaturan & Integrasi
+          {settingsOpen ? "▾" : "▸"} AI Core
         </button>
         {settingsOpen && (
           <HudPanel className="text-sm mt-2">
-            <div className="divide-y divide-line/60">
-              <div className="py-3 first:pt-0">
-                {gmailNotice && (
-                  <p className="text-xs font-mono text-cyan-glow mb-2">{gmailNotice}</p>
-                )}
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
-                      Gmail & Google Calendar
-                    </p>
-                    <p className="text-slate-300 truncate">
-                      {gmailLoading
-                        ? "Memuat..."
-                        : gmailEmail
-                          ? `Terhubung: ${gmailEmail}`
-                          : "Belum terhubung — Aslan belum bisa cek/bales email atau baca/bikin event Calendar kamu."}
-                    </p>
-                  </div>
-                  {!gmailLoading &&
-                    (gmailEmail ? (
-                      <button onClick={handleDisconnectGmail} className={ghostBtnClass}>
-                        Disconnect
-                      </button>
-                    ) : (
-                      <a href="/api/google/oauth/start" className={primaryBtnClass}>
-                        Connect Gmail & Calendar
-                      </a>
-                    ))}
-                </div>
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-4 pb-4 border-b border-line/60">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-mint-glow animate-pulse" aria-hidden="true" />
+                <p className="font-mono text-xs uppercase tracking-[0.25em] text-cyan-glow">AI Core</p>
               </div>
+              <p className="text-[10px] font-mono text-slate-500">Status sistem Aslan &amp; integrasi</p>
+            </div>
 
-              <div className="py-3">
-                {telegramError && (
-                  <p className="text-xs font-mono text-rose-glow mb-2">{telegramError}</p>
-                )}
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
-                      Telegram
-                    </p>
-                    <p className="text-slate-300 truncate">
-                      {telegramLoading
-                        ? "Memuat..."
-                        : telegramLinked
-                          ? `Terhubung${telegramUsername ? `: @${telegramUsername}` : ""}`
-                          : telegramDeepLink
-                            ? "Buka Telegram, tekan Start di bot-nya buat nyelesain koneksi..."
-                            : "Belum terhubung — chat Aslan langsung dari Telegram."}
-                    </p>
-                  </div>
-                  {!telegramLoading &&
-                    (telegramLinked ? (
-                      <button onClick={handleDisconnectTelegram} className={ghostBtnClass}>
-                        Disconnect
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleConnectTelegram}
-                        disabled={telegramLinking}
-                        className={primaryBtnClass}
-                      >
-                        {telegramLinking ? "Memuat..." : "Connect Telegram"}
-                      </button>
-                    ))}
-                </div>
-              </div>
+            {gmailNotice && (
+              <p className="text-xs font-mono text-cyan-glow mb-3">{gmailNotice}</p>
+            )}
 
-              <div className="py-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              <StatCell label="Terhubung" value={`${connectedCount}/4`} />
+              <StatCell label="Memori" value={memoryCount ?? "–"} />
+              <StatCell label="Aksi Hari Ini" value={actionsToday ?? "–"} />
+              <StatCell label="Total Obrolan" value={totalMessages ?? "–"} />
+            </div>
+
+            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+              Integrasi
+            </p>
+            <div className="grid sm:grid-cols-2 gap-3 mb-5">
+              <IntegrationCard
+                title="Gmail & Calendar"
+                status={gmailLoading ? "info" : gmailEmail ? "connected" : "disconnected"}
+                detail={
+                  gmailLoading
+                    ? "Memuat..."
+                    : gmailEmail
+                      ? gmailEmail
+                      : "Aslan belum bisa cek email atau kalender kamu."
+                }
+                action={
+                  !gmailLoading &&
+                  (gmailEmail ? (
+                    <button onClick={handleDisconnectGmail} className={`${ghostBtnClass} self-start`}>
+                      Unlink
+                    </button>
+                  ) : (
+                    <a href="/api/google/oauth/start" className={`${primaryBtnClass} self-start`}>
+                      Link
+                    </a>
+                  ))
+                }
+              />
+
+              <IntegrationCard
+                title="Telegram"
+                status={telegramLoading ? "info" : telegramLinked ? "connected" : "disconnected"}
+                detail={
+                  telegramLoading
+                    ? "Memuat..."
+                    : telegramLinked
+                      ? telegramUsername
+                        ? `@${telegramUsername}`
+                        : "Terhubung"
+                      : telegramDeepLink
+                        ? "Buka Telegram, tekan Start di bot-nya..."
+                        : "Chat Aslan langsung dari Telegram."
+                }
+                action={
+                  !telegramLoading &&
+                  (telegramLinked ? (
+                    <button onClick={handleDisconnectTelegram} className={`${ghostBtnClass} self-start`}>
+                      Unlink
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleConnectTelegram}
+                      disabled={telegramLinking}
+                      className={`${primaryBtnClass} self-start`}
+                    >
+                      {telegramLinking ? "Memuat..." : "Link"}
+                    </button>
+                  ))
+                }
+              />
+              {telegramError && (
+                <p className="text-xs font-mono text-rose-glow sm:col-span-2 -mt-2">{telegramError}</p>
+              )}
+
+              <div className="border border-line rounded-sm p-3">
                 <PushNotifications />
               </div>
 
-              <div className="py-3">
+              <IntegrationCard
+                title="Voice (TTS/STT)"
+                status="info"
+                detail={
+                  voiceSupported
+                    ? "Browser ini dukung mode suara & hands-free."
+                    : "Browser ini belum dukung mode suara."
+                }
+              />
+            </div>
+
+            <div className="divide-y divide-line/60">
+              <div className="py-3 first:pt-0">
                 <DataExport />
               </div>
-
               <div className="py-3 last:pb-0">
                 <TwoFactorAuth />
               </div>

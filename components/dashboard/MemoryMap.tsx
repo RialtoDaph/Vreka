@@ -55,6 +55,7 @@ const NAV = [
 
 const VOICE_PHASE_STYLE: Record<VoicePhase, { color: string; label: string }> = {
   idle: { color: THEME.cyanGlow, label: "Online" },
+  "wake-listening": { color: THEME.cyanGlow, label: "Nunggu 'Aslan'..." },
   listening: { color: THEME.mintGlow, label: "Lagi dengerin..." },
   processing: { color: THEME.amberGlow, label: "Mikir..." },
   speaking: { color: THEME.mintGlow, label: "Ngomong..." },
@@ -106,7 +107,7 @@ export default function MemoryMap({ data, vitals }: Props) {
   const { phase: voicePhase, toggle: toggleVoice, audioRef, model: voiceModel, lastReply } =
     useVoiceAssistant();
   const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
-  const voiceBusy = voicePhase !== "idle" && voicePhase !== "error";
+  const voiceBusy = voicePhase !== "idle" && voicePhase !== "wake-listening" && voicePhase !== "error";
   const voiceModelLabel = ASSISTANT_MODELS.find((m) => m.id === voiceModel)?.label ?? voiceModel;
 
   // At least one type must stay active -- turning off the last one would

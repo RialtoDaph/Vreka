@@ -32,9 +32,11 @@ function chainable(data: unknown[] = []) {
     limit: () => obj,
     not: () => obj,
     eq: () => obj,
+    gte: () => obj,
     delete: () => obj,
     maybeSingle: () => Promise.resolve({ data: data[0] ?? null, error: null }),
-    then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve),
+    then: (resolve: (v: unknown) => unknown) =>
+      Promise.resolve({ data, error: null, count: data.length }).then(resolve),
   };
   return obj;
 }
@@ -47,6 +49,8 @@ function mockSupabase(messages: unknown[] = []) {
         if (table === "assistant_messages") return chainable(messages);
         if (table === "google_credentials") return chainable([]);
         if (table === "telegram_links") return chainable([]);
+        if (table === "assistant_memories") return chainable([]);
+        if (table === "assistant_audit_log") return chainable([]);
         throw new Error(`unexpected table: ${table}`);
       },
     }),
@@ -59,9 +63,21 @@ type VoiceMock = {
   errorMsg?: string | null;
   lastReply?: string | null;
   toggle?: () => void;
+  handsFreeSupported?: boolean;
+  handsFreeMode?: boolean;
+  toggleHandsFree?: () => void;
 };
 
-function mockVoice({ supported = true, phase = "idle", errorMsg = null, lastReply = null, toggle = vi.fn() }: VoiceMock = {}) {
+function mockVoice({
+  supported = true,
+  phase = "idle",
+  errorMsg = null,
+  lastReply = null,
+  toggle = vi.fn(),
+  handsFreeSupported = true,
+  handsFreeMode = false,
+  toggleHandsFree = vi.fn(),
+}: VoiceMock = {}) {
   vi.doMock("@/lib/assistant/useVoiceAssistant", () => ({
     useVoiceAssistant: () => ({
       supported,
@@ -72,9 +88,12 @@ function mockVoice({ supported = true, phase = "idle", errorMsg = null, lastRepl
       sendText: vi.fn(),
       audioRef: { current: null },
       model: "claude-sonnet-5",
+      handsFreeSupported,
+      handsFreeMode,
+      toggleHandsFree,
     }),
   }));
-  return { toggle };
+  return { toggle, toggleHandsFree };
 }
 
 describe("AsistenPage", () => {
@@ -132,7 +151,7 @@ describe("AsistenPage", () => {
 
     expect(await screen.findByText("Lagi dengerin...")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Tanya atau minta dicatetin sesuatu...")).not.toBeInTheDocument();
-    expect(screen.getByText("⏹ Stop Mode Suara")).toBeInTheDocument();
+    expect(screen.getByLabelText("Stop mode suara")).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("Hentikan mode suara"));
     expect(toggle).toHaveBeenCalledTimes(1);
@@ -154,7 +173,38 @@ describe("AsistenPage", () => {
     render(<AsistenPage />);
 
     await screen.findByPlaceholderText("Tanya atau minta dicatetin sesuatu...");
-    expect(screen.queryByText("🎤 Mode Suara")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Mode suara")).not.toBeInTheDocument();
+  });
+
+  it("hides the hands-free toolbar button when the browser doesn't support wake-word listening", async () => {
+    mockSupabase([]);
+    mockVoice({ handsFreeSupported: false });
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    await screen.findByPlaceholderText("Tanya atau minta dicatetin sesuatu...");
+    expect(screen.queryByLabelText(/mode hands-free/i)).not.toBeInTheDocument();
+  });
+
+  it("toggles hands-free mode from the toolbar", async () => {
+    mockSupabase([]);
+    const { toggleHandsFree } = mockVoice({ handsFreeMode: false });
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    fireEvent.click(await screen.findByLabelText(/nyalain mode hands-free/i));
+    expect(toggleHandsFree).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a passive wake-listening indicator without taking over the chat UI", async () => {
+    mockSupabase([]);
+    mockVoice({ phase: "wake-listening", handsFreeMode: true });
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    expect(await screen.findByText(/bilang.*aslan/i)).toBeInTheDocument();
+    // Unlike an active call, wake-listening keeps the text input visible.
+    expect(screen.getByPlaceholderText("Tanya atau minta dicatetin sesuatu...")).toBeInTheDocument();
   });
 
   it("renders a short assistant reply as a plain bubble with no pagination chrome", async () => {
