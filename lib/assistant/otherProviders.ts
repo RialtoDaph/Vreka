@@ -97,10 +97,11 @@ async function runOpenAiCompatibleChatWithConsult(
     },
   ];
 
-  // Newer reasoning-tier models (gpt-5.6-sol, and possibly grok-4.5) default
-  // to a non-"none" reasoning effort that OpenAI's /v1/chat/completions
-  // rejects outright when `tools` are also present ("Function tools with
-  // reasoning_effort are not supported ... set reasoning_effort to 'none'").
+  // Newer reasoning-tier models (confirmed on gpt-5.6-sol in production, and
+  // possibly other GPT-5.6 tiers / grok-4.5) default to a non-"none"
+  // reasoning effort that OpenAI's /v1/chat/completions rejects outright
+  // when `tools` are also present ("Function tools with reasoning_effort
+  // are not supported ... set reasoning_effort to 'none'").
   // Only the tools-bearing call needs this -- the follow-up call has no
   // tools and isn't affected.
   const first = await postJson(`${baseUrl}/chat/completions`, apiKey, {

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
 import type { AssistantProvider } from "@/lib/assistant/models";
 import { ASLAN_MODES, getAslanMode, type AslanMode } from "@/lib/assistant/modes";
-import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
+import { useVoiceAssistant } from "@/lib/assistant/useVoiceAssistant";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
@@ -104,51 +104,6 @@ function AssistantReplyCard({ content }: { content: string }) {
   );
 }
 
-const VOICE_PHASE_STYLE: Record<VoicePhase, { label: string; text: string; dot: string; border: string }> = {
-  idle: { label: "Online", text: "text-cyan-glow", dot: "bg-cyan-glow", border: "border-cyan-glow/50" },
-  "wake-listening": { label: "Nunggu 'Aslan'...", text: "text-cyan-glow", dot: "bg-cyan-glow", border: "border-cyan-glow/50" },
-  listening: { label: "Lagi dengerin...", text: "text-mint-glow", dot: "bg-mint-glow", border: "border-mint-glow/50" },
-  processing: { label: "Mikir...", text: "text-amber-glow", dot: "bg-amber-glow", border: "border-amber-glow/50" },
-  speaking: { label: "Ngomong...", text: "text-mint-glow", dot: "bg-mint-glow", border: "border-mint-glow/50" },
-  error: { label: "Error", text: "text-rose-glow", dot: "bg-rose-glow", border: "border-rose-glow/50" },
-};
-
-// One button in the 5-icon toolbar (real-time mode / screen share / tools /
-// hands-free / voice) -- icon-only with an aria-label since there's no room
-// for text labels at this size.
-function ToolbarIconButton({
-  icon,
-  label,
-  active,
-  disabled,
-  onClick,
-}: {
-  icon: string;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      className={`w-10 h-10 rounded-full border flex items-center justify-center text-base transition-colors shrink-0 ${
-        active
-          ? "border-cyan-glow bg-cyan-glow/10 text-cyan-glow shadow-glow"
-          : disabled
-            ? "border-line/50 text-slate-700 cursor-not-allowed"
-            : "border-line text-slate-400 hover:text-slate-200 hover:border-cyan-glow/40"
-      }`}
-    >
-      {icon}
-    </button>
-  );
-}
-
 // One of the 4 mode buttons (Santai/Fokus/Intel/Ultra) that pick Aslan's
 // brain + persona + color together -- replaces the old plain model dropdown.
 function ModeButton({
@@ -240,24 +195,12 @@ export default function AsistenPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const {
-    supported: voiceSupported,
-    phase: voicePhase,
-    errorMsg: voiceError,
-    toggle: toggleVoice,
-    audioRef: voiceAudioRef,
-    lastReply: voiceLastReply,
-    handsFreeSupported,
-    handsFreeMode,
-    toggleHandsFree,
-    mode,
-    setMode,
-  } = useVoiceAssistant();
+  // Voice controls (screen share, hands-free, mic) live on the Memory Map
+  // now -- this page keeps `supported` (an informational capability check
+  // for StatusAslan/AI Core) and `mode`/`setMode` (the mode buttons below
+  // still live here) but doesn't drive an active call itself.
+  const { supported: voiceSupported, mode, setMode } = useVoiceAssistant();
   const activeMode = getAslanMode(mode);
-  // wake-listening is a passive background state (no mic recording, no
-  // server round-trips yet) -- it shouldn't take over the page the way an
-  // actual conversation does, so it's excluded from "voice call in progress".
-  const voiceActive = voicePhase !== "idle" && voicePhase !== "wake-listening";
 
   const [gmailEmail, setGmailEmail] = useState<string | null>(null);
   const [gmailLoading, setGmailLoading] = useState(true);
@@ -289,19 +232,6 @@ export default function AsistenPage() {
       }
     }
     loadProviderStatus();
-  }, []);
-
-  const [screenShareSupported, setScreenShareSupported] = useState(false);
-  const [screenShareActive, setScreenShareActive] = useState(false);
-  const [screenShareError, setScreenShareError] = useState<string | null>(null);
-  const screenShareStreamRef = useRef<MediaStream | null>(null);
-  const screenVideoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    setScreenShareSupported(!!navigator.mediaDevices?.getDisplayMedia);
-    return () => {
-      screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
-    };
   }, []);
 
   // Real counts only, same rule as StatusAslan's header pill -- no fabricated
@@ -435,51 +365,6 @@ export default function AsistenPage() {
     setTelegramDeepLink(null);
   }
 
-  function captureScreenFrame(): string | undefined {
-    const video = screenVideoRef.current;
-    if (!video || video.readyState < 2 || !video.videoWidth) return undefined;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return undefined;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.7);
-  }
-
-  async function toggleScreenShare() {
-    if (screenShareActive) {
-      screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
-      screenShareStreamRef.current = null;
-      setScreenShareActive(false);
-      return;
-    }
-    setScreenShareError(null);
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      screenShareStreamRef.current = stream;
-      if (screenVideoRef.current) {
-        screenVideoRef.current.srcObject = stream;
-        // play() isn't reliably promise-returning across environments (e.g.
-        // jsdom in tests returns undefined instead of a Promise), so guard
-        // before chaining .catch() onto it.
-        const playResult = screenVideoRef.current.play();
-        if (playResult && typeof playResult.then === "function") {
-          await playResult.catch(() => {});
-        }
-      }
-      // The browser's own "Stop sharing" control ends the track directly --
-      // this is the only way to know that happened without polling.
-      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
-        screenShareStreamRef.current = null;
-        setScreenShareActive(false);
-      });
-      setScreenShareActive(true);
-    } catch {
-      setScreenShareError("Gagal mulai screen share. Coba lagi atau izinin akses share screen di browser.");
-    }
-  }
-
   async function refreshMessages() {
     const { data } = await supabase
       .from("assistant_messages")
@@ -500,23 +385,9 @@ export default function AsistenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Voice turns are handled entirely inside useVoiceAssistant (its own
-  // record -> transcribe -> chat -> speak loop) rather than through
-  // sendMessage(), so this page's own message list doesn't get the usual
-  // optimistic update -- it only learns a turn happened via `lastReply`.
-  // runAssistantChat persists both sides of that turn via next/server's
-  // after() *after* the response is already sent, so there's an inherent
-  // small lag before a fresh fetch here is guaranteed to see it.
-  useEffect(() => {
-    if (!voiceLastReply) return;
-    const timeout = setTimeout(refreshMessages, 700);
-    return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceLastReply]);
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending, voicePhase]);
+  }, [messages, sending]);
 
   async function sendMessage(text: string) {
     if (!text || sending) return;
@@ -540,15 +411,12 @@ export default function AsistenPage() {
     let started = false;
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    // Grabbed fresh per message (not once when sharing starts) so Aslan
-    // always sees whatever's on screen right now, not a stale first frame.
-    const image = screenShareActive ? captureScreenFrame() : undefined;
 
     try {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, mode, image }),
+        body: JSON.stringify({ message: text, mode }),
         signal: controller.signal,
       });
 
@@ -652,62 +520,8 @@ export default function AsistenPage() {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {screenShareSupported && (
-              <ToolbarIconButton
-                icon="🖥️"
-                label={screenShareActive ? "Matiin screen share" : "Share screen ke Aslan"}
-                active={screenShareActive}
-                onClick={toggleScreenShare}
-              />
-            )}
-            <ToolbarIconButton
-              icon="🧰"
-              label="Tools & Integrasi"
-              active={settingsOpen}
-              onClick={() => setSettingsOpen((o) => !o)}
-            />
-            {handsFreeSupported && (
-              <ToolbarIconButton
-                icon="👂"
-                label={handsFreeMode ? "Matiin mode hands-free" : "Nyalain mode hands-free (panggil 'Aslan')"}
-                active={handsFreeMode}
-                onClick={toggleHandsFree}
-              />
-            )}
-            {voiceSupported && (
-              <ToolbarIconButton
-                icon="🎤"
-                label={voiceActive ? "Stop mode suara" : "Mode suara"}
-                active={voiceActive}
-                onClick={toggleVoice}
-              />
-            )}
-          </div>
         </div>
       </header>
-
-      {/* Hidden -- only used as a frame source for screen-share snapshots,
-          never shown to the user directly. */}
-      <video ref={screenVideoRef} className="hidden" muted playsInline />
-
-      {voicePhase === "wake-listening" && (
-        <p className="text-xs font-mono text-cyan-glow flex items-center gap-1.5 -mt-3">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow animate-pulse" />
-          Mode hands-free aktif — bilang &quot;Aslan&quot; buat mulai ngobrol.
-        </p>
-      )}
-
-      {screenShareActive && (
-        <p className="text-xs font-mono text-cyan-glow flex items-center gap-1.5 -mt-3">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow animate-pulse" />
-          Screen share aktif — Aslan liat snapshot layar kamu tiap kamu kirim pesan (pake Claude, walau mode teks lagi
-          di provider lain).
-        </p>
-      )}
-      {screenShareError && (
-        <p className="text-xs font-mono text-rose-glow -mt-3">{screenShareError}</p>
-      )}
 
       <StatusAslan
         gmailConnected={!!gmailEmail}
@@ -771,8 +585,6 @@ export default function AsistenPage() {
           </p>
         )}
 
-        <audio ref={voiceAudioRef} className="hidden" />
-
         {sending && (
           <div className="flex justify-center mt-3">
             <button
@@ -786,39 +598,19 @@ export default function AsistenPage() {
           </div>
         )}
 
-        {voiceActive ? (
-          <div className="flex flex-col items-center gap-2 mt-4 pt-4 border-t border-line">
-            <button
-              type="button"
-              onClick={toggleVoice}
-              aria-label="Hentikan mode suara"
-              className={`w-16 h-16 rounded-full border-2 flex items-center justify-center text-2xl transition-colors bg-panel2 ${VOICE_PHASE_STYLE[voicePhase].border} ${VOICE_PHASE_STYLE[voicePhase].text} ${voicePhase === "listening" || voicePhase === "speaking" ? "animate-pulse" : ""}`}
-            >
-              🎤
-            </button>
-            <p
-              className={`text-xs font-mono uppercase tracking-wider flex items-center gap-1.5 ${VOICE_PHASE_STYLE[voicePhase].text}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${VOICE_PHASE_STYLE[voicePhase].dot}`} />
-              {VOICE_PHASE_STYLE[voicePhase].label}
-            </p>
-            {voiceError && <p className="text-xs text-rose-glow">{voiceError}</p>}
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="flex gap-2 mt-4 pt-4 border-t border-line">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Tanya atau minta dicatetin sesuatu..."
-              className={inputClass}
-              disabled={sending}
-            />
-            <button type="submit" disabled={sending || !input.trim()} className={primaryBtnClass}>
-              Kirim
-            </button>
-          </form>
-        )}
+        <form onSubmit={handleSubmit} className="flex gap-2 mt-4 pt-4 border-t border-line">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Tanya atau minta dicatetin sesuatu..."
+            className={inputClass}
+            disabled={sending}
+          />
+          <button type="submit" disabled={sending || !input.trim()} className={primaryBtnClass}>
+            Kirim
+          </button>
+        </form>
       </HudPanel>
 
       <div>

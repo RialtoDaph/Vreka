@@ -8,6 +8,7 @@ import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssi
 import { THEME } from "@/lib/theme";
 import { getAslanMode } from "@/lib/assistant/modes";
 import SignOutButton from "@/components/SignOutButton";
+import ToolbarIconButton from "@/components/asisten/ToolbarIconButton";
 
 export type MemoryMapVitals = {
   memoryCount: number;
@@ -104,8 +105,78 @@ export default function MemoryMap({ data, vitals }: Props) {
   const [insightError, setInsightError] = useState<string | null>(null);
   const [insightDismissed, setInsightDismissed] = useState(false);
 
-  const { phase: voicePhase, toggle: toggleVoice, audioRef, mode: voiceMode, lastReply } =
-    useVoiceAssistant();
+  const [screenShareSupported, setScreenShareSupported] = useState(false);
+  const [screenShareActive, setScreenShareActive] = useState(false);
+  const [screenShareError, setScreenShareError] = useState<string | null>(null);
+  const screenShareStreamRef = useRef<MediaStream | null>(null);
+  const screenVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    setScreenShareSupported(!!navigator.mediaDevices?.getDisplayMedia);
+    return () => {
+      screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  function captureScreenFrame(): string | undefined {
+    const video = screenVideoRef.current;
+    if (!video || video.readyState < 2 || !video.videoWidth) return undefined;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return undefined;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  }
+
+  async function toggleScreenShare() {
+    if (screenShareActive) {
+      screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
+      screenShareStreamRef.current = null;
+      setScreenShareActive(false);
+      return;
+    }
+    setScreenShareError(null);
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenShareStreamRef.current = stream;
+      if (screenVideoRef.current) {
+        screenVideoRef.current.srcObject = stream;
+        // play() isn't reliably promise-returning across environments (e.g.
+        // jsdom in tests returns undefined instead of a Promise), so guard
+        // before chaining .catch() onto it.
+        const playResult = screenVideoRef.current.play();
+        if (playResult && typeof playResult.then === "function") {
+          await playResult.catch(() => {});
+        }
+      }
+      // The browser's own "Stop sharing" control ends the track directly --
+      // this is the only way to know that happened without polling.
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+        screenShareStreamRef.current = null;
+        setScreenShareActive(false);
+      });
+      setScreenShareActive(true);
+    } catch {
+      setScreenShareError("Gagal mulai screen share. Coba lagi atau izinin akses share screen di browser.");
+    }
+  }
+
+  const {
+    supported: voiceSupported,
+    phase: voicePhase,
+    errorMsg: voiceError,
+    toggle: toggleVoice,
+    audioRef,
+    mode: voiceMode,
+    lastReply,
+    handsFreeSupported,
+    handsFreeMode,
+    toggleHandsFree,
+  } = useVoiceAssistant({
+    getScreenshot: () => (screenShareActive ? captureScreenFrame() : undefined),
+  });
   const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
   const voiceBusy = voicePhase !== "idle" && voicePhase !== "wake-listening" && voicePhase !== "error";
   const activeAslanMode = getAslanMode(voiceMode);
@@ -1073,6 +1144,53 @@ export default function MemoryMap({ data, vitals }: Props) {
         </div>
       )}
 
+      {!focusMode && (
+        <div className="absolute z-[2] bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5">
+          <div className="flex items-center gap-2 bg-panel/85 border border-line rounded-full p-1.5 backdrop-blur-sm">
+            {screenShareSupported && (
+              <ToolbarIconButton
+                icon="🖥️"
+                label={screenShareActive ? "Matiin screen share" : "Share screen ke Aslan"}
+                active={screenShareActive}
+                onClick={toggleScreenShare}
+              />
+            )}
+            <ToolbarIconButton
+              icon="🧰"
+              label="Tools & Integrasi"
+              onClick={() => setNavOverlay("/dashboard/asisten")}
+            />
+            {handsFreeSupported && (
+              <ToolbarIconButton
+                icon="👂"
+                label={handsFreeMode ? "Matiin mode hands-free" : "Nyalain mode hands-free (panggil 'Aslan')"}
+                active={handsFreeMode}
+                onClick={toggleHandsFree}
+              />
+            )}
+            {voiceSupported && (
+              <ToolbarIconButton
+                icon="🎤"
+                label={voiceBusy ? "Stop mode suara" : "Mode suara"}
+                active={voiceBusy}
+                onClick={toggleVoice}
+              />
+            )}
+          </div>
+          {screenShareActive && (
+            <p className="text-[9.5px] font-mono text-cyan-glow flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow animate-pulse" />
+              Screen share aktif — Aslan liat snapshot layar kamu tiap ngobrol.
+            </p>
+          )}
+          {screenShareError && <p className="text-[9.5px] font-mono text-rose-glow">{screenShareError}</p>}
+          {voiceError && <p className="text-[9.5px] font-mono text-rose-glow">{voiceError}</p>}
+        </div>
+      )}
+
+      {/* Hidden -- only used as a frame source for screen-share snapshots,
+          never shown to the user directly. */}
+      <video ref={screenVideoRef} className="hidden" muted playsInline />
       <audio ref={audioRef} className="hidden" />
     </div>
   );
