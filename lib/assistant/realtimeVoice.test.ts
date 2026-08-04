@@ -162,4 +162,31 @@ describe("startRealtimeSession", () => {
 
     expect(onUserTranscript).toHaveBeenCalledWith("halo");
   });
+
+  // Regression: the model's spoken reply connected successfully but never
+  // actually played, since setting `srcObject` alone doesn't auto-play in
+  // browsers -- reported as "aku ngomong tapi gak ada respon" in production.
+  it("plays the remote audio stream once a track arrives", async () => {
+    const { pc } = mockPeerConnection();
+    mockMic();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/assistant/realtime-session") {
+          return Promise.resolve({ ok: true, json: async () => ({ clientSecret: "ek_test" }) });
+        }
+        return Promise.resolve({ ok: true, text: async () => "answer-sdp" });
+      })
+    );
+
+    const audioEl = document.createElement("audio");
+    const playSpy = vi.spyOn(audioEl, "play").mockResolvedValue(undefined);
+    await startRealtimeSession(audioEl, {});
+
+    const fakeStream = {} as MediaStream;
+    pc.ontrack?.({ streams: [fakeStream] });
+
+    expect(audioEl.srcObject).toBe(fakeStream);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
 });

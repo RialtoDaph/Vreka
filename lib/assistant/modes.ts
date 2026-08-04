@@ -46,7 +46,7 @@ export const ASLAN_MODES: readonly AslanMode[] = [
     persona:
       "Mode SANTAI lagi aktif: gaya ngobrol kamu santai, ramah, bahasa kasual sehari-hari -- kayak lagi ngobrol sama temen deket. Jangan kaku atau kelewat formal.",
     primaryProvider: "openai",
-    primaryModel: "gpt-5.6-sol",
+    primaryModel: "gpt-5.6-luna",
     voiceEngine: "realtime",
     secondaryProvider: "gemini",
     secondaryModel: "gemini-3.6-flash",

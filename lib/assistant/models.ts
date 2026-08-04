@@ -8,7 +8,7 @@ export const ASSISTANT_MODELS = [
   { id: "claude-haiku-4-5", label: "Haiku 4.5", tagline: "Paling cepat & hemat", provider: "anthropic" },
   { id: "claude-sonnet-5", label: "Sonnet 5", tagline: "Seimbang (rekomendasi)", provider: "anthropic" },
   { id: "claude-opus-5", label: "Opus 5", tagline: "Paling pintar, paling mahal", provider: "anthropic" },
-  { id: "gpt-5.6-sol", label: "GPT 5.6 Sol", tagline: "OpenAI — mode obrolan aja, tanpa tools Vreka", provider: "openai" },
+  { id: "gpt-5.6-luna", label: "GPT 5.6 Luna", tagline: "OpenAI — cepat & hemat, mode obrolan aja, tanpa tools Vreka", provider: "openai" },
   { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash", tagline: "Google — mode obrolan aja, tanpa tools Vreka", provider: "gemini" },
   { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", tagline: "Google — reasoning terdalam, tanpa tools Vreka", provider: "gemini" },
   { id: "grok-4.5", label: "Grok 4.5", tagline: "xAI — mode obrolan aja, tanpa tools Vreka", provider: "grok" },

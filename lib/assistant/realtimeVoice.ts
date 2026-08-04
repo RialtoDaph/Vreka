@@ -79,6 +79,10 @@ export async function startRealtimeSession(
 
   pc.ontrack = (event) => {
     audioEl.srcObject = event.streams[0] ?? null;
+    // Browsers don't auto-play a freshly attached stream just because
+    // srcObject changed -- without this, the connection succeeds silently
+    // and the model's spoken reply never actually plays.
+    audioEl.play().catch(() => {});
   };
 
   const dc = pc.createDataChannel("oai-events");
