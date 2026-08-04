@@ -82,7 +82,7 @@ export default async function OverviewPage() {
     }
   }
 
-  const voiceEnabled = !!process.env.ELEVENLABS_API_KEY;
+  const voiceEnabled = !!process.env.OPENAI_API_KEY;
 
   const memoryMapData = buildMemoryMapData({
     tasks: (tasks ?? []) as Task[],
