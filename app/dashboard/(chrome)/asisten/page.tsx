@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
-import { ASSISTANT_MODELS, DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
+import type { AssistantProvider } from "@/lib/assistant/models";
+import { ASLAN_MODES, getAslanMode, type AslanMode } from "@/lib/assistant/modes";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
@@ -12,8 +13,6 @@ import PushNotifications from "@/components/asisten/PushNotifications";
 import StatusAslan from "@/components/asisten/StatusAslan";
 import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
-
-const MODEL_STORAGE_KEY = "vreka-assistant-model";
 
 // Long assistant replies used to render as one continuously-growing bubble
 // -- split into roughly-this-many-characters-per-page chunks (on paragraph
@@ -107,11 +106,128 @@ function AssistantReplyCard({ content }: { content: string }) {
 
 const VOICE_PHASE_STYLE: Record<VoicePhase, { label: string; text: string; dot: string; border: string }> = {
   idle: { label: "Online", text: "text-cyan-glow", dot: "bg-cyan-glow", border: "border-cyan-glow/50" },
+  "wake-listening": { label: "Nunggu 'Aslan'...", text: "text-cyan-glow", dot: "bg-cyan-glow", border: "border-cyan-glow/50" },
   listening: { label: "Lagi dengerin...", text: "text-mint-glow", dot: "bg-mint-glow", border: "border-mint-glow/50" },
   processing: { label: "Mikir...", text: "text-amber-glow", dot: "bg-amber-glow", border: "border-amber-glow/50" },
   speaking: { label: "Ngomong...", text: "text-mint-glow", dot: "bg-mint-glow", border: "border-mint-glow/50" },
   error: { label: "Error", text: "text-rose-glow", dot: "bg-rose-glow", border: "border-rose-glow/50" },
 };
+
+// One button in the 5-icon toolbar (real-time mode / screen share / tools /
+// hands-free / voice) -- icon-only with an aria-label since there's no room
+// for text labels at this size.
+function ToolbarIconButton({
+  icon,
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={`w-10 h-10 rounded-full border flex items-center justify-center text-base transition-colors shrink-0 ${
+        active
+          ? "border-cyan-glow bg-cyan-glow/10 text-cyan-glow shadow-glow"
+          : disabled
+            ? "border-line/50 text-slate-700 cursor-not-allowed"
+            : "border-line text-slate-400 hover:text-slate-200 hover:border-cyan-glow/40"
+      }`}
+    >
+      {icon}
+    </button>
+  );
+}
+
+// One of the 4 mode buttons (Santai/Fokus/Intel/Ultra) that pick Aslan's
+// brain + persona + color together -- replaces the old plain model dropdown.
+function ModeButton({
+  mode,
+  active,
+  disabled,
+  onClick,
+}: {
+  mode: AslanMode;
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={disabled ? `${mode.label} — key server belum di-set` : mode.tagline}
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors shrink-0 ${
+        active
+          ? "shadow-glow"
+          : disabled
+            ? "border-line/50 text-slate-700 cursor-not-allowed"
+            : "border-line text-slate-400 hover:text-slate-200"
+      }`}
+      style={active ? { borderColor: mode.colorHex, backgroundColor: `${mode.colorHex}1a`, color: mode.colorHex } : undefined}
+    >
+      <span aria-hidden="true">{mode.emoji}</span>
+      <span>{mode.label}</span>
+    </button>
+  );
+}
+
+// A LINK/UNLINK integration card in the AI Core panel's integrations grid.
+function IntegrationCard({
+  title,
+  status,
+  detail,
+  action,
+}: {
+  title: string;
+  status: "connected" | "disconnected" | "info";
+  detail: string;
+  action?: React.ReactNode;
+}) {
+  const dot = status === "connected" ? "bg-mint-glow" : status === "disconnected" ? "bg-slate-600" : "bg-cyan-glow";
+  return (
+    <div className="border border-line rounded-sm p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 flex items-center gap-1.5 min-w-0">
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+          <span className="truncate">{title}</span>
+        </p>
+        {status !== "info" && (
+          <span
+            className={`text-[9px] font-mono uppercase tracking-wider shrink-0 ${
+              status === "connected" ? "text-mint-glow" : "text-slate-600"
+            }`}
+          >
+            {status === "connected" ? "LINKED" : "UNLINKED"}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-slate-300 truncate">{detail}</p>
+      {action}
+    </div>
+  );
+}
+
+function StatCell({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="border border-line rounded-sm px-3 py-2.5">
+      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1">{label}</p>
+      <p className="font-display text-lg text-white">{value}</p>
+    </div>
+  );
+}
 
 export default function AsistenPage() {
   const supabase = createClient();
@@ -121,7 +237,6 @@ export default function AsistenPage() {
   const [sending, setSending] = useState(false);
   const [awaitingFirstChunk, setAwaitingFirstChunk] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -132,8 +247,17 @@ export default function AsistenPage() {
     toggle: toggleVoice,
     audioRef: voiceAudioRef,
     lastReply: voiceLastReply,
+    handsFreeSupported,
+    handsFreeMode,
+    toggleHandsFree,
+    mode,
+    setMode,
   } = useVoiceAssistant();
-  const voiceActive = voicePhase !== "idle";
+  const activeMode = getAslanMode(mode);
+  // wake-listening is a passive background state (no mic recording, no
+  // server round-trips yet) -- it shouldn't take over the page the way an
+  // actual conversation does, so it's excluded from "voice call in progress".
+  const voiceActive = voicePhase !== "idle" && voicePhase !== "wake-listening";
 
   const [gmailEmail, setGmailEmail] = useState<string | null>(null);
   const [gmailLoading, setGmailLoading] = useState(true);
@@ -148,10 +272,65 @@ export default function AsistenPage() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  useEffect(() => {
-    const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
-    if (isValidAssistantModel(saved)) setModel(saved);
+  // Which providers have a server-side API key configured -- null while
+  // loading. Kept "fail open" (null = don't disable anything yet) so a slow
+  // or failed status check never blocks picking a model.
+  const [providerStatus, setProviderStatus] = useState<Record<AssistantProvider, boolean> | null>(null);
 
+  useEffect(() => {
+    async function loadProviderStatus() {
+      try {
+        const res = await fetch("/api/assistant/providers");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.configured) setProviderStatus(data.configured);
+      } catch {
+        // stays null -- dropdown just shows every option enabled
+      }
+    }
+    loadProviderStatus();
+  }, []);
+
+  const [screenShareSupported, setScreenShareSupported] = useState(false);
+  const [screenShareActive, setScreenShareActive] = useState(false);
+  const [screenShareError, setScreenShareError] = useState<string | null>(null);
+  const screenShareStreamRef = useRef<MediaStream | null>(null);
+  const screenVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    setScreenShareSupported(!!navigator.mediaDevices?.getDisplayMedia);
+    return () => {
+      screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  // Real counts only, same rule as StatusAslan's header pill -- no fabricated
+  // latency/uptime numbers in the AI Core stat grid.
+  const [memoryCount, setMemoryCount] = useState<number | null>(null);
+  const [actionsToday, setActionsToday] = useState<number | null>(null);
+  const [totalMessages, setTotalMessages] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function loadAiCoreStats() {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const [{ count: memCount }, { count: actionCount }, { count: msgCount }] = await Promise.all([
+        supabase.from("assistant_memories").select("*", { count: "exact", head: true }),
+        supabase
+          .from("assistant_audit_log")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", todayStart.toISOString()),
+        supabase.from("assistant_messages").select("*", { count: "exact", head: true }),
+      ]);
+      setMemoryCount(memCount ?? 0);
+      setActionsToday(actionCount ?? 0);
+      setTotalMessages(msgCount ?? 0);
+    }
+    loadAiCoreStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const gmailError = params.get("gmail_error");
     const gmailConnected = params.get("gmail");
@@ -256,10 +435,49 @@ export default function AsistenPage() {
     setTelegramDeepLink(null);
   }
 
-  function handleModelChange(value: string) {
-    if (!isValidAssistantModel(value)) return;
-    setModel(value);
-    window.localStorage.setItem(MODEL_STORAGE_KEY, value);
+  function captureScreenFrame(): string | undefined {
+    const video = screenVideoRef.current;
+    if (!video || video.readyState < 2 || !video.videoWidth) return undefined;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return undefined;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  }
+
+  async function toggleScreenShare() {
+    if (screenShareActive) {
+      screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
+      screenShareStreamRef.current = null;
+      setScreenShareActive(false);
+      return;
+    }
+    setScreenShareError(null);
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenShareStreamRef.current = stream;
+      if (screenVideoRef.current) {
+        screenVideoRef.current.srcObject = stream;
+        // play() isn't reliably promise-returning across environments (e.g.
+        // jsdom in tests returns undefined instead of a Promise), so guard
+        // before chaining .catch() onto it.
+        const playResult = screenVideoRef.current.play();
+        if (playResult && typeof playResult.then === "function") {
+          await playResult.catch(() => {});
+        }
+      }
+      // The browser's own "Stop sharing" control ends the track directly --
+      // this is the only way to know that happened without polling.
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+        screenShareStreamRef.current = null;
+        setScreenShareActive(false);
+      });
+      setScreenShareActive(true);
+    } catch {
+      setScreenShareError("Gagal mulai screen share. Coba lagi atau izinin akses share screen di browser.");
+    }
   }
 
   async function refreshMessages() {
@@ -322,12 +540,15 @@ export default function AsistenPage() {
     let started = false;
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    // Grabbed fresh per message (not once when sharing starts) so Aslan
+    // always sees whatever's on screen right now, not a stale first frame.
+    const image = screenShareActive ? captureScreenFrame() : undefined;
 
     try {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, model }),
+        body: JSON.stringify({ message: text, mode, image }),
         signal: controller.signal,
       });
 
@@ -391,6 +612,10 @@ export default function AsistenPage() {
     await sendMessage(text);
   }
 
+  // Same 4-system count StatusAslan's header pill uses: Aslan itself always
+  // counts, plus the three actually-optional integrations.
+  const connectedCount = [true, !!gmailEmail, telegramLinked, voiceSupported].filter(Boolean).length;
+
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] overflow-y-auto">
       <header className="flex items-end justify-between gap-3 flex-wrap">
@@ -398,7 +623,8 @@ export default function AsistenPage() {
           <img
             src="/aslan.png"
             alt=""
-            className="w-11 h-11 rounded-full border border-cyan-glow/40 shadow-glow"
+            className="w-11 h-11 rounded-full border-2 shadow-glow"
+            style={{ borderColor: activeMode.colorHex }}
           />
           <div>
             <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
@@ -410,33 +636,78 @@ export default function AsistenPage() {
           </div>
         </div>
         <div className="flex items-end gap-3 flex-wrap">
-          {voiceSupported && (
-            <button
-              type="button"
-              onClick={toggleVoice}
-              className={voiceActive ? primaryBtnClass : ghostBtnClass}
-            >
-              {voiceActive ? "⏹ Stop Mode Suara" : "🎤 Mode Suara"}
-            </button>
-          )}
           <div>
             <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
-              Model
+              Mode
             </label>
-            <select
-              value={model}
-              onChange={(e) => handleModelChange(e.target.value)}
-              className="bg-panel2 border border-line rounded-sm px-3 py-2 text-sm text-white focus:border-cyan-glow/60 transition-colors"
-            >
-              {ASSISTANT_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} — {m.tagline}
-                </option>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {ASLAN_MODES.map((m) => (
+                <ModeButton
+                  key={m.id}
+                  mode={m}
+                  active={mode === m.id}
+                  disabled={providerStatus ? !providerStatus[m.primaryProvider] : false}
+                  onClick={() => setMode(m.id)}
+                />
               ))}
-            </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {screenShareSupported && (
+              <ToolbarIconButton
+                icon="🖥️"
+                label={screenShareActive ? "Matiin screen share" : "Share screen ke Aslan"}
+                active={screenShareActive}
+                onClick={toggleScreenShare}
+              />
+            )}
+            <ToolbarIconButton
+              icon="🧰"
+              label="Tools & Integrasi"
+              active={settingsOpen}
+              onClick={() => setSettingsOpen((o) => !o)}
+            />
+            {handsFreeSupported && (
+              <ToolbarIconButton
+                icon="👂"
+                label={handsFreeMode ? "Matiin mode hands-free" : "Nyalain mode hands-free (panggil 'Aslan')"}
+                active={handsFreeMode}
+                onClick={toggleHandsFree}
+              />
+            )}
+            {voiceSupported && (
+              <ToolbarIconButton
+                icon="🎤"
+                label={voiceActive ? "Stop mode suara" : "Mode suara"}
+                active={voiceActive}
+                onClick={toggleVoice}
+              />
+            )}
           </div>
         </div>
       </header>
+
+      {/* Hidden -- only used as a frame source for screen-share snapshots,
+          never shown to the user directly. */}
+      <video ref={screenVideoRef} className="hidden" muted playsInline />
+
+      {voicePhase === "wake-listening" && (
+        <p className="text-xs font-mono text-cyan-glow flex items-center gap-1.5 -mt-3">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow animate-pulse" />
+          Mode hands-free aktif — bilang &quot;Aslan&quot; buat mulai ngobrol.
+        </p>
+      )}
+
+      {screenShareActive && (
+        <p className="text-xs font-mono text-cyan-glow flex items-center gap-1.5 -mt-3">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow animate-pulse" />
+          Screen share aktif — Aslan liat snapshot layar kamu tiap kamu kirim pesan (pake Claude, walau mode teks lagi
+          di provider lain).
+        </p>
+      )}
+      {screenShareError && (
+        <p className="text-xs font-mono text-rose-glow -mt-3">{screenShareError}</p>
+      )}
 
       <StatusAslan
         gmailConnected={!!gmailEmail}
@@ -555,85 +826,111 @@ export default function AsistenPage() {
           onClick={() => setSettingsOpen((o) => !o)}
           className="text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-300"
         >
-          {settingsOpen ? "▾" : "▸"} Pengaturan & Integrasi
+          {settingsOpen ? "▾" : "▸"} AI Core
         </button>
         {settingsOpen && (
           <HudPanel className="text-sm mt-2">
-            <div className="divide-y divide-line/60">
-              <div className="py-3 first:pt-0">
-                {gmailNotice && (
-                  <p className="text-xs font-mono text-cyan-glow mb-2">{gmailNotice}</p>
-                )}
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
-                      Gmail & Google Calendar
-                    </p>
-                    <p className="text-slate-300 truncate">
-                      {gmailLoading
-                        ? "Memuat..."
-                        : gmailEmail
-                          ? `Terhubung: ${gmailEmail}`
-                          : "Belum terhubung — Aslan belum bisa cek/bales email atau baca/bikin event Calendar kamu."}
-                    </p>
-                  </div>
-                  {!gmailLoading &&
-                    (gmailEmail ? (
-                      <button onClick={handleDisconnectGmail} className={ghostBtnClass}>
-                        Disconnect
-                      </button>
-                    ) : (
-                      <a href="/api/google/oauth/start" className={primaryBtnClass}>
-                        Connect Gmail & Calendar
-                      </a>
-                    ))}
-                </div>
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-4 pb-4 border-b border-line/60">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-mint-glow animate-pulse" aria-hidden="true" />
+                <p className="font-mono text-xs uppercase tracking-[0.25em] text-cyan-glow">AI Core</p>
               </div>
+              <p className="text-[10px] font-mono text-slate-500">Status sistem Aslan &amp; integrasi</p>
+            </div>
 
-              <div className="py-3">
-                {telegramError && (
-                  <p className="text-xs font-mono text-rose-glow mb-2">{telegramError}</p>
-                )}
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
-                      Telegram
-                    </p>
-                    <p className="text-slate-300 truncate">
-                      {telegramLoading
-                        ? "Memuat..."
-                        : telegramLinked
-                          ? `Terhubung${telegramUsername ? `: @${telegramUsername}` : ""}`
-                          : telegramDeepLink
-                            ? "Buka Telegram, tekan Start di bot-nya buat nyelesain koneksi..."
-                            : "Belum terhubung — chat Aslan langsung dari Telegram."}
-                    </p>
-                  </div>
-                  {!telegramLoading &&
-                    (telegramLinked ? (
-                      <button onClick={handleDisconnectTelegram} className={ghostBtnClass}>
-                        Disconnect
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleConnectTelegram}
-                        disabled={telegramLinking}
-                        className={primaryBtnClass}
-                      >
-                        {telegramLinking ? "Memuat..." : "Connect Telegram"}
-                      </button>
-                    ))}
-                </div>
-              </div>
+            {gmailNotice && (
+              <p className="text-xs font-mono text-cyan-glow mb-3">{gmailNotice}</p>
+            )}
 
-              <div className="py-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              <StatCell label="Terhubung" value={`${connectedCount}/4`} />
+              <StatCell label="Memori" value={memoryCount ?? "–"} />
+              <StatCell label="Aksi Hari Ini" value={actionsToday ?? "–"} />
+              <StatCell label="Total Obrolan" value={totalMessages ?? "–"} />
+            </div>
+
+            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+              Integrasi
+            </p>
+            <div className="grid sm:grid-cols-2 gap-3 mb-5">
+              <IntegrationCard
+                title="Gmail & Calendar"
+                status={gmailLoading ? "info" : gmailEmail ? "connected" : "disconnected"}
+                detail={
+                  gmailLoading
+                    ? "Memuat..."
+                    : gmailEmail
+                      ? gmailEmail
+                      : "Aslan belum bisa cek email atau kalender kamu."
+                }
+                action={
+                  !gmailLoading &&
+                  (gmailEmail ? (
+                    <button onClick={handleDisconnectGmail} className={`${ghostBtnClass} self-start`}>
+                      Unlink
+                    </button>
+                  ) : (
+                    <a href="/api/google/oauth/start" className={`${primaryBtnClass} self-start`}>
+                      Link
+                    </a>
+                  ))
+                }
+              />
+
+              <IntegrationCard
+                title="Telegram"
+                status={telegramLoading ? "info" : telegramLinked ? "connected" : "disconnected"}
+                detail={
+                  telegramLoading
+                    ? "Memuat..."
+                    : telegramLinked
+                      ? telegramUsername
+                        ? `@${telegramUsername}`
+                        : "Terhubung"
+                      : telegramDeepLink
+                        ? "Buka Telegram, tekan Start di bot-nya..."
+                        : "Chat Aslan langsung dari Telegram."
+                }
+                action={
+                  !telegramLoading &&
+                  (telegramLinked ? (
+                    <button onClick={handleDisconnectTelegram} className={`${ghostBtnClass} self-start`}>
+                      Unlink
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleConnectTelegram}
+                      disabled={telegramLinking}
+                      className={`${primaryBtnClass} self-start`}
+                    >
+                      {telegramLinking ? "Memuat..." : "Link"}
+                    </button>
+                  ))
+                }
+              />
+              {telegramError && (
+                <p className="text-xs font-mono text-rose-glow sm:col-span-2 -mt-2">{telegramError}</p>
+              )}
+
+              <div className="border border-line rounded-sm p-3">
                 <PushNotifications />
               </div>
 
-              <div className="py-3">
+              <IntegrationCard
+                title="Voice (TTS/STT)"
+                status="info"
+                detail={
+                  voiceSupported
+                    ? "Browser ini dukung mode suara & hands-free."
+                    : "Browser ini belum dukung mode suara."
+                }
+              />
+            </div>
+
+            <div className="divide-y divide-line/60">
+              <div className="py-3 first:pt-0">
                 <DataExport />
               </div>
-
               <div className="py-3 last:pb-0">
                 <TwoFactorAuth />
               </div>

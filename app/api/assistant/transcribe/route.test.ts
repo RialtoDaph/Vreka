@@ -9,12 +9,20 @@ function mockAuth(user: { id: string } | null) {
   }));
 }
 
-function mockElevenLabs(convert: ReturnType<typeof vi.fn> | null) {
-  vi.doMock("@/lib/assistant/voice", () => ({
-    getElevenLabsClient: () =>
-      convert ? { speechToText: { convert } } : null,
-    STT_MODEL_ID: "scribe_v1",
-  }));
+function mockOpenAiTranscribe(response: { ok: boolean; status?: number; json?: unknown; text?: string } | null) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      response === null
+        ? Promise.reject(new Error("should not be called"))
+        : {
+            ok: response.ok,
+            status: response.status ?? (response.ok ? 200 : 500),
+            json: async () => response.json,
+            text: async () => response.text ?? "",
+          }
+    )
+  );
 }
 
 function makeRequest(fields: Record<string, string | Blob | undefined>) {
@@ -33,7 +41,7 @@ function fakeAudio(): Blob {
 }
 
 beforeEach(() => {
-  vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
+  vi.stubEnv("OPENAI_API_KEY", "test-key");
 });
 
 afterEach(() => {
@@ -45,7 +53,6 @@ afterEach(() => {
 describe("POST /api/assistant/transcribe", () => {
   it("rejects unauthenticated requests", async () => {
     mockAuth(null);
-    mockElevenLabs(vi.fn());
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ audio: fakeAudio() }));
     expect(res.status).toBe(401);
@@ -53,28 +60,23 @@ describe("POST /api/assistant/transcribe", () => {
 
   it("rejects a request with no audio", async () => {
     mockAuth({ id: "user-1" });
-    mockElevenLabs(vi.fn());
     const { POST } = await import("./route");
     const res = await POST(makeRequest({}));
     expect(res.status).toBe(400);
   });
 
-  it("returns the transcript when language-detection confidence is high", async () => {
+  it("returns the transcript from OpenAI's transcription endpoint", async () => {
     mockAuth({ id: "user-1" });
-    mockElevenLabs(
-      vi.fn().mockResolvedValue({ text: "catet pengeluaran 50rb", languageProbability: 0.92 })
-    );
+    mockOpenAiTranscribe({ ok: true, json: { text: "catet pengeluaran 50rb" } });
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ audio: fakeAudio() }));
     const body = await res.json();
     expect(body.text).toBe("catet pengeluaran 50rb");
   });
 
-  it("treats a low-confidence transcript as silence instead of relaying it", async () => {
+  it("treats a known hallucinated silence phrase as no speech", async () => {
     mockAuth({ id: "user-1" });
-    mockElevenLabs(
-      vi.fn().mockResolvedValue({ text: "terima kasih", languageProbability: 0.12 })
-    );
+    mockOpenAiTranscribe({ ok: true, json: { text: "Thank you for watching!" } });
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ audio: fakeAudio() }));
     const body = await res.json();
@@ -83,16 +85,24 @@ describe("POST /api/assistant/transcribe", () => {
 
   it("returns empty text for a response shape with no text field", async () => {
     mockAuth({ id: "user-1" });
-    mockElevenLabs(vi.fn().mockResolvedValue({ transcripts: [] }));
+    mockOpenAiTranscribe({ ok: true, json: {} });
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ audio: fakeAudio() }));
     const body = await res.json();
     expect(body.text).toBe("");
   });
 
-  it("returns 500 when ELEVENLABS_API_KEY is missing", async () => {
+  it("returns 500 when the upstream transcription request fails", async () => {
     mockAuth({ id: "user-1" });
-    mockElevenLabs(null);
+    mockOpenAiTranscribe({ ok: false, status: 502, text: "upstream error" });
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ audio: fakeAudio() }));
+    expect(res.status).toBe(500);
+  });
+
+  it("returns 500 when OPENAI_API_KEY is missing", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    mockAuth({ id: "user-1" });
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ audio: fakeAudio() }));
     expect(res.status).toBe(500);

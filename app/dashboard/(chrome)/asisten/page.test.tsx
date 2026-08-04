@@ -15,6 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
   vi.unstubAllGlobals();
+  Object.defineProperty(navigator, "mediaDevices", { value: undefined, configurable: true });
 });
 
 // These each do their own Supabase/fetch calls on mount -- stubbed out so
@@ -32,9 +33,11 @@ function chainable(data: unknown[] = []) {
     limit: () => obj,
     not: () => obj,
     eq: () => obj,
+    gte: () => obj,
     delete: () => obj,
     maybeSingle: () => Promise.resolve({ data: data[0] ?? null, error: null }),
-    then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve),
+    then: (resolve: (v: unknown) => unknown) =>
+      Promise.resolve({ data, error: null, count: data.length }).then(resolve),
   };
   return obj;
 }
@@ -47,6 +50,8 @@ function mockSupabase(messages: unknown[] = []) {
         if (table === "assistant_messages") return chainable(messages);
         if (table === "google_credentials") return chainable([]);
         if (table === "telegram_links") return chainable([]);
+        if (table === "assistant_memories") return chainable([]);
+        if (table === "assistant_audit_log") return chainable([]);
         throw new Error(`unexpected table: ${table}`);
       },
     }),
@@ -59,9 +64,25 @@ type VoiceMock = {
   errorMsg?: string | null;
   lastReply?: string | null;
   toggle?: () => void;
+  handsFreeSupported?: boolean;
+  handsFreeMode?: boolean;
+  toggleHandsFree?: () => void;
+  mode?: string;
+  setMode?: (m: string) => void;
 };
 
-function mockVoice({ supported = true, phase = "idle", errorMsg = null, lastReply = null, toggle = vi.fn() }: VoiceMock = {}) {
+function mockVoice({
+  supported = true,
+  phase = "idle",
+  errorMsg = null,
+  lastReply = null,
+  toggle = vi.fn(),
+  handsFreeSupported = true,
+  handsFreeMode = false,
+  toggleHandsFree = vi.fn(),
+  mode = "intel",
+  setMode = vi.fn(),
+}: VoiceMock = {}) {
   vi.doMock("@/lib/assistant/useVoiceAssistant", () => ({
     useVoiceAssistant: () => ({
       supported,
@@ -71,10 +92,54 @@ function mockVoice({ supported = true, phase = "idle", errorMsg = null, lastRepl
       toggle,
       sendText: vi.fn(),
       audioRef: { current: null },
-      model: "claude-sonnet-5",
+      mode,
+      setMode,
+      handsFreeSupported,
+      handsFreeMode,
+      toggleHandsFree,
     }),
   }));
-  return { toggle };
+  return { toggle, toggleHandsFree, setMode };
+}
+
+// Routes fetch by URL so a test can stub /api/assistant/providers and
+// /api/assistant/chat independently without clobbering each other.
+function mockFetchRouter({
+  configured,
+  chatReply,
+  captureChatBody,
+}: {
+  configured?: Record<string, boolean>;
+  chatReply?: string;
+  captureChatBody?: (body: Record<string, unknown>) => void;
+} = {}) {
+  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    if (url === "/api/assistant/providers") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ configured: configured ?? { anthropic: true, openai: true, gemini: true, grok: true } }),
+      });
+    }
+    if (url === "/api/assistant/chat") {
+      if (init?.body) captureChatBody?.(JSON.parse(init.body as string));
+      let done = false;
+      return Promise.resolve({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: async () => {
+              if (done) return { done: true, value: undefined };
+              done = true;
+              return { done: false, value: new TextEncoder().encode(chatReply ?? "ok") };
+            },
+          }),
+        },
+      });
+    }
+    return Promise.reject(new Error(`unexpected fetch: ${url}`));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 describe("AsistenPage", () => {
@@ -132,7 +197,7 @@ describe("AsistenPage", () => {
 
     expect(await screen.findByText("Lagi dengerin...")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Tanya atau minta dicatetin sesuatu...")).not.toBeInTheDocument();
-    expect(screen.getByText("⏹ Stop Mode Suara")).toBeInTheDocument();
+    expect(screen.getByLabelText("Stop mode suara")).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("Hentikan mode suara"));
     expect(toggle).toHaveBeenCalledTimes(1);
@@ -154,7 +219,136 @@ describe("AsistenPage", () => {
     render(<AsistenPage />);
 
     await screen.findByPlaceholderText("Tanya atau minta dicatetin sesuatu...");
-    expect(screen.queryByText("🎤 Mode Suara")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Mode suara")).not.toBeInTheDocument();
+  });
+
+  it("hides the hands-free toolbar button when the browser doesn't support wake-word listening", async () => {
+    mockSupabase([]);
+    mockVoice({ handsFreeSupported: false });
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    await screen.findByPlaceholderText("Tanya atau minta dicatetin sesuatu...");
+    expect(screen.queryByLabelText(/mode hands-free/i)).not.toBeInTheDocument();
+  });
+
+  it("toggles hands-free mode from the toolbar", async () => {
+    mockSupabase([]);
+    const { toggleHandsFree } = mockVoice({ handsFreeMode: false });
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    fireEvent.click(await screen.findByLabelText(/nyalain mode hands-free/i));
+    expect(toggleHandsFree).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a passive wake-listening indicator without taking over the chat UI", async () => {
+    mockSupabase([]);
+    mockVoice({ phase: "wake-listening", handsFreeMode: true });
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    expect(await screen.findByText(/bilang.*aslan/i)).toBeInTheDocument();
+    // Unlike an active call, wake-listening keeps the text input visible.
+    expect(screen.getByPlaceholderText("Tanya atau minta dicatetin sesuatu...")).toBeInTheDocument();
+  });
+
+  it("disables mode buttons whose provider key isn't configured on the server", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter({ configured: { anthropic: true, openai: false, gemini: false, grok: false } });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    expect(await screen.findByRole("button", { name: /Santai/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Fokus/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Ultra/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Intel/ })).not.toBeDisabled();
+  });
+
+  it("does not disable any mode button while the provider status is still loading", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter();
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    expect(await screen.findByRole("button", { name: /Santai/ })).not.toBeDisabled();
+  });
+
+  it("marks the active mode's button pressed and calls setMode when a different mode is clicked", async () => {
+    mockSupabase([]);
+    const { setMode } = mockVoice({ mode: "intel" });
+    mockFetchRouter();
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    const intelButton = await screen.findByRole("button", { name: /Intel/ });
+    expect(intelButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Fokus/ })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: /Fokus/ }));
+    expect(setMode).toHaveBeenCalledWith("fokus");
+  });
+
+  it("sends the active mode (not a model id) in the chat request body", async () => {
+    mockSupabase([]);
+    mockVoice({ mode: "fokus" });
+    const captured: Record<string, unknown>[] = [];
+    mockFetchRouter({ captureChatBody: (body) => captured.push(body) });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    const input = await screen.findByPlaceholderText("Tanya atau minta dicatetin sesuatu...");
+    fireEvent.change(input, { target: { value: "cari tren terkini" } });
+    fireEvent.click(screen.getByText("Kirim"));
+
+    await screen.findByText("ok");
+    expect(captured[0]).toMatchObject({ mode: "fokus" });
+  });
+
+  it("starts and stops screen share from the toolbar, showing the active banner while sharing", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter();
+    const stop = vi.fn();
+    const addEventListener = vi.fn();
+    const getDisplayMedia = vi.fn().mockResolvedValue({
+      getTracks: () => [{ stop }],
+      getVideoTracks: () => [{ addEventListener }],
+    });
+    Object.defineProperty(navigator, "mediaDevices", { value: { getDisplayMedia }, configurable: true });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    fireEvent.click(await screen.findByLabelText("Share screen ke Aslan"));
+    expect(await screen.findByText(/Screen share aktif/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Matiin screen share"));
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Screen share aktif/)).not.toBeInTheDocument();
+  });
+
+  it("shows an error and stays inactive when the browser denies screen share", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter();
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: { getDisplayMedia: vi.fn().mockRejectedValue(new Error("NotAllowedError")) },
+      configurable: true,
+    });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    fireEvent.click(await screen.findByLabelText("Share screen ke Aslan"));
+    expect(await screen.findByText(/Gagal mulai screen share/)).toBeInTheDocument();
+    expect(screen.queryByText(/Screen share aktif/)).not.toBeInTheDocument();
   });
 
   it("renders a short assistant reply as a plain bubble with no pagination chrome", async () => {

@@ -377,7 +377,7 @@ export function buildMemoryMapData({
   hubById["h-asisten"].fields = [
     { k: "Gmail", v: gmailEmail ? `Terhubung (${gmailEmail})` : "Belum terhubung" },
     { k: "Google Calendar", v: calendarConnected ? "Terhubung" : "Belum terhubung" },
-    { k: "Voice (ElevenLabs)", v: voiceEnabled ? "Aktif" : "Nonaktif" },
+    { k: "Voice (OpenAI)", v: voiceEnabled ? "Aktif" : "Nonaktif" },
   ];
 
   // Ring-connect all hubs in sequence so the graph reads as one connected system.
