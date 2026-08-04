@@ -159,11 +159,16 @@ tambahan). Buat aktifin:
   jadwal Calendar, semua dalam satu grid
 - **Jurnal** — catatan harian freeform dengan prompt refleksi yang beda tiap
   hari, satu entry per hari
-- **Aslan** — asisten AI personal (Claude/GPT/Gemini/Grok, model bisa dipilih)
-  yang tau kondisi keuangan/kerjaan/pelajaran kamu, bisa dicatetin
-  transaksi/to-do/catatan lewat chat (tool-calling khusus mode Claude), nyimpen
-  memory jangka panjang soal kamu, punya mode telepon hands-free dengan
-  barge-in (TTS/STT lewat OpenAI) kalau `OPENAI_API_KEY` di-set, kalau
+- **Aslan** — asisten AI personal dengan 4 mode (🟢 Santai/OpenAI, 🟡
+  Fokus/Grok, 🔴 Intel/Claude, 🟣 Ultra/Gemini), tiap mode punya
+  persona + warna UI sendiri dan bisa dipindah lewat tombol atau perintah
+  suara ("ganti mode ke fokus"). Yang tau kondisi keuangan/kerjaan/pelajaran
+  kamu, bisa dicatetin transaksi/to-do/catatan lewat chat (tool-calling
+  khusus mode Intel/Claude — mode lain cuma ngobrol, plus bisa konsultasi ke
+  provider lain lewat satu tool `consult_second_opinion`), nyimpen memory
+  jangka panjang soal kamu, punya mode telepon hands-free dengan barge-in
+  (TTS/STT lewat OpenAI, dan Santai pakai OpenAI Realtime API buat
+  voice-to-voice latency rendah) kalau `OPENAI_API_KEY` di-set, kalau
   Gmail di-connect bisa cari/baca email, bikin draft balesan, liat/bikin event
   Google Calendar, plus ringkasan email belum dibaca otomatis sekali sehari,
   kalau Telegram di-connect bisa diajak chat langsung dari Telegram dan dapet
