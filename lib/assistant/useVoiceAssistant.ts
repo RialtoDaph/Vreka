@@ -42,12 +42,22 @@ const WAKE_PHRASE = "aslan";
 
 export type VoicePhase = "idle" | "wake-listening" | "listening" | "processing" | "speaking" | "error";
 
+export type UseVoiceAssistantOptions = {
+  // Called right before each turn-based chat request goes out, so a caller
+  // with an active screen-share (currently only the Memory Map) can attach
+  // a fresh snapshot to that turn. Not consulted by the Realtime engine --
+  // Santai's live voice call has no per-turn request to attach an image to.
+  getScreenshot?: () => string | undefined;
+};
+
 /**
- * Shared state machine behind talking to Aslan — used by both the bottom-bar
- * launcher and the Memory Map's radial voice dial so there's one source of
- * truth for mic/TTS/barge-in behavior instead of two competing copies.
+ * Shared state machine behind talking to Aslan — used by both the Memory
+ * Map's toolbar/radial voice dial and (indirectly) anywhere else Aslan's
+ * voice is wired up, so there's one source of truth for mic/TTS/barge-in
+ * behavior instead of competing copies.
  */
-export function useVoiceAssistant() {
+export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
+  const { getScreenshot } = options;
   const [supported, setSupported] = useState(false);
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -442,10 +452,13 @@ export function useVoiceAssistant() {
       }
 
       try {
+        // Grabbed fresh per turn (not once when sharing starts) so Aslan
+        // always sees whatever's on screen right now, not a stale frame.
+        const image = getScreenshot?.();
         const res = await fetch("/api/assistant/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, mode: modeRef.current }),
+          body: JSON.stringify({ message: text, mode: modeRef.current, image }),
         });
         const reply = res.ok ? await res.text() : "Maaf, ada masalah pas mikir.";
         if (stoppedRef.current) break;
