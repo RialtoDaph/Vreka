@@ -197,6 +197,31 @@ describe("runOpenAiCompatibleChat with a consult tool", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  // Regression: production logged a 400 from OpenAI --
+  // "Function tools with reasoning_effort are not supported for
+  // gpt-5.6-sol ... set reasoning_effort to 'none'" -- because the
+  // tools-bearing request never set it, and the model defaults to
+  // something else. Both Santai (openai) and Fokus (grok) share this code
+  // path via their consult tool, so this one bug broke both modes.
+  it("sets reasoning_effort to 'none' on the tools-bearing request so reasoning-tier models don't 400", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ choices: [{ message: { content: "ok" } }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runOpenAiCompatibleChat({
+      apiKey: "key",
+      model: "gpt-5.6-sol",
+      systemPrompt: "",
+      history: [],
+      userMessage: "halo",
+      baseUrl: "https://api.openai.com/v1",
+      consult: { toolName: "consult_second_opinion", toolDescription: "desc", run: vi.fn() },
+    });
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.reasoning_effort).toBe("none");
+    expect(body.tools).toBeDefined();
+  });
+
   it("calls the consult tool and makes a follow-up request when the model requests it", async () => {
     const fetchMock = vi
       .fn()

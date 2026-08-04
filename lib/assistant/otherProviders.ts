@@ -97,7 +97,19 @@ async function runOpenAiCompatibleChatWithConsult(
     },
   ];
 
-  const first = await postJson(`${baseUrl}/chat/completions`, apiKey, { model, messages, tools, tool_choice: "auto" });
+  // Newer reasoning-tier models (gpt-5.6-sol, and possibly grok-4.5) default
+  // to a non-"none" reasoning effort that OpenAI's /v1/chat/completions
+  // rejects outright when `tools` are also present ("Function tools with
+  // reasoning_effort are not supported ... set reasoning_effort to 'none'").
+  // Only the tools-bearing call needs this -- the follow-up call has no
+  // tools and isn't affected.
+  const first = await postJson(`${baseUrl}/chat/completions`, apiKey, {
+    model,
+    messages,
+    tools,
+    tool_choice: "auto",
+    reasoning_effort: "none",
+  });
   const firstChoice = (first.choices as Array<{ message: Record<string, unknown> }> | undefined)?.[0];
   const firstMessage = firstChoice?.message;
   if (!firstMessage) return "";
