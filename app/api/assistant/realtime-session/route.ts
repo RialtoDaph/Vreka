@@ -51,6 +51,7 @@ export async function POST() {
 
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
+      console.error(`POST /api/assistant/realtime-session gagal (${res.status}):`, detail.slice(0, 500));
       return NextResponse.json(
         { error: `Gagal bikin sesi realtime (${res.status}). ${detail.slice(0, 200)}` },
         { status: 500 }
@@ -65,6 +66,7 @@ export async function POST() {
 
     return NextResponse.json({ clientSecret, model: REALTIME_MODEL });
   } catch (error) {
+    console.error("POST /api/assistant/realtime-session gagal:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Gagal bikin sesi realtime." },
       { status: 500 }
