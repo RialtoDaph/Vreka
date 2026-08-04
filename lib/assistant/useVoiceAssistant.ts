@@ -369,7 +369,17 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       audio.src = url;
-      await audio.play().catch(() => {});
+      // A play() rejection (autoplay blocked, no supported source, ...) used
+      // to be swallowed here -- Aslan's reply would generate fine server-side
+      // and then just never make a sound, with nothing telling the user why.
+      try {
+        await audio.play();
+      } catch (err) {
+        console.error("Aslan: audio.play() ditolak browser:", err);
+        setErrorMsg(
+          "Balasan Aslan gagal diputer (browser nolak audio-nya). Coba klik lagi tombol mic-nya."
+        );
+      }
       const result = await watchForBargeIn(audio);
       URL.revokeObjectURL(url);
 
