@@ -15,6 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
   vi.unstubAllGlobals();
+  Object.defineProperty(navigator, "mediaDevices", { value: undefined, configurable: true });
 });
 
 // These each do their own Supabase/fetch calls on mount -- stubbed out so
@@ -94,6 +95,46 @@ function mockVoice({
     }),
   }));
   return { toggle, toggleHandsFree };
+}
+
+// Routes fetch by URL so a test can stub /api/assistant/providers and
+// /api/assistant/chat independently without clobbering each other.
+function mockFetchRouter({
+  configured,
+  chatReply,
+  captureChatBody,
+}: {
+  configured?: Record<string, boolean>;
+  chatReply?: string;
+  captureChatBody?: (body: Record<string, unknown>) => void;
+} = {}) {
+  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    if (url === "/api/assistant/providers") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ configured: configured ?? { anthropic: true, openai: true, gemini: true, grok: true } }),
+      });
+    }
+    if (url === "/api/assistant/chat") {
+      if (init?.body) captureChatBody?.(JSON.parse(init.body as string));
+      let done = false;
+      return Promise.resolve({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: async () => {
+              if (done) return { done: true, value: undefined };
+              done = true;
+              return { done: false, value: new TextEncoder().encode(chatReply ?? "ok") };
+            },
+          }),
+        },
+      });
+    }
+    return Promise.reject(new Error(`unexpected fetch: ${url}`));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 describe("AsistenPage", () => {
@@ -205,6 +246,89 @@ describe("AsistenPage", () => {
     expect(await screen.findByText(/bilang.*aslan/i)).toBeInTheDocument();
     // Unlike an active call, wake-listening keeps the text input visible.
     expect(screen.getByPlaceholderText("Tanya atau minta dicatetin sesuatu...")).toBeInTheDocument();
+  });
+
+  it("disables model options whose provider key isn't configured on the server", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter({ configured: { anthropic: true, openai: false, gemini: false, grok: false } });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    const gptOption = await screen.findByText(/GPT 5\.6 Sol/, { exact: false });
+    expect(gptOption.closest("option")).toBeDisabled();
+    const claudeOption = screen.getByText(/Sonnet 5/, { exact: false });
+    expect(claudeOption.closest("option")).not.toBeDisabled();
+  });
+
+  it("switches to a configured alt-provider model when the real-time toolbar icon is clicked, and back on a second click", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter({ configured: { anthropic: true, openai: true, gemini: false, grok: false } });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    const select = (await screen.findByLabelText("Model")) as HTMLSelectElement;
+    expect(select.value).toBe("claude-sonnet-5");
+
+    fireEvent.click(await screen.findByLabelText("Ganti ke mode GPT/Gemini/Grok"));
+    expect(select.value).toBe("gpt-5.6-sol");
+
+    fireEvent.click(screen.getByLabelText("Balik ke Claude"));
+    expect(select.value).toBe("claude-sonnet-5");
+  });
+
+  it("hides the real-time toggle's target entirely when no alt provider is configured, disabling the button", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter({ configured: { anthropic: true, openai: false, gemini: false, grok: false } });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    expect(await screen.findByLabelText("Ganti ke mode GPT/Gemini/Grok")).toBeDisabled();
+  });
+
+  it("starts and stops screen share from the toolbar, showing the active banner while sharing", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter();
+    const stop = vi.fn();
+    const addEventListener = vi.fn();
+    const getDisplayMedia = vi.fn().mockResolvedValue({
+      getTracks: () => [{ stop }],
+      getVideoTracks: () => [{ addEventListener }],
+    });
+    Object.defineProperty(navigator, "mediaDevices", { value: { getDisplayMedia }, configurable: true });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    fireEvent.click(await screen.findByLabelText("Share screen ke Aslan"));
+    expect(await screen.findByText(/Screen share aktif/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Matiin screen share"));
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Screen share aktif/)).not.toBeInTheDocument();
+  });
+
+  it("shows an error and stays inactive when the browser denies screen share", async () => {
+    mockSupabase([]);
+    mockVoice();
+    mockFetchRouter();
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: { getDisplayMedia: vi.fn().mockRejectedValue(new Error("NotAllowedError")) },
+      configurable: true,
+    });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    fireEvent.click(await screen.findByLabelText("Share screen ke Aslan"));
+    expect(await screen.findByText(/Gagal mulai screen share/)).toBeInTheDocument();
+    expect(screen.queryByText(/Screen share aktif/)).not.toBeInTheDocument();
   });
 
   it("renders a short assistant reply as a plain bubble with no pagination chrome", async () => {

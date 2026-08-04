@@ -3,8 +3,24 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAssistantSystemPrompt } from "@/lib/assistant/context";
 import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistant/tools";
+import { providerForModel } from "@/lib/assistant/models";
+import { runOtherProviderChat } from "@/lib/assistant/otherProviders";
 
 const MAX_TOOL_ITERATIONS = 5;
+const IMAGE_MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+
+// `image` comes in as a data URL (e.g. from a <canvas>.toDataURL() screen
+// share snapshot) -- split it back into the base64 payload + media type
+// Claude's vision API expects.
+function parseImageDataUrl(dataUrl: string): Anthropic.Base64ImageSource {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  const mediaType = match?.[1];
+  const data = match?.[2];
+  if (!data || !IMAGE_MEDIA_TYPES.includes(mediaType as (typeof IMAGE_MEDIA_TYPES)[number])) {
+    throw new Error("Format gambar screen share nggak didukung.");
+  }
+  return { type: "base64", media_type: mediaType as (typeof IMAGE_MEDIA_TYPES)[number], data };
+}
 
 // Server-side tool -- Claude executes the search itself and the result
 // lands directly in response.content, no client-side execution needed. Kept
@@ -41,13 +57,22 @@ export function modelRequestExtras(model: string) {
 // onDelta is given, text is forwarded to it as it streams in from Anthropic
 // (across every tool-loop iteration) so callers can render it live instead
 // of waiting for the whole multi-turn loop to finish.
+//
+// `model` picks Aslan's "brain" for this turn. Non-Anthropic models (GPT,
+// Gemini, Grok) skip the tool-use loop entirely and just have a plain
+// conversation -- replicating this app's tool schemas across four different
+// function-calling formats is out of scope for now, so those modes can chat
+// but can't nyatet transaksi/tugas/dst. `image` (a screen-share snapshot)
+// always goes through Claude regardless of `model` -- the caller is
+// responsible for forcing an Anthropic model when an image is attached.
 export async function runAssistantChat(
   supabase: SupabaseClient,
   userId: string,
   userMessage: string,
   model: string,
   apiKey: string,
-  onDelta?: (delta: string) => void
+  onDelta?: (delta: string) => void,
+  image?: string
 ): Promise<string> {
   const [{ data: history }, systemPrompt] = await Promise.all([
     supabase
@@ -63,16 +88,6 @@ export async function runAssistantChat(
     .slice()
     .reverse();
 
-  const anthropic = new Anthropic({ apiKey });
-
-  const messages: Anthropic.MessageParam[] = [
-    ...orderedHistory.map((m) => ({
-      role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
-      content: m.content,
-    })),
-    { role: "user", content: userMessage },
-  ];
-
   let finalText = "";
   const auditRows: Array<{
     user_id: string;
@@ -82,7 +97,53 @@ export async function runAssistantChat(
     result_summary: string;
   }> = [];
 
+  const provider = providerForModel(model);
+
+  if (provider !== "anthropic") {
+    try {
+      finalText = await runOtherProviderChat(provider, {
+        apiKey,
+        model,
+        systemPrompt,
+        history: orderedHistory.map((m) => ({
+          role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          content: m.content,
+        })),
+        userMessage,
+        onDelta,
+      });
+      if (!finalText) finalText = "(nggak ada respons)";
+    } catch (err) {
+      console.error("Aslan: provider chat gagal:", err);
+      const fallback = "Aduh, ada gangguan pas mroses ini lewat mode ini. Coba lagi sebentar lagi.";
+      finalText += fallback;
+      onDelta?.(fallback);
+    }
+
+    after(async () => {
+      try {
+        await supabase.from("assistant_messages").insert({ user_id: userId, role: "user", content: userMessage });
+        await supabase.from("assistant_messages").insert({ user_id: userId, role: "assistant", content: finalText });
+      } catch (err) {
+        console.error("Aslan: gagal simpan riwayat chat (provider lain):", err);
+      }
+    });
+
+    return finalText;
+  }
+
+  const anthropic = new Anthropic({ apiKey });
+  const messages: Anthropic.MessageParam[] = orderedHistory.map((m) => ({
+    role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+    content: m.content,
+  }));
+
   try {
+    const lastUserContent: Anthropic.MessageParam["content"] = image
+      ? [{ type: "text", text: userMessage }, { type: "image", source: parseImageDataUrl(image) }]
+      : userMessage;
+    messages.push({ role: "user", content: lastUserContent });
+
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
       const stream = anthropic.messages.stream({
         model,

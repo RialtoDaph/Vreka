@@ -68,7 +68,7 @@ function fakeStream(turn: FakeTurn) {
 
 function mockAnthropic(turns: FakeTurn[]) {
   let call = 0;
-  const streamSpy = vi.fn(() => {
+  const streamSpy = vi.fn<(params: { model: string }) => ReturnType<typeof fakeStream>>(() => {
     const turn = turns[Math.min(call, turns.length - 1)];
     call += 1;
     return fakeStream(turn);
@@ -210,5 +210,64 @@ describe("POST /api/assistant/chat", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toBeTruthy();
+  });
+
+  it("routes a non-Anthropic model through the provider chat helper instead of the Anthropic SDK", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    const streamSpy = mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
+    vi.doMock("@/lib/assistant/otherProviders", () => ({
+      runOtherProviderChat: vi.fn().mockImplementation(async (_provider, args) => {
+        args.onDelta?.("Halo dari GPT!");
+        return "Halo dari GPT!";
+      }),
+    }));
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ message: "halo", model: "gpt-5.6-sol" }));
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toBe("Halo dari GPT!");
+    expect(streamSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 naming the right env var when a non-Anthropic provider's key is missing", async () => {
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ message: "halo", model: "gemini-3.6-flash" }));
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toContain("GEMINI_API_KEY");
+  });
+
+  it("forces the default Claude model when an image is attached even if a non-Anthropic model was selected", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    const streamSpy = mockAnthropic([
+      { deltas: ["Aku liat layarnya."], response: { stop_reason: "end_turn", content: [{ type: "text", text: "Aku liat layarnya." }] } },
+    ]);
+    const otherProviderSpy = vi.fn();
+    vi.doMock("@/lib/assistant/otherProviders", () => ({ runOtherProviderChat: otherProviderSpy }));
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest({ message: "ini apa?", model: "gpt-5.6-sol", image: "data:image/jpeg;base64,AAAA" })
+    );
+
+    expect(res.status).toBe(200);
+    await res.text();
+    expect(otherProviderSpy).not.toHaveBeenCalled();
+    expect(streamSpy).toHaveBeenCalledTimes(1);
+    expect(streamSpy.mock.calls[0][0].model).toBe("claude-sonnet-5");
   });
 });

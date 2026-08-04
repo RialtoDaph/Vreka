@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
-import { ASSISTANT_MODELS, DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
+import {
+  ASSISTANT_MODELS,
+  DEFAULT_ASSISTANT_MODEL,
+  isValidAssistantModel,
+  providerForModel,
+  type AssistantModelId,
+  type AssistantProvider,
+} from "@/lib/assistant/models";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
@@ -14,6 +21,7 @@ import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
+const ALT_MODEL_STORAGE_KEY = "vreka-assistant-alt-model";
 
 // Long assistant replies used to render as one continuously-growing bubble
 // -- split into roughly-this-many-characters-per-page chunks (on paragraph
@@ -236,6 +244,38 @@ export default function AsistenPage() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Which providers have a server-side API key configured -- null while
+  // loading. Kept "fail open" (null = don't disable anything yet) so a slow
+  // or failed status check never blocks picking a model.
+  const [providerStatus, setProviderStatus] = useState<Record<AssistantProvider, boolean> | null>(null);
+
+  useEffect(() => {
+    async function loadProviderStatus() {
+      try {
+        const res = await fetch("/api/assistant/providers");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.configured) setProviderStatus(data.configured);
+      } catch {
+        // stays null -- dropdown just shows every option enabled
+      }
+    }
+    loadProviderStatus();
+  }, []);
+
+  const [screenShareSupported, setScreenShareSupported] = useState(false);
+  const [screenShareActive, setScreenShareActive] = useState(false);
+  const [screenShareError, setScreenShareError] = useState<string | null>(null);
+  const screenShareStreamRef = useRef<MediaStream | null>(null);
+  const screenVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    setScreenShareSupported(!!navigator.mediaDevices?.getDisplayMedia);
+    return () => {
+      screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
   // Real counts only, same rule as StatusAslan's header pill -- no fabricated
   // latency/uptime numbers in the AI Core stat grid.
   const [memoryCount, setMemoryCount] = useState<number | null>(null);
@@ -376,6 +416,76 @@ export default function AsistenPage() {
     window.localStorage.setItem(MODEL_STORAGE_KEY, value);
   }
 
+  // Picks which non-Claude model the 📡 toolbar icon switches to: whatever
+  // was last used (if its provider is still configured), else the first
+  // configured alternative in list order.
+  function firstConfiguredAltModel(): AssistantModelId | null {
+    if (!providerStatus) return null;
+    const remembered = window.localStorage.getItem(ALT_MODEL_STORAGE_KEY);
+    const rememberedModel = ASSISTANT_MODELS.find((m) => m.id === remembered);
+    if (rememberedModel && rememberedModel.provider !== "anthropic" && providerStatus[rememberedModel.provider]) {
+      return rememberedModel.id;
+    }
+    const found = ASSISTANT_MODELS.find((m) => m.provider !== "anthropic" && providerStatus[m.provider]);
+    return found?.id ?? null;
+  }
+
+  function toggleRealtimeMode() {
+    if (providerForModel(model) !== "anthropic") {
+      handleModelChange(DEFAULT_ASSISTANT_MODEL);
+      return;
+    }
+    const target = firstConfiguredAltModel();
+    if (!target) return;
+    window.localStorage.setItem(ALT_MODEL_STORAGE_KEY, target);
+    handleModelChange(target);
+  }
+
+  function captureScreenFrame(): string | undefined {
+    const video = screenVideoRef.current;
+    if (!video || video.readyState < 2 || !video.videoWidth) return undefined;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return undefined;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  }
+
+  async function toggleScreenShare() {
+    if (screenShareActive) {
+      screenShareStreamRef.current?.getTracks().forEach((t) => t.stop());
+      screenShareStreamRef.current = null;
+      setScreenShareActive(false);
+      return;
+    }
+    setScreenShareError(null);
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenShareStreamRef.current = stream;
+      if (screenVideoRef.current) {
+        screenVideoRef.current.srcObject = stream;
+        // play() isn't reliably promise-returning across environments (e.g.
+        // jsdom in tests returns undefined instead of a Promise), so guard
+        // before chaining .catch() onto it.
+        const playResult = screenVideoRef.current.play();
+        if (playResult && typeof playResult.then === "function") {
+          await playResult.catch(() => {});
+        }
+      }
+      // The browser's own "Stop sharing" control ends the track directly --
+      // this is the only way to know that happened without polling.
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+        screenShareStreamRef.current = null;
+        setScreenShareActive(false);
+      });
+      setScreenShareActive(true);
+    } catch {
+      setScreenShareError("Gagal mulai screen share. Coba lagi atau izinin akses share screen di browser.");
+    }
+  }
+
   async function refreshMessages() {
     const { data } = await supabase
       .from("assistant_messages")
@@ -436,12 +546,15 @@ export default function AsistenPage() {
     let started = false;
     const controller = new AbortController();
     abortControllerRef.current = controller;
+    // Grabbed fresh per message (not once when sharing starts) so Aslan
+    // always sees whatever's on screen right now, not a stale first frame.
+    const image = screenShareActive ? captureScreenFrame() : undefined;
 
     try {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, model }),
+        body: JSON.stringify({ message: text, model, image }),
         signal: controller.signal,
       });
 
@@ -509,6 +622,10 @@ export default function AsistenPage() {
   // counts, plus the three actually-optional integrations.
   const connectedCount = [true, !!gmailEmail, telegramLinked, voiceSupported].filter(Boolean).length;
 
+  const realtimeActive = providerForModel(model) !== "anthropic";
+  const hasAnyAltProviderConfigured =
+    !providerStatus || ASSISTANT_MODELS.some((m) => m.provider !== "anthropic" && providerStatus[m.provider]);
+
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] overflow-y-auto">
       <header className="flex items-end justify-between gap-3 flex-wrap">
@@ -529,8 +646,21 @@ export default function AsistenPage() {
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <ToolbarIconButton icon="📡" label="Mode GPT Real-Time (segera hadir)" disabled />
-            <ToolbarIconButton icon="🖥️" label="Mode Screen Share (segera hadir)" disabled />
+            <ToolbarIconButton
+              icon="📡"
+              label={realtimeActive ? "Balik ke Claude" : "Ganti ke mode GPT/Gemini/Grok"}
+              active={realtimeActive}
+              disabled={!hasAnyAltProviderConfigured}
+              onClick={toggleRealtimeMode}
+            />
+            {screenShareSupported && (
+              <ToolbarIconButton
+                icon="🖥️"
+                label={screenShareActive ? "Matiin screen share" : "Share screen ke Aslan"}
+                active={screenShareActive}
+                onClick={toggleScreenShare}
+              />
+            )}
             <ToolbarIconButton
               icon="🧰"
               label="Tools & Integrasi"
@@ -555,17 +685,22 @@ export default function AsistenPage() {
             )}
           </div>
           <div>
-            <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
+            <label
+              htmlFor="assistant-model-select"
+              className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5"
+            >
               Model
             </label>
             <select
+              id="assistant-model-select"
               value={model}
               onChange={(e) => handleModelChange(e.target.value)}
               className="bg-panel2 border border-line rounded-sm px-3 py-2 text-sm text-white focus:border-cyan-glow/60 transition-colors"
             >
               {ASSISTANT_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
+                <option key={m.id} value={m.id} disabled={providerStatus ? !providerStatus[m.provider] : false}>
                   {m.label} — {m.tagline}
+                  {providerStatus && !providerStatus[m.provider] ? " (key belum di-set)" : ""}
                 </option>
               ))}
             </select>
@@ -573,11 +708,26 @@ export default function AsistenPage() {
         </div>
       </header>
 
+      {/* Hidden -- only used as a frame source for screen-share snapshots,
+          never shown to the user directly. */}
+      <video ref={screenVideoRef} className="hidden" muted playsInline />
+
       {voicePhase === "wake-listening" && (
         <p className="text-xs font-mono text-cyan-glow flex items-center gap-1.5 -mt-3">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow animate-pulse" />
           Mode hands-free aktif — bilang &quot;Aslan&quot; buat mulai ngobrol.
         </p>
+      )}
+
+      {screenShareActive && (
+        <p className="text-xs font-mono text-cyan-glow flex items-center gap-1.5 -mt-3">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow animate-pulse" />
+          Screen share aktif — Aslan liat snapshot layar kamu tiap kamu kirim pesan (pake Claude, walau mode teks lagi
+          di provider lain).
+        </p>
+      )}
+      {screenShareError && (
+        <p className="text-xs font-mono text-rose-glow -mt-3">{screenShareError}</p>
       )}
 
       <StatusAslan
