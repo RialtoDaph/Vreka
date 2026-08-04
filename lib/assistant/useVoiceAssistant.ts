@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
+import { DEFAULT_ASLAN_MODE, detectModeCommand, getAslanMode, isValidAslanMode, type AslanModeId } from "@/lib/assistant/modes";
 
-const MODEL_STORAGE_KEY = "vreka-assistant-model";
+const MODE_STORAGE_KEY = "vreka-assistant-mode";
 const SILENCE_THRESHOLD = 0.02;
 const SILENCE_DURATION_MS = 900;
 const MIN_SPEECH_MS = 400;
@@ -57,10 +57,20 @@ export function useVoiceAssistant() {
 
   const stoppedRef = useRef(true);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const modelRef = useRef(DEFAULT_ASSISTANT_MODEL);
-  // Mirrors modelRef for display purposes — components render off state
-  // (not a ref) so they actually re-render when the model is known.
-  const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
+  const modeRef = useRef<AslanModeId>(DEFAULT_ASLAN_MODE);
+  // Mirrors modeRef for display purposes — components render off state (not
+  // a ref) so they actually re-render when the active mode changes. This is
+  // the single source of truth for "which mode is active" -- callers (the
+  // Aslan page's mode buttons, voice command detection below) all go
+  // through `setMode` so an in-progress voice call picks up a change
+  // immediately instead of only on the next hook mount.
+  const [mode, setModeState] = useState<AslanModeId>(DEFAULT_ASLAN_MODE);
+
+  function setMode(next: AslanModeId) {
+    modeRef.current = next;
+    setModeState(next);
+    window.localStorage.setItem(MODE_STORAGE_KEY, next);
+  }
 
   const [handsFreeSupported, setHandsFreeSupported] = useState(false);
   const [handsFreeMode, setHandsFreeMode] = useState(false);
@@ -74,10 +84,10 @@ export function useVoiceAssistant() {
       typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia
     );
     setHandsFreeSupported(!!getSpeechRecognitionCtor());
-    const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
-    if (isValidAssistantModel(saved)) {
-      modelRef.current = saved;
-      setModel(saved);
+    const saved = window.localStorage.getItem(MODE_STORAGE_KEY);
+    if (isValidAslanMode(saved)) {
+      modeRef.current = saved;
+      setModeState(saved);
     }
     return () => {
       stoppedRef.current = true;
@@ -402,11 +412,24 @@ export function useVoiceAssistant() {
         setPhase("processing");
       }
 
+      // An explicit spoken command ("ganti mode ke fokus") switches modes
+      // right here instead of being forwarded to the chat API as a real
+      // question -- confirmed with a short spoken reply, then straight back
+      // to listening for whatever the user actually wants to ask.
+      const commandedMode = detectModeCommand(text);
+      if (commandedMode) {
+        setMode(commandedMode);
+        if (stoppedRef.current) break;
+        setPhase("speaking");
+        pendingBlob = await speakWithBargeIn(`Oke, mode ${getAslanMode(commandedMode).label} aktif.`);
+        continue;
+      }
+
       try {
         const res = await fetch("/api/assistant/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, model: modelRef.current }),
+          body: JSON.stringify({ message: text, mode: modeRef.current }),
         });
         const reply = res.ok ? await res.text() : "Maaf, ada masalah pas mikir.";
         if (stoppedRef.current) break;
@@ -464,7 +487,8 @@ export function useVoiceAssistant() {
     toggle,
     sendText,
     audioRef,
-    model,
+    mode,
+    setMode,
     lastReply,
     handsFreeSupported,
     handsFreeMode,

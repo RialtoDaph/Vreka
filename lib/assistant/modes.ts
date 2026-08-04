@@ -106,3 +106,15 @@ export function isValidAslanMode(value: unknown): value is AslanModeId {
 export function getAslanMode(id: string): AslanMode {
   return ASLAN_MODES.find((m) => m.id === id) ?? ASLAN_MODES.find((m) => m.id === DEFAULT_ASLAN_MODE)!;
 }
+
+// Requires "mode" adjacent to the mode name (either order: "ganti mode ke
+// fokus" or "santai mode dong") rather than a bare keyword match -- someone
+// casually saying "santai aja sih" mid-conversation shouldn't accidentally
+// flip the whole brain.
+const MODE_COMMAND_PATTERN = /\bmode\s+(?:ke\s+)?(santai|fokus|intel|ultra)\b|\b(santai|fokus|intel|ultra)\s+mode\b/i;
+
+export function detectModeCommand(text: string): AslanModeId | null {
+  const match = MODE_COMMAND_PATTERN.exec(text.toLowerCase());
+  const id = match?.[1] ?? match?.[2];
+  return id && isValidAslanMode(id) ? id : null;
+}

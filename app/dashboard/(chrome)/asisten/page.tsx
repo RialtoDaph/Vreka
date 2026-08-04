@@ -3,14 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
-import {
-  ASSISTANT_MODELS,
-  DEFAULT_ASSISTANT_MODEL,
-  isValidAssistantModel,
-  providerForModel,
-  type AssistantModelId,
-  type AssistantProvider,
-} from "@/lib/assistant/models";
+import type { AssistantProvider } from "@/lib/assistant/models";
+import { ASLAN_MODES, getAslanMode, type AslanMode } from "@/lib/assistant/modes";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
@@ -19,9 +13,6 @@ import PushNotifications from "@/components/asisten/PushNotifications";
 import StatusAslan from "@/components/asisten/StatusAslan";
 import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { inputClass, primaryBtnClass, ghostBtnClass } from "@/lib/ui";
-
-const MODEL_STORAGE_KEY = "vreka-assistant-model";
-const ALT_MODEL_STORAGE_KEY = "vreka-assistant-alt-model";
 
 // Long assistant replies used to render as one continuously-growing bubble
 // -- split into roughly-this-many-characters-per-page chunks (on paragraph
@@ -158,6 +149,41 @@ function ToolbarIconButton({
   );
 }
 
+// One of the 4 mode buttons (Santai/Fokus/Intel/Ultra) that pick Aslan's
+// brain + persona + color together -- replaces the old plain model dropdown.
+function ModeButton({
+  mode,
+  active,
+  disabled,
+  onClick,
+}: {
+  mode: AslanMode;
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={disabled ? `${mode.label} — key server belum di-set` : mode.tagline}
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors shrink-0 ${
+        active
+          ? "shadow-glow"
+          : disabled
+            ? "border-line/50 text-slate-700 cursor-not-allowed"
+            : "border-line text-slate-400 hover:text-slate-200"
+      }`}
+      style={active ? { borderColor: mode.colorHex, backgroundColor: `${mode.colorHex}1a`, color: mode.colorHex } : undefined}
+    >
+      <span aria-hidden="true">{mode.emoji}</span>
+      <span>{mode.label}</span>
+    </button>
+  );
+}
+
 // A LINK/UNLINK integration card in the AI Core panel's integrations grid.
 function IntegrationCard({
   title,
@@ -211,7 +237,6 @@ export default function AsistenPage() {
   const [sending, setSending] = useState(false);
   const [awaitingFirstChunk, setAwaitingFirstChunk] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [model, setModel] = useState(DEFAULT_ASSISTANT_MODEL);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -225,7 +250,10 @@ export default function AsistenPage() {
     handsFreeSupported,
     handsFreeMode,
     toggleHandsFree,
+    mode,
+    setMode,
   } = useVoiceAssistant();
+  const activeMode = getAslanMode(mode);
   // wake-listening is a passive background state (no mic recording, no
   // server round-trips yet) -- it shouldn't take over the page the way an
   // actual conversation does, so it's excluded from "voice call in progress".
@@ -303,9 +331,6 @@ export default function AsistenPage() {
   }, []);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
-    if (isValidAssistantModel(saved)) setModel(saved);
-
     const params = new URLSearchParams(window.location.search);
     const gmailError = params.get("gmail_error");
     const gmailConnected = params.get("gmail");
@@ -408,37 +433,6 @@ export default function AsistenPage() {
     setTelegramLinked(false);
     setTelegramUsername(null);
     setTelegramDeepLink(null);
-  }
-
-  function handleModelChange(value: string) {
-    if (!isValidAssistantModel(value)) return;
-    setModel(value);
-    window.localStorage.setItem(MODEL_STORAGE_KEY, value);
-  }
-
-  // Picks which non-Claude model the 📡 toolbar icon switches to: whatever
-  // was last used (if its provider is still configured), else the first
-  // configured alternative in list order.
-  function firstConfiguredAltModel(): AssistantModelId | null {
-    if (!providerStatus) return null;
-    const remembered = window.localStorage.getItem(ALT_MODEL_STORAGE_KEY);
-    const rememberedModel = ASSISTANT_MODELS.find((m) => m.id === remembered);
-    if (rememberedModel && rememberedModel.provider !== "anthropic" && providerStatus[rememberedModel.provider]) {
-      return rememberedModel.id;
-    }
-    const found = ASSISTANT_MODELS.find((m) => m.provider !== "anthropic" && providerStatus[m.provider]);
-    return found?.id ?? null;
-  }
-
-  function toggleRealtimeMode() {
-    if (providerForModel(model) !== "anthropic") {
-      handleModelChange(DEFAULT_ASSISTANT_MODEL);
-      return;
-    }
-    const target = firstConfiguredAltModel();
-    if (!target) return;
-    window.localStorage.setItem(ALT_MODEL_STORAGE_KEY, target);
-    handleModelChange(target);
   }
 
   function captureScreenFrame(): string | undefined {
@@ -554,7 +548,7 @@ export default function AsistenPage() {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, model, image }),
+        body: JSON.stringify({ message: text, mode, image }),
         signal: controller.signal,
       });
 
@@ -622,10 +616,6 @@ export default function AsistenPage() {
   // counts, plus the three actually-optional integrations.
   const connectedCount = [true, !!gmailEmail, telegramLinked, voiceSupported].filter(Boolean).length;
 
-  const realtimeActive = providerForModel(model) !== "anthropic";
-  const hasAnyAltProviderConfigured =
-    !providerStatus || ASSISTANT_MODELS.some((m) => m.provider !== "anthropic" && providerStatus[m.provider]);
-
   return (
     <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] overflow-y-auto">
       <header className="flex items-end justify-between gap-3 flex-wrap">
@@ -633,7 +623,8 @@ export default function AsistenPage() {
           <img
             src="/aslan.png"
             alt=""
-            className="w-11 h-11 rounded-full border border-cyan-glow/40 shadow-glow"
+            className="w-11 h-11 rounded-full border-2 shadow-glow"
+            style={{ borderColor: activeMode.colorHex }}
           />
           <div>
             <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
@@ -645,14 +636,23 @@ export default function AsistenPage() {
           </div>
         </div>
         <div className="flex items-end gap-3 flex-wrap">
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
+              Mode
+            </label>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {ASLAN_MODES.map((m) => (
+                <ModeButton
+                  key={m.id}
+                  mode={m}
+                  active={mode === m.id}
+                  disabled={providerStatus ? !providerStatus[m.primaryProvider] : false}
+                  onClick={() => setMode(m.id)}
+                />
+              ))}
+            </div>
+          </div>
           <div className="flex items-center gap-2">
-            <ToolbarIconButton
-              icon="📡"
-              label={realtimeActive ? "Balik ke Claude" : "Ganti ke mode GPT/Gemini/Grok"}
-              active={realtimeActive}
-              disabled={!hasAnyAltProviderConfigured}
-              onClick={toggleRealtimeMode}
-            />
             {screenShareSupported && (
               <ToolbarIconButton
                 icon="🖥️"
@@ -683,27 +683,6 @@ export default function AsistenPage() {
                 onClick={toggleVoice}
               />
             )}
-          </div>
-          <div>
-            <label
-              htmlFor="assistant-model-select"
-              className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5"
-            >
-              Model
-            </label>
-            <select
-              id="assistant-model-select"
-              value={model}
-              onChange={(e) => handleModelChange(e.target.value)}
-              className="bg-panel2 border border-line rounded-sm px-3 py-2 text-sm text-white focus:border-cyan-glow/60 transition-colors"
-            >
-              {ASSISTANT_MODELS.map((m) => (
-                <option key={m.id} value={m.id} disabled={providerStatus ? !providerStatus[m.provider] : false}>
-                  {m.label} — {m.tagline}
-                  {providerStatus && !providerStatus[m.provider] ? " (key belum di-set)" : ""}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       </header>

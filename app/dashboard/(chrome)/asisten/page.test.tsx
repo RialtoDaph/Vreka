@@ -67,6 +67,8 @@ type VoiceMock = {
   handsFreeSupported?: boolean;
   handsFreeMode?: boolean;
   toggleHandsFree?: () => void;
+  mode?: string;
+  setMode?: (m: string) => void;
 };
 
 function mockVoice({
@@ -78,6 +80,8 @@ function mockVoice({
   handsFreeSupported = true,
   handsFreeMode = false,
   toggleHandsFree = vi.fn(),
+  mode = "intel",
+  setMode = vi.fn(),
 }: VoiceMock = {}) {
   vi.doMock("@/lib/assistant/useVoiceAssistant", () => ({
     useVoiceAssistant: () => ({
@@ -88,13 +92,14 @@ function mockVoice({
       toggle,
       sendText: vi.fn(),
       audioRef: { current: null },
-      model: "claude-sonnet-5",
+      mode,
+      setMode,
       handsFreeSupported,
       handsFreeMode,
       toggleHandsFree,
     }),
   }));
-  return { toggle, toggleHandsFree };
+  return { toggle, toggleHandsFree, setMode };
 }
 
 // Routes fetch by URL so a test can stub /api/assistant/providers and
@@ -248,7 +253,7 @@ describe("AsistenPage", () => {
     expect(screen.getByPlaceholderText("Tanya atau minta dicatetin sesuatu...")).toBeInTheDocument();
   });
 
-  it("disables model options whose provider key isn't configured on the server", async () => {
+  it("disables mode buttons whose provider key isn't configured on the server", async () => {
     mockSupabase([]);
     mockVoice();
     mockFetchRouter({ configured: { anthropic: true, openai: false, gemini: false, grok: false } });
@@ -256,39 +261,54 @@ describe("AsistenPage", () => {
     const { default: AsistenPage } = await import("./page");
     render(<AsistenPage />);
 
-    const gptOption = await screen.findByText(/GPT 5\.6 Sol/, { exact: false });
-    expect(gptOption.closest("option")).toBeDisabled();
-    const claudeOption = screen.getByText(/Sonnet 5/, { exact: false });
-    expect(claudeOption.closest("option")).not.toBeDisabled();
+    expect(await screen.findByRole("button", { name: /Santai/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Fokus/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Ultra/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Intel/ })).not.toBeDisabled();
   });
 
-  it("switches to a configured alt-provider model when the real-time toolbar icon is clicked, and back on a second click", async () => {
+  it("does not disable any mode button while the provider status is still loading", async () => {
     mockSupabase([]);
     mockVoice();
-    mockFetchRouter({ configured: { anthropic: true, openai: true, gemini: false, grok: false } });
+    mockFetchRouter();
 
     const { default: AsistenPage } = await import("./page");
     render(<AsistenPage />);
 
-    const select = (await screen.findByLabelText("Model")) as HTMLSelectElement;
-    expect(select.value).toBe("claude-sonnet-5");
-
-    fireEvent.click(await screen.findByLabelText("Ganti ke mode GPT/Gemini/Grok"));
-    expect(select.value).toBe("gpt-5.6-sol");
-
-    fireEvent.click(screen.getByLabelText("Balik ke Claude"));
-    expect(select.value).toBe("claude-sonnet-5");
+    expect(await screen.findByRole("button", { name: /Santai/ })).not.toBeDisabled();
   });
 
-  it("hides the real-time toggle's target entirely when no alt provider is configured, disabling the button", async () => {
+  it("marks the active mode's button pressed and calls setMode when a different mode is clicked", async () => {
     mockSupabase([]);
-    mockVoice();
-    mockFetchRouter({ configured: { anthropic: true, openai: false, gemini: false, grok: false } });
+    const { setMode } = mockVoice({ mode: "intel" });
+    mockFetchRouter();
 
     const { default: AsistenPage } = await import("./page");
     render(<AsistenPage />);
 
-    expect(await screen.findByLabelText("Ganti ke mode GPT/Gemini/Grok")).toBeDisabled();
+    const intelButton = await screen.findByRole("button", { name: /Intel/ });
+    expect(intelButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Fokus/ })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: /Fokus/ }));
+    expect(setMode).toHaveBeenCalledWith("fokus");
+  });
+
+  it("sends the active mode (not a model id) in the chat request body", async () => {
+    mockSupabase([]);
+    mockVoice({ mode: "fokus" });
+    const captured: Record<string, unknown>[] = [];
+    mockFetchRouter({ captureChatBody: (body) => captured.push(body) });
+
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    const input = await screen.findByPlaceholderText("Tanya atau minta dicatetin sesuatu...");
+    fireEvent.change(input, { target: { value: "cari tren terkini" } });
+    fireEvent.click(screen.getByText("Kirim"));
+
+    await screen.findByText("ok");
+    expect(captured[0]).toMatchObject({ mode: "fokus" });
   });
 
   it("starts and stops screen share from the toolbar, showing the active banner while sharing", async () => {

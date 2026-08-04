@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASLAN_MODES, DEFAULT_ASLAN_MODE, getAslanMode, isValidAslanMode } from "./modes";
+import { ASLAN_MODES, DEFAULT_ASLAN_MODE, detectModeCommand, getAslanMode, isValidAslanMode } from "./modes";
 import { isValidAssistantModel } from "./models";
 
 describe("ASLAN_MODES", () => {
@@ -47,5 +47,27 @@ describe("isValidAslanMode / getAslanMode", () => {
   it("defaults to intel so tool-calling keeps working for anyone who never picks a mode", () => {
     expect(DEFAULT_ASLAN_MODE).toBe("intel");
     expect(getAslanMode(DEFAULT_ASLAN_MODE).primaryProvider).toBe("anthropic");
+  });
+});
+
+describe("detectModeCommand", () => {
+  it("detects an explicit command phrase in either word order", () => {
+    expect(detectModeCommand("ganti mode ke fokus dong")).toBe("fokus");
+    expect(detectModeCommand("santai mode aja ya")).toBe("santai");
+    expect(detectModeCommand("pindah ke mode intel")).toBe("intel");
+    expect(detectModeCommand("mode ultra")).toBe("ultra");
+  });
+
+  it("is case-insensitive", () => {
+    expect(detectModeCommand("GANTI MODE KE SANTAI")).toBe("santai");
+  });
+
+  it("does not fire on a casual mention of the word without 'mode' next to it", () => {
+    expect(detectModeCommand("santai aja sih gak usah buru-buru")).toBeNull();
+    expect(detectModeCommand("gimana caranya biar tetep fokus belajar")).toBeNull();
+  });
+
+  it("returns null for ordinary conversation", () => {
+    expect(detectModeCommand("catet pengeluaran 50rb makan siang")).toBeNull();
   });
 });
