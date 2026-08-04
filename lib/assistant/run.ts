@@ -3,30 +3,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAssistantSystemPrompt } from "@/lib/assistant/context";
 import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistant/tools";
-import { providerForModel, type AssistantProvider } from "@/lib/assistant/models";
-import { runOtherProviderChat, type ConsultConfig } from "@/lib/assistant/otherProviders";
-
-// Lets a non-Anthropic primary (Santai/OpenAI, Fokus/Grok) delegate one
-// query per turn to a secondary provider (e.g. Gemini) via a consult tool,
-// instead of querying both brains every turn. The caller (the chat route)
-// already resolved which provider/model/key this points at based on the
-// active Aslan mode.
-export type SecondaryBrainConfig = {
-  provider: Exclude<AssistantProvider, "anthropic">;
-  model: string;
-  apiKey: string;
-};
 
 export type RunAssistantChatOptions = {
   onDelta?: (delta: string) => void;
-  // A screen-share snapshot (data URL) -- always goes through Claude
-  // regardless of `model`, so the caller is responsible for forcing an
-  // Anthropic model when this is set.
+  // A screen-share snapshot (data URL) from the Memory Map's screen-share
+  // toggle.
   image?: string;
-  // Appended ahead of the base system prompt to flavor Aslan's personality
-  // for the active mode (santai/fokus/intel/ultra).
-  persona?: string;
-  secondaryBrain?: SecondaryBrainConfig;
 };
 
 const MAX_TOOL_ITERATIONS = 5;
@@ -80,13 +62,6 @@ export function modelRequestExtras(model: string) {
 // onDelta is given, text is forwarded to it as it streams in from Anthropic
 // (across every tool-loop iteration) so callers can render it live instead
 // of waiting for the whole multi-turn loop to finish.
-//
-// `model` picks Aslan's "brain" for this turn. Non-Anthropic models (GPT,
-// Gemini, Grok) skip the tool-use loop entirely and just have a plain
-// conversation -- replicating this app's tool schemas across four different
-// function-calling formats is out of scope for now, so those modes can chat
-// but can't nyatet transaksi/tugas/dst (except the single consult tool,
-// see `options.secondaryBrain`).
 export async function runAssistantChat(
   supabase: SupabaseClient,
   userId: string,
@@ -95,9 +70,9 @@ export async function runAssistantChat(
   apiKey: string,
   options: RunAssistantChatOptions = {}
 ): Promise<string> {
-  const { onDelta, image, persona, secondaryBrain } = options;
+  const { onDelta, image } = options;
 
-  const [{ data: history }, basePrompt] = await Promise.all([
+  const [{ data: history }, systemPrompt] = await Promise.all([
     supabase
       .from("assistant_messages")
       .select("role, content")
@@ -106,11 +81,17 @@ export async function runAssistantChat(
       .limit(30),
     buildAssistantSystemPrompt(supabase, userId),
   ]);
-  const systemPrompt = persona ? `${persona}\n\n${basePrompt}` : basePrompt;
 
   const orderedHistory = ((history ?? []) as Array<{ role: string; content: string }>)
     .slice()
     .reverse();
+
+  const anthropic = new Anthropic({ apiKey });
+
+  const messages: Anthropic.MessageParam[] = orderedHistory.map((m) => ({
+    role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+    content: m.content,
+  }));
 
   let finalText = "";
   const auditRows: Array<{
@@ -120,63 +101,6 @@ export async function runAssistantChat(
     result_ok: boolean;
     result_summary: string;
   }> = [];
-
-  const provider = providerForModel(model);
-
-  if (provider !== "anthropic") {
-    try {
-      const consult: ConsultConfig | undefined = secondaryBrain
-        ? {
-            toolName: "consult_second_opinion",
-            toolDescription: `Tanya model AI lain (${secondaryBrain.provider}) buat second opinion, cek fakta terkini, atau riset singkat. Jangan dipakai kalau kamu udah yakin sama jawabanmu sendiri.`,
-            run: (query: string) =>
-              runOtherProviderChat(secondaryBrain.provider, {
-                apiKey: secondaryBrain.apiKey,
-                model: secondaryBrain.model,
-                systemPrompt:
-                  "Jawab singkat, faktual, dan langsung ke intinya -- ini bakal dipake sebagai referensi asisten lain, bukan dibaca user langsung.",
-                history: [],
-                userMessage: query,
-              }),
-          }
-        : undefined;
-      finalText = await runOtherProviderChat(provider, {
-        apiKey,
-        model,
-        systemPrompt,
-        history: orderedHistory.map((m) => ({
-          role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
-          content: m.content,
-        })),
-        userMessage,
-        onDelta,
-        consult,
-      });
-      if (!finalText) finalText = "(nggak ada respons)";
-    } catch (err) {
-      console.error("Aslan: provider chat gagal:", err);
-      const fallback = "Aduh, ada gangguan pas mroses ini lewat mode ini. Coba lagi sebentar lagi.";
-      finalText += fallback;
-      onDelta?.(fallback);
-    }
-
-    after(async () => {
-      try {
-        await supabase.from("assistant_messages").insert({ user_id: userId, role: "user", content: userMessage });
-        await supabase.from("assistant_messages").insert({ user_id: userId, role: "assistant", content: finalText });
-      } catch (err) {
-        console.error("Aslan: gagal simpan riwayat chat (provider lain):", err);
-      }
-    });
-
-    return finalText;
-  }
-
-  const anthropic = new Anthropic({ apiKey });
-  const messages: Anthropic.MessageParam[] = orderedHistory.map((m) => ({
-    role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
-    content: m.content,
-  }));
 
   try {
     const lastUserContent: Anthropic.MessageParam["content"] = image

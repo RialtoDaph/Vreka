@@ -7,9 +7,7 @@ Dibangun dengan Next.js (App Router) + Supabase + Tailwind CSS.
 ## Setup
 
 1. Copy `.env.example` ke `.env.local` dan isi kredensial Supabase + Anthropic +
-   OpenAI kamu (OpenAI dipakai buat mode suara — TTS/STT — di Aslan, plus GPT
-   sebagai salah satu pilihan model; Gemini/xAI opsional buat pilihan model
-   lainnya).
+   ElevenLabs kamu (ElevenLabs dipakai buat mode suara — TTS/STT — di Aslan).
 2. `npm install`
 3. `npm run dev`
 
@@ -28,12 +26,11 @@ Dibangun dengan Next.js (App Router) + Supabase + Tailwind CSS.
 ## Deploy
 
 Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` (mode suara + opsi model GPT), dan
-opsional `GEMINI_API_KEY` / `XAI_API_KEY` (opsi model Gemini/Grok) di
-environment variables Vercel. Semua key AI itu
-cuma dipakai server-side (route `/api/assistant/*`), jangan pernah ditaruh di
-env var yang di-prefix `NEXT_PUBLIC_`. Env var yang ditambah setelah deploy
-nggak berlaku surut — harus ada build baru buat kepake.
+`ANTHROPIC_API_KEY`, dan `ELEVENLABS_API_KEY` (mode suara) di environment
+variables Vercel. Semua key AI itu cuma dipakai server-side (route
+`/api/assistant/*`), jangan pernah ditaruh di env var yang di-prefix
+`NEXT_PUBLIC_`. Env var yang ditambah setelah deploy nggak berlaku surut —
+harus ada build baru buat kepake.
 
 Di Supabase (Authentication → URL Configuration), **Site URL** harus diarahkan ke
 domain produksi, bukan `http://localhost:3000` bawaannya, dan `/auth/callback`
@@ -159,16 +156,13 @@ tambahan). Buat aktifin:
   jadwal Calendar, semua dalam satu grid
 - **Jurnal** — catatan harian freeform dengan prompt refleksi yang beda tiap
   hari, satu entry per hari
-- **Aslan** — asisten AI personal dengan 4 mode (🟢 Santai/OpenAI, 🟡
-  Fokus/Grok, 🔴 Intel/Claude, 🟣 Ultra/Gemini), tiap mode punya
-  persona + warna UI sendiri dan bisa dipindah lewat tombol atau perintah
-  suara ("ganti mode ke fokus"). Yang tau kondisi keuangan/kerjaan/pelajaran
-  kamu, bisa dicatetin transaksi/to-do/catatan lewat chat (tool-calling
-  khusus mode Intel/Claude — mode lain cuma ngobrol, plus bisa konsultasi ke
-  provider lain lewat satu tool `consult_second_opinion`), nyimpen memory
-  jangka panjang soal kamu, punya mode telepon hands-free dengan barge-in
-  (TTS/STT lewat OpenAI, dan Santai pakai OpenAI Realtime API buat
-  voice-to-voice latency rendah) kalau `OPENAI_API_KEY` di-set, kalau
+- **Aslan** — asisten AI personal bertenaga Claude, dengan pilihan tier
+  model (Haiku/Sonnet/Opus) lewat dropdown. Yang tau kondisi
+  keuangan/kerjaan/pelajaran kamu, bisa dicatetin transaksi/to-do/catatan
+  lewat chat (tool-calling), nyimpen memory jangka panjang soal kamu, punya
+  mode telepon hands-free dengan barge-in (TTS/STT lewat ElevenLabs) kalau
+  `ELEVENLABS_API_KEY` di-set, bisa "liat" layar kamu lewat screen-share
+  buat mode obrolan visual, kalau
   Gmail di-connect bisa cari/baca email, bikin draft balesan, liat/bikin event
   Google Calendar, plus ringkasan email belum dibaca otomatis sekali sehari,
   kalau Telegram di-connect bisa diajak chat langsung dari Telegram dan dapet
