@@ -40,11 +40,13 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok || !res.body) {
       const detail = await res.text().catch(() => "");
+      console.error(`POST /api/assistant/speak gagal (${res.status}):`, detail.slice(0, 500));
       return NextResponse.json({ error: `Gagal bikin suara (${res.status}). ${detail.slice(0, 200)}` }, { status: 500 });
     }
 
     return new NextResponse(res.body, { headers: { "Content-Type": "audio/mpeg" } });
   } catch (error) {
+    console.error("POST /api/assistant/speak gagal:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Gagal bikin suara." },
       { status: 500 }

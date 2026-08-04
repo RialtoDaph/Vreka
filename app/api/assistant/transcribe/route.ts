@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
+      console.error(`POST /api/assistant/transcribe gagal (${res.status}):`, detail.slice(0, 500));
       return NextResponse.json(
         { error: `Gagal transkrip suara (${res.status}). ${detail.slice(0, 200)}` },
         { status: 500 }
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
     const text = typeof data?.text === "string" ? data.text : "";
     return NextResponse.json({ text: isLikelyHallucination(text) ? "" : text });
   } catch (error) {
+    console.error("POST /api/assistant/transcribe gagal:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Gagal transkrip suara." },
       { status: 500 }
