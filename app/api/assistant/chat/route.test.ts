@@ -212,7 +212,7 @@ describe("POST /api/assistant/chat", () => {
     expect(body.error).toBeTruthy();
   });
 
-  it("routes a non-Anthropic model through the provider chat helper instead of the Anthropic SDK", async () => {
+  it("routes a non-Anthropic mode through the provider chat helper instead of the Anthropic SDK", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     mockSupabaseServer({ id: "user-1" });
     mockAfter();
@@ -226,7 +226,7 @@ describe("POST /api/assistant/chat", () => {
     }));
 
     const { POST } = await import("./route");
-    const res = await POST(makeRequest({ message: "halo", model: "gpt-5.6-sol" }));
+    const res = await POST(makeRequest({ message: "halo", mode: "santai" }));
 
     expect(res.status).toBe(200);
     const text = await res.text();
@@ -234,21 +234,21 @@ describe("POST /api/assistant/chat", () => {
     expect(streamSpy).not.toHaveBeenCalled();
   });
 
-  it("returns 500 naming the right env var when a non-Anthropic provider's key is missing", async () => {
+  it("returns 500 naming the right env var when a non-Anthropic mode's key is missing", async () => {
     mockSupabaseServer({ id: "user-1" });
     mockAfter();
     mockTools();
     mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
 
     const { POST } = await import("./route");
-    const res = await POST(makeRequest({ message: "halo", model: "gemini-3.6-flash" }));
+    const res = await POST(makeRequest({ message: "halo", mode: "ultra" }));
 
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toContain("GEMINI_API_KEY");
   });
 
-  it("forces the default Claude model when an image is attached even if a non-Anthropic model was selected", async () => {
+  it("forces Intel (Claude) when an image is attached even if a non-Anthropic mode was selected", async () => {
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     mockSupabaseServer({ id: "user-1" });
     mockAfter();
@@ -261,7 +261,7 @@ describe("POST /api/assistant/chat", () => {
 
     const { POST } = await import("./route");
     const res = await POST(
-      makeRequest({ message: "ini apa?", model: "gpt-5.6-sol", image: "data:image/jpeg;base64,AAAA" })
+      makeRequest({ message: "ini apa?", mode: "santai", image: "data:image/jpeg;base64,AAAA" })
     );
 
     expect(res.status).toBe(200);
@@ -269,5 +269,59 @@ describe("POST /api/assistant/chat", () => {
     expect(otherProviderSpy).not.toHaveBeenCalled();
     expect(streamSpy).toHaveBeenCalledTimes(1);
     expect(streamSpy.mock.calls[0][0].model).toBe("claude-sonnet-5");
+  });
+
+  it("folds the active mode's persona into the Claude system prompt", async () => {
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    const streamSpy = mockAnthropic([
+      { deltas: ["ok"], response: { stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] } },
+    ]);
+
+    const { POST } = await import("./route");
+    // No `mode` in the body -- falls back to the default mode (Intel), whose
+    // persona should still show up ahead of the base system prompt.
+    const res = await POST(makeRequest({ message: "halo" }));
+    await res.text();
+
+    const call = streamSpy.mock.calls[0][0] as unknown as { system: Array<{ text: string }> };
+    expect(call.system[0].text).toContain("Mode INTEL lagi aktif");
+  });
+
+  it("passes a consult tool config through when the active mode's secondary provider key is configured", async () => {
+    vi.stubEnv("XAI_API_KEY", "test-xai-key");
+    vi.stubEnv("GEMINI_API_KEY", "test-gemini-key");
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
+    const otherProviderSpy = vi.fn().mockResolvedValue("jawaban dari grok");
+    vi.doMock("@/lib/assistant/otherProviders", () => ({ runOtherProviderChat: otherProviderSpy }));
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ message: "cari trending topic hari ini", mode: "fokus" }));
+    await res.text();
+
+    expect(otherProviderSpy).toHaveBeenCalledWith(
+      "grok",
+      expect.objectContaining({ consult: expect.objectContaining({ toolName: "consult_second_opinion" }) })
+    );
+  });
+
+  it("omits the consult tool when the secondary provider's key isn't configured", async () => {
+    vi.stubEnv("XAI_API_KEY", "test-xai-key");
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
+    const otherProviderSpy = vi.fn().mockResolvedValue("jawaban dari grok");
+    vi.doMock("@/lib/assistant/otherProviders", () => ({ runOtherProviderChat: otherProviderSpy }));
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ message: "cari trending topic hari ini", mode: "fokus" }));
+    await res.text();
+
+    expect(otherProviderSpy).toHaveBeenCalledWith("grok", expect.objectContaining({ consult: undefined }));
   });
 });

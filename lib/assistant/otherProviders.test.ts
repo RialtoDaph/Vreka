@@ -22,6 +22,10 @@ function sseResponse(lines: string[], ok = true, status = 200) {
   } as unknown as Response;
 }
 
+function jsonResponse(data: unknown, ok = true, status = 200) {
+  return { ok, status, json: async () => data, text: async () => (ok ? "" : "upstream blew up") } as unknown as Response;
+}
+
 describe("runOpenAiCompatibleChat", () => {
   it("assembles streamed deltas into the final reply and forwards each chunk", async () => {
     const chunks = [
@@ -167,5 +171,102 @@ describe("runOtherProviderChat", () => {
     });
 
     expect(fetchMock.mock.calls[0][0]).toContain("generativelanguage.googleapis.com");
+  });
+});
+
+describe("runOpenAiCompatibleChat with a consult tool", () => {
+  it("returns the first response's content directly when no tool call is requested", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ choices: [{ message: { content: "Gak perlu nyari, aku udah tau." } }] })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const consultRun = vi.fn();
+
+    const result = await runOpenAiCompatibleChat({
+      apiKey: "key",
+      model: "gpt-5.6-sol",
+      systemPrompt: "kamu Aslan",
+      history: [],
+      userMessage: "2+2 berapa?",
+      baseUrl: "https://api.openai.com/v1",
+      consult: { toolName: "consult_second_opinion", toolDescription: "desc", run: consultRun },
+    });
+
+    expect(result).toBe("Gak perlu nyari, aku udah tau.");
+    expect(consultRun).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls the consult tool and makes a follow-up request when the model requests it", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                tool_calls: [
+                  { id: "call_1", function: { name: "consult_second_opinion", arguments: '{"query":"harga BTC hari ini"}' } },
+                ],
+              },
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ choices: [{ message: { content: "Berdasarkan hasil cari, BTC lagi di angka segini." } }] })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const consultRun = vi.fn().mockResolvedValue("BTC: $123,456");
+
+    const result = await runOpenAiCompatibleChat({
+      apiKey: "key",
+      model: "grok-4.5",
+      systemPrompt: "kamu Aslan mode Fokus",
+      history: [],
+      userMessage: "harga bitcoin sekarang berapa?",
+      baseUrl: "https://api.x.ai/v1",
+      consult: { toolName: "consult_second_opinion", toolDescription: "desc", run: consultRun },
+    });
+
+    expect(consultRun).toHaveBeenCalledWith("harga BTC hari ini");
+    expect(result).toBe("Berdasarkan hasil cari, BTC lagi di angka segini.");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondCallBody = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string);
+    expect(secondCallBody.messages.at(-1)).toMatchObject({ role: "tool", tool_call_id: "call_1", content: "BTC: $123,456" });
+  });
+
+  it("reports a failed consult call instead of throwing", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          choices: [
+            {
+              message: {
+                tool_calls: [{ id: "call_1", function: { name: "consult_second_opinion", arguments: '{"query":"apa aja"}' } }],
+              },
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(jsonResponse({ choices: [{ message: { content: "Tetep bisa jawab." } }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const consultRun = vi.fn().mockRejectedValue(new Error("secondary provider down"));
+
+    const result = await runOpenAiCompatibleChat({
+      apiKey: "key",
+      model: "grok-4.5",
+      systemPrompt: "",
+      history: [],
+      userMessage: "cari sesuatu",
+      baseUrl: "https://api.x.ai/v1",
+      consult: { toolName: "consult_second_opinion", toolDescription: "desc", run: consultRun },
+    });
+
+    expect(result).toBe("Tetep bisa jawab.");
+    const secondCallBody = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string);
+    expect(secondCallBody.messages.at(-1).content).toBe("Gagal konsultasi ke model lain.");
   });
 });
