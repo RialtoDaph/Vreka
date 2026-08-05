@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { computeStreak } from "@/lib/habits";
-import { todayKey } from "@/lib/date";
-import { formatDate } from "@/lib/format";
+import { localDateKey, todayKey } from "@/lib/date";
+import { daysUntil, formatDate } from "@/lib/format";
 import { buildDailyBriefing, type BriefingColor, type DailyBriefing } from "@/lib/dailyBriefing";
 import type { DailyBriefingRow } from "@/lib/types";
 import HudPanel from "@/components/HudPanel";
@@ -15,6 +15,7 @@ const COLOR_CLASSES: Record<BriefingColor, { border: string; text: string; dot: 
   amber: { border: "border-l-amber-glow", text: "text-amber-glow", dot: "bg-amber-glow" },
   mint: { border: "border-l-mint-glow", text: "text-mint-glow", dot: "bg-mint-glow" },
   cyan: { border: "border-l-cyan-glow", text: "text-cyan-glow", dot: "bg-cyan-glow" },
+  violet: { border: "border-l-violet-glow", text: "text-violet-glow", dot: "bg-violet-glow" },
 };
 
 export default function RingkasanPage() {
@@ -59,6 +60,11 @@ export default function RingkasanPage() {
     endOfToday.setDate(endOfToday.getDate() + 1);
 
     try {
+      const sevenDaysOut = new Date(startOfToday);
+      sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
+      const fourteenDaysAgo = new Date(startOfToday);
+      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
       const [
         { data: txMonth },
         { data: budgets },
@@ -66,6 +72,9 @@ export default function RingkasanPage() {
         { data: overdueTasks },
         { data: habits },
         { data: habitChecks },
+        { data: studyNotes },
+        { data: journalEntries },
+        { data: milestones },
         calendarRes,
       ] = await Promise.all([
         supabase
@@ -88,6 +97,13 @@ export default function RingkasanPage() {
           .lt("deadline", startOfToday.toISOString()),
         supabase.from("habits").select("id, title"),
         supabase.from("habit_checks").select("habit_id, period"),
+        supabase.from("study_notes").select("title, progress, updated_at"),
+        supabase.from("journal_entries").select("entry_date"),
+        supabase
+          .from("life_milestones")
+          .select("title, occurred_on")
+          .gte("occurred_on", todayKey())
+          .lte("occurred_on", localDateKey(sevenDaysOut)),
         fetch(
           `/api/google/calendar/list?from=${startOfToday.toISOString()}&to=${endOfToday.toISOString()}`
         )
@@ -124,6 +140,19 @@ export default function RingkasanPage() {
         .filter((h) => !(checksByHabit.get(h.id) ?? new Set()).has(today))
         .map((h) => ({ title: h.title, streak: computeStreak(checksByHabit.get(h.id) ?? new Set()) }));
 
+      const staleStudyNotes = (studyNotes ?? [])
+        .filter((n) => n.progress < 100 && new Date(n.updated_at) < fourteenDaysAgo)
+        .map((n) => ({ title: n.title }));
+
+      const journalPeriods = new Set((journalEntries ?? []).map((e) => e.entry_date));
+      const journalStreak = computeStreak(journalPeriods);
+      const journaledToday = journalPeriods.has(today);
+
+      const upcomingMilestones = (milestones ?? []).map((m) => {
+        const days = daysUntil(m.occurred_on) ?? 0;
+        return { title: m.title, dateLabel: days === 0 ? "Hari ini" : `${days} hari lagi` };
+      });
+
       const result = buildDailyBriefing(label, {
         income,
         expense,
@@ -136,6 +165,12 @@ export default function RingkasanPage() {
           start: e.start,
         })),
         calendarConnected: !!calendarRes.connected,
+        hasStudyNotes: (studyNotes ?? []).length > 0,
+        staleStudyNotes,
+        hasJournalHistory: journalPeriods.size > 0,
+        journaledToday,
+        journalStreak,
+        upcomingMilestones,
       });
       setBriefing(result);
 
