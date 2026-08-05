@@ -221,6 +221,7 @@ export type LifeMilestone = {
   user_id: string;
   title: string;
   occurred_on: string;
+  ended_on: string | null;
   category: MilestoneCategory;
   description: string | null;
   created_at: string;

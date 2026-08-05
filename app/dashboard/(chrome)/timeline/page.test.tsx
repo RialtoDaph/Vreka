@@ -18,23 +18,37 @@ type Rows = {
 };
 
 // Chainable Supabase table double. Reads are plain thenables; the
-// milestones table also supports insert().select().single() and
-// delete().eq() for the add/remove flows.
+// milestones table also supports insert().select().single(),
+// update().eq().select().single(), and delete().eq() for the
+// add/edit/remove flows.
 function chainableTable(rows: unknown[]) {
   let newId = 0;
   let pendingInsert: Record<string, unknown> | null = null;
+  let pendingUpdate: Record<string, unknown> | null = null;
+  let pendingEqId: unknown = null;
   const obj: Record<string, unknown> = {
     select: () => obj,
     order: () => obj,
-    eq: () => obj,
+    eq: (_col: string, value: unknown) => {
+      pendingEqId = value;
+      return obj;
+    },
     delete: () => obj,
     insert: (payload: Record<string, unknown>) => {
       pendingInsert = payload;
       return obj;
     },
+    update: (payload: Record<string, unknown>) => {
+      pendingUpdate = payload;
+      return obj;
+    },
     single: () =>
       Promise.resolve({
-        data: pendingInsert ? { id: `new-${++newId}`, created_at: "now", ...pendingInsert } : null,
+        data: pendingInsert
+          ? { id: `new-${++newId}`, created_at: "now", ...pendingInsert }
+          : pendingUpdate
+            ? { id: pendingEqId, created_at: "now", ...pendingUpdate }
+            : null,
         error: null,
       }),
     then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: rows, error: null }).then(resolve),
@@ -141,6 +155,65 @@ describe("TimelineKehidupanPage", () => {
 
     fireEvent.click(screen.getByLabelText("Hapus milestone Lulus kuliah"));
     await waitFor(() => expect(screen.queryByText("Lulus kuliah")).not.toBeInTheDocument());
+  });
+
+  it("edits an existing milestone", async () => {
+    mockSupabase({
+      milestones: [
+        { id: "m1", title: "Lulus kuliah", occurred_on: "2020-01-01", ended_on: null, category: "pendidikan", description: null },
+      ],
+    });
+    const { default: TimelineKehidupanPage } = await import("./page");
+    render(<TimelineKehidupanPage />);
+
+    await screen.findByText("Lulus kuliah");
+    fireEvent.click(screen.getByLabelText("Edit milestone Lulus kuliah"));
+
+    const titleInput = screen.getByDisplayValue("Lulus kuliah");
+    fireEvent.change(titleInput, { target: { value: "Lulus S1" } });
+    fireEvent.click(screen.getByText("Update Milestone"));
+
+    await waitFor(() => expect(screen.getByText("Lulus S1")).toBeInTheDocument());
+    expect(screen.queryByText("Lulus kuliah")).not.toBeInTheDocument();
+  });
+
+  it("shows a date range when a milestone has an end date", async () => {
+    mockSupabase({
+      milestones: [
+        {
+          id: "m1",
+          title: "Kuliah S1",
+          occurred_on: "2018-08-01",
+          ended_on: "2022-06-01",
+          category: "pendidikan",
+          description: null,
+        },
+      ],
+    });
+    const { default: TimelineKehidupanPage } = await import("./page");
+    render(<TimelineKehidupanPage />);
+
+    expect(await screen.findByText(/2018.*–.*2022/)).toBeInTheDocument();
+  });
+
+  it("rejects an end date before the start date", async () => {
+    mockSupabase({});
+    const { default: TimelineKehidupanPage } = await import("./page");
+    render(<TimelineKehidupanPage />);
+
+    await screen.findByText('Belum ada milestone. Tambah yang pertama lewat "+ Milestone".');
+    fireEvent.click(screen.getByText("+ Milestone"));
+    fireEvent.change(screen.getByPlaceholderText("Wisuda, kerja baru, dll"), {
+      target: { value: "Kuliah S1" },
+    });
+    fireEvent.change(screen.getByLabelText("Tanggal mulai"), { target: { value: "2022-01-01" } });
+    fireEvent.change(screen.getByLabelText("Tanggal selesai (opsional)"), { target: { value: "2020-01-01" } });
+    fireEvent.click(screen.getByText("Simpan"));
+
+    expect(
+      await screen.findByText("Tanggal selesai nggak boleh sebelum tanggal mulai.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Kuliah S1")).not.toBeInTheDocument();
   });
 
   it("filters entries by category", async () => {

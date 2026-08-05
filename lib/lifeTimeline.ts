@@ -15,6 +15,7 @@ export type LifeTimelineEntry = {
   id: string;
   title: string;
   occurred_on: string;
+  ended_on: string | null;
   category: TimelineCategory;
   description: string | null;
   auto: boolean;
@@ -29,6 +30,7 @@ export function deriveStudyMilestones(
       id: `study-${n.id}`,
       title: `Topik "${n.title}" selesai 100%`,
       occurred_on: n.updated_at.slice(0, 10),
+      ended_on: null,
       category: "otomatis" as const,
       description: null,
       auto: true,
@@ -60,6 +62,7 @@ export function deriveHabitStreakMilestones(
         id: `habit-${habitId}-${days}`,
         title: `Streak "${habitTitle}" ${days} hari`,
         occurred_on: p,
+        ended_on: null,
         category: "otomatis",
         description: null,
         auto: true,
