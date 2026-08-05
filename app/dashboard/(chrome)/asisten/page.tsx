@@ -74,7 +74,7 @@ function AssistantReplyCard({ content }: { content: string }) {
           onClick={() => goTo(clampedPage - 1)}
           disabled={clampedPage === 0}
           aria-label="Slide sebelumnya"
-          className="w-6 h-6 rounded-full border border-line text-slate-400 hover:text-slate-200 disabled:opacity-30 text-xs shrink-0"
+          className="w-8 h-8 rounded-full border border-line text-slate-400 hover:text-slate-200 disabled:opacity-30 text-xs shrink-0"
         >
           ‹
         </button>
@@ -91,7 +91,7 @@ function AssistantReplyCard({ content }: { content: string }) {
           onClick={() => goTo(clampedPage + 1)}
           disabled={clampedPage === pages.length - 1}
           aria-label="Slide berikutnya"
-          className="w-6 h-6 rounded-full border border-line text-slate-400 hover:text-slate-200 disabled:opacity-30 text-xs shrink-0"
+          className="w-8 h-8 rounded-full border border-line text-slate-400 hover:text-slate-200 disabled:opacity-30 text-xs shrink-0"
         >
           ›
         </button>

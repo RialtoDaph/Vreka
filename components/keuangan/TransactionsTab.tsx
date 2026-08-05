@@ -463,7 +463,7 @@ export default function TransactionsTab() {
             {items.map((tx) => (
               <li
                 key={tx.id}
-                className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
+                className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5"
               >
                 <div className="min-w-0">
                   <p className="text-sm text-slate-200 truncate">

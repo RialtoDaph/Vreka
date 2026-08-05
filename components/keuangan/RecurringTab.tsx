@@ -417,7 +417,10 @@ function RecurringSection({
             const isChecked = checkedIds.has(item.id);
             const isBusy = togglingId === item.id;
             return (
-              <li key={item.id} className="py-3 first:pt-0 last:pb-0 flex items-center gap-3">
+              <li
+                key={item.id}
+                className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center gap-x-3 gap-y-1.5"
+              >
                 <input
                   type="checkbox"
                   checked={isChecked}
@@ -440,19 +443,19 @@ function RecurringSection({
                     )}
                   </p>
                 </div>
-                <span
-                  className={`font-mono text-sm shrink-0 ${toneClass} ${
-                    isChecked ? "opacity-50" : ""
-                  }`}
-                >
-                  {formatCurrency(Number(item.amount))}
-                </span>
-                <button onClick={() => onEdit(item)} className={ghostBtnClass}>
-                  Edit
-                </button>
-                <button onClick={() => onDelete(item.id)} className={dangerBtnClass}>
-                  Hapus
-                </button>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span
+                    className={`font-mono text-sm ${toneClass} ${isChecked ? "opacity-50" : ""}`}
+                  >
+                    {formatCurrency(Number(item.amount))}
+                  </span>
+                  <button onClick={() => onEdit(item)} className={ghostBtnClass}>
+                    Edit
+                  </button>
+                  <button onClick={() => onDelete(item.id)} className={dangerBtnClass}>
+                    Hapus
+                  </button>
+                </div>
               </li>
             );
           })}

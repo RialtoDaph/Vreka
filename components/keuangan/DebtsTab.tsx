@@ -397,7 +397,7 @@ export default function DebtsTab() {
               return (
               <li
                 key={debt.id}
-                className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
+                className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5"
               >
                 <div className="min-w-0 flex items-center gap-3">
                   {showCycleCheck && (

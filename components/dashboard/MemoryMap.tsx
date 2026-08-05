@@ -78,6 +78,7 @@ export default function MemoryMap({ data, vitals }: Props) {
     () => typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
   const [navOpen, setNavOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [webglError, setWebglError] = useState(false);
   const [lastModuleHref, setLastModuleHref] = useState<string | null>(null);
   useEffect(() => {
@@ -791,7 +792,7 @@ export default function MemoryMap({ data, vitals }: Props) {
       )}
 
       {!focusMode && (
-        <div className="absolute top-5 left-5 z-[2] w-[230px]">
+        <div className="absolute top-5 left-5 z-[2] w-[150px] sm:w-[230px]">
           <button
             onClick={() => setNavOpen((o) => !o)}
             aria-expanded={navOpen}
@@ -885,78 +886,100 @@ export default function MemoryMap({ data, vitals }: Props) {
         </div>
       )}
 
+      {/* Both live in one top-right row (not a screen-centered toolbar) so
+          they never drift over the top-left nav/search panel on narrow
+          screens -- a centered toolbar's left edge sits well inside that
+          panel's width on any phone-sized viewport. */}
       {!webglError && (
-        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[2] flex gap-1 bg-panel/85 border border-line rounded-lg p-1 backdrop-blur-sm">
-          <button
-            onClick={() => setFocusMode((f) => !f)}
-            aria-pressed={focusMode}
-            title="Focus Mode"
-            className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
-              focusMode ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-slate-400"
-            }`}
-          >
-            ◱
-          </button>
+        <div className="absolute top-5 right-5 z-[2] flex items-start gap-1.5">
           {!focusMode && (
-            <>
+            <div className="relative">
               <button
-                onClick={() => sceneApiRef.current?.fitView()}
-                title="Fit"
-                className="flex items-center justify-center w-7 h-7 rounded-[5px] border border-transparent text-slate-400 font-mono text-sm hover:text-slate-200"
-              >
-                ⊙
-              </button>
-              <button
-                onClick={() => setSpin((s) => !s)}
-                aria-pressed={spin}
-                title={spin ? "Auto-spin" : "Diam"}
+                onClick={() => setFilterOpen((o) => !o)}
+                aria-expanded={filterOpen}
+                aria-label="Filter tipe memori"
+                title="Filter"
                 className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
-                  spin ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-slate-400"
+                  filterOpen || activeTypes.size !== ALL_TYPES.length
+                    ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
+                    : "bg-panel/85 border-line text-slate-400"
                 }`}
               >
-                ◍
+                ▾
               </button>
-            </>
+              {filterOpen && (
+                <div className="absolute top-9 right-0 z-[2] min-w-[140px] bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm">
+                  <p className="font-mono text-[9px] tracking-[0.15em] uppercase text-slate-400 mb-2 text-right">
+                    Filter
+                  </p>
+                  <div className="flex flex-col gap-1.5 items-end">
+                    <button
+                      onClick={() => setActiveTypes(new Set(ALL_TYPES))}
+                      className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
+                      style={{ color: activeTypes.size === ALL_TYPES.length ? THEME.cyanGlow : THEME.neutral400 }}
+                    >
+                      Semua
+                    </button>
+                    {FILTERS.map((f) => {
+                      const active = activeTypes.has(f.id);
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => toggleType(f.id)}
+                          className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs whitespace-nowrap"
+                          style={{ color: active ? THEME.cyanGlow : THEME.neutral400 }}
+                        >
+                          {f.label}
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: f.dot, opacity: active ? 1 : 0.35 }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
-        </div>
-      )}
-
-      {!webglError && !focusMode && (
-        <div className="absolute top-5 right-5 z-[2] text-right">
-          <p className="font-mono text-[9px] tracking-[0.15em] uppercase text-slate-400 mb-2">
-            Filter
-          </p>
-          <div className="flex flex-col gap-1.5 items-end">
+          <div className="flex gap-1 bg-panel/85 border border-line rounded-lg p-1 backdrop-blur-sm">
             <button
-              onClick={() => setActiveTypes(new Set(ALL_TYPES))}
-              className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
-              style={{ color: activeTypes.size === ALL_TYPES.length ? THEME.cyanGlow : THEME.neutral400 }}
+              onClick={() => setFocusMode((f) => !f)}
+              aria-pressed={focusMode}
+              title="Focus Mode"
+              className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
+                focusMode ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-slate-400"
+              }`}
             >
-              Semua
+              ◱
             </button>
-            {FILTERS.map((f) => {
-              const active = activeTypes.has(f.id);
-              return (
+            {!focusMode && (
+              <>
                 <button
-                  key={f.id}
-                  onClick={() => toggleType(f.id)}
-                  className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
-                  style={{ color: active ? THEME.cyanGlow : THEME.neutral400 }}
+                  onClick={() => sceneApiRef.current?.fitView()}
+                  title="Fit"
+                  className="flex items-center justify-center w-7 h-7 rounded-[5px] border border-transparent text-slate-400 font-mono text-sm hover:text-slate-200"
                 >
-                  {f.label}
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ backgroundColor: f.dot, opacity: active ? 1 : 0.35 }}
-                  />
+                  ⊙
                 </button>
-              );
-            })}
+                <button
+                  onClick={() => setSpin((s) => !s)}
+                  aria-pressed={spin}
+                  title={spin ? "Auto-spin" : "Diam"}
+                  className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
+                    spin ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-slate-400"
+                  }`}
+                >
+                  ◍
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
 
       {selectedNode && (
-        <div className="absolute top-0 right-0 bottom-0 w-[300px] bg-panel/90 border-l border-line backdrop-blur-[10px] p-5 z-[3] overflow-y-auto">
+        <div className="absolute top-0 right-0 bottom-0 w-full sm:w-[300px] bg-panel/90 border-l border-line backdrop-blur-[10px] p-5 z-[3] overflow-y-auto">
           <p className="font-mono text-[9.5px] text-slate-500 mb-2.5 truncate">{breadcrumb}</p>
           <div className="flex items-center justify-between mb-4">
             <span
@@ -1002,17 +1025,64 @@ export default function MemoryMap({ data, vitals }: Props) {
               ← Kembali ke {parentHub.label}
             </button>
           )}
+
+          {/* Rendered inline (not as its own floating card) so it stays
+              reachable when this panel goes full-width on mobile -- a
+              separate bottom-left card would sit underneath it, unreachable,
+              on any screen narrow enough for the panel to cover the width. */}
+          {!focusMode && !insightDismissed && (insightLoading || insight || insightError) && (
+            <div className="mt-5 pt-4 border-t border-line">
+              <div className="flex items-center justify-between mb-2">
+                <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow">
+                  <span className="w-[5px] h-[5px] rounded-full bg-cyan-glow pulse-dot" />
+                  Riset Aslan
+                </span>
+                <button
+                  onClick={() => setInsightDismissed(true)}
+                  className="bg-transparent border-none text-slate-400 text-sm leading-none cursor-pointer"
+                  aria-label="Tutup riset"
+                >
+                  ×
+                </button>
+              </div>
+              {insightLoading && <p className="font-mono text-[10px] text-slate-500 m-0">Mikir...</p>}
+              {insightError && !insightLoading && (
+                <p className="text-[11.5px] text-rose-glow m-0">{insightError}</p>
+              )}
+              {insight && !insightLoading && (
+                <>
+                  <p className="text-[12.5px] leading-relaxed text-slate-300 mb-2.5 mt-0">{insight.text}</p>
+                  {insight.sources.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {insight.sources.map((s) => (
+                        <a
+                          key={s.url}
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-[9.5px] no-underline border border-cyan-glow/30 text-cyan-glow rounded-full px-2 py-0.5 bg-cyan-glow/[.06] hover:bg-cyan-glow/10"
+                        >
+                          {s.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <p className="font-mono text-[9px] text-slate-600 m-0">Klik node lain buat gali topik itu</p>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      <div className="absolute z-[2] flex flex-col items-center gap-2.5 top-1/2 right-[34px] -translate-y-1/2">
+      <div className="absolute z-[2] flex flex-col items-center gap-2.5 top-1/2 right-4 sm:right-[34px] -translate-y-1/2">
         <button
           onClick={toggleVoice}
           data-phase={voicePhase}
           aria-label={voiceBusy ? "Hentikan ngobrol sama Aslan" : "Ngobrol sama Aslan"}
-          className="relative w-[150px] h-[150px] rounded-full bg-transparent border-none cursor-pointer flex items-center justify-center"
+          className="relative w-[100px] h-[100px] sm:w-[150px] sm:h-[150px] rounded-full bg-transparent border-none cursor-pointer flex items-center justify-center"
         >
-          <span className="aslan-avatar w-[120px] h-[120px]">
+          <span className="aslan-avatar w-20 h-20 sm:w-[120px] sm:h-[120px]">
             <img src="/aslan.png" alt="" />
           </span>
         </button>
@@ -1024,7 +1094,7 @@ export default function MemoryMap({ data, vitals }: Props) {
           {voiceStyle.label}
         </p>
         {lastReply && (
-          <div className="w-[240px] bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm shadow-glow">
+          <div className="w-[min(240px,calc(100vw-2.5rem))] bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm shadow-glow">
             <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow mb-1.5">
               🗨 Aslan bilang
             </p>
@@ -1033,51 +1103,8 @@ export default function MemoryMap({ data, vitals }: Props) {
         )}
       </div>
 
-      {!focusMode && selectedNode && !insightDismissed && (insightLoading || insight || insightError) && (
-        <div className="absolute bottom-24 left-5 z-[2] w-[270px] bg-panel/90 border border-line rounded-lg p-3.5 backdrop-blur-[10px] shadow-glow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow">
-              <span className="w-[5px] h-[5px] rounded-full bg-cyan-glow pulse-dot" />
-              Riset Aslan
-            </span>
-            <button
-              onClick={() => setInsightDismissed(true)}
-              className="bg-transparent border-none text-slate-400 text-sm leading-none cursor-pointer"
-              aria-label="Tutup riset"
-            >
-              ×
-            </button>
-          </div>
-          {insightLoading && <p className="font-mono text-[10px] text-slate-500 m-0">Mikir...</p>}
-          {insightError && !insightLoading && (
-            <p className="text-[11.5px] text-rose-glow m-0">{insightError}</p>
-          )}
-          {insight && !insightLoading && (
-            <>
-              <p className="text-[12.5px] leading-relaxed text-slate-300 mb-2.5 mt-0">{insight.text}</p>
-              {insight.sources.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {insight.sources.map((s) => (
-                    <a
-                      key={s.url}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-[9.5px] no-underline border border-cyan-glow/30 text-cyan-glow rounded-full px-2 py-0.5 bg-cyan-glow/[.06] hover:bg-cyan-glow/10"
-                    >
-                      {s.label}
-                    </a>
-                  ))}
-                </div>
-              )}
-              <p className="font-mono text-[9px] text-slate-600 m-0">Klik node lain buat gali topik itu</p>
-            </>
-          )}
-        </div>
-      )}
-
       {!focusMode && (
-        <div className="absolute bottom-24 right-5 z-[2] flex gap-1 bg-panel/85 border border-line rounded-md p-1 backdrop-blur-sm">
+        <div className="absolute bottom-24 right-5 z-[2] hidden md:flex gap-1 bg-panel/85 border border-line rounded-md p-1 backdrop-blur-sm">
           {NAV.map((item) => (
             <button
               key={item.href}
@@ -1110,7 +1137,7 @@ export default function MemoryMap({ data, vitals }: Props) {
           onClick={() => setNavOverlay(null)}
         >
           <div
-            className="relative w-[75vw] h-[75vh] bg-void border border-line rounded-lg overflow-hidden shadow-2xl flex flex-col"
+            className="relative w-[92vw] h-[85vh] sm:w-[75vw] sm:h-[75vh] bg-void border border-line rounded-lg overflow-hidden shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shrink-0 h-10 flex items-center justify-between gap-3 px-4 border-b border-line bg-panel/90">
@@ -1145,8 +1172,8 @@ export default function MemoryMap({ data, vitals }: Props) {
       )}
 
       {!focusMode && (
-        <div className="absolute z-[2] bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5">
-          <div className="flex items-center gap-2 bg-panel/85 border border-line rounded-full p-1.5 backdrop-blur-sm">
+        <div className="absolute z-[2] bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 max-w-[94vw]">
+          <div className="flex items-center flex-wrap justify-center gap-2 bg-panel/85 border border-line rounded-full p-1.5 backdrop-blur-sm">
             <ToolbarIconButton
               icon="⚡"
               label={gptRealtimeBusy ? "Stop ngobrol sama Aslan" : "Ngobrol real-time sama Aslan"}

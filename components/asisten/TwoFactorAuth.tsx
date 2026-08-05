@@ -124,7 +124,7 @@ export default function TwoFactorAuth() {
             Nggak bisa scan? Masukin manual di app authenticator kamu:{" "}
             <span className="font-mono text-slate-300">{enroll.secret}</span>
           </p>
-          <form onSubmit={handleVerify} className="flex gap-2 items-start">
+          <form onSubmit={handleVerify} className="flex flex-wrap gap-2 items-start">
             <input
               type="text"
               inputMode="numeric"
