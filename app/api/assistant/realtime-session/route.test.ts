@@ -68,7 +68,7 @@ describe("POST /api/assistant/realtime-session", () => {
     expect(body.model).toBe("gpt-realtime-2.1-mini");
   });
 
-  it("bakes the casual persona and the user's data summary into the session instructions", async () => {
+  it("bakes the Nana persona and the user's data summary into the session instructions", async () => {
     mockAuth({ id: "user-1" });
     mockContext();
     const fetchMock = vi.fn().mockResolvedValue({
@@ -82,7 +82,7 @@ describe("POST /api/assistant/realtime-session", () => {
     await POST();
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.session.instructions).toContain("santai");
+    expect(body.session.instructions).toContain("Nama kamu Nana");
     expect(body.session.instructions).toContain("ringkasan data user");
     expect(body.session.type).toBe("realtime");
   });
@@ -105,5 +105,20 @@ describe("POST /api/assistant/realtime-session", () => {
     const { POST } = await import("./route");
     const res = await POST();
     expect(res.status).toBe(500);
+  });
+
+  it("returns 429 once the per-user rate limit is hit", async () => {
+    mockAuth({ id: "user-rl" });
+    mockContext();
+    mockOpenAiSession({ ok: true, json: { value: "ek_abc123" } });
+
+    const { POST } = await import("./route");
+    for (let i = 0; i < 10; i++) {
+      const res = await POST();
+      expect(res.status).toBe(200);
+    }
+    const res = await POST();
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
   });
 });

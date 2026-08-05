@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildAssistantSystemPrompt } from "@/lib/assistant/context";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
+
+// Lower than transcribe/speak's limit -- this mints one session per call
+// *start*, not once per turn, so legitimate use never gets anywhere close
+// to this. Mainly a backstop against a reconnect loop or bug racking up
+// OpenAI Realtime sessions (its priciest per-token endpoint) unchecked.
+const REALTIME_SESSION_RATE_LIMIT = 10;
+const REALTIME_SESSION_RATE_WINDOW_MS = 5 * 60 * 1000;
 
 // gpt-realtime-2.1-mini is OpenAI's current low-latency Realtime model as of
 // this writing (the "-mini" tier keeps cost down; the full gpt-realtime-2.1
@@ -14,8 +22,11 @@ const REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || "alloy";
 // Casual, ngobrol-santai persona for the dedicated GPT real-time voice
 // button on Memory Map -- separate from Aslan's own (Claude-driven) voice
 // loop, this is a lighter-weight, always-available "quick chat" option.
+// Named "Nana" (not Aslan) deliberately, since this button runs on a
+// different voice engine (OpenAI's own, not ElevenLabs) -- reusing Aslan's
+// name here would read as the same character with a mismatched voice.
 const REALTIME_PERSONA =
-  "Gaya ngobrol kamu santai, ramah, bahasa kasual sehari-hari -- kayak lagi ngobrol sama temen deket. Jangan kaku atau kelewat formal.";
+  "Nama kamu Nana. Gaya ngobrol kamu santai, ramah, bahasa kasual sehari-hari -- kayak lagi ngobrol sama temen deket. Jangan kaku atau kelewat formal.";
 
 // Mints a short-lived client secret the browser uses to open a WebRTC
 // connection directly to OpenAI -- the real OPENAI_API_KEY never reaches the
@@ -27,6 +38,14 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Belum login." }, { status: 401 });
+  }
+
+  const limit = checkRateLimit(`realtime-session:${user.id}`, REALTIME_SESSION_RATE_LIMIT, REALTIME_SESSION_RATE_WINDOW_MS);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Kebanyakan permintaan, tunggu bentar ya." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const apiKey = process.env.OPENAI_API_KEY;

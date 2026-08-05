@@ -183,7 +183,7 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
     const { default: MemoryMap } = await import("./MemoryMap");
     render(<MemoryMap data={DATA} vitals={VITALS} />);
 
-    fireEvent.click(await screen.findByLabelText("Ngobrol real-time sama GPT"));
+    fireEvent.click(await screen.findByLabelText("Ngobrol real-time sama Nana"));
     expect(toggle).toHaveBeenCalledTimes(1);
   });
 
@@ -193,7 +193,7 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
     const { default: MemoryMap } = await import("./MemoryMap");
     render(<MemoryMap data={DATA} vitals={VITALS} />);
 
-    expect(await screen.findByLabelText("Stop GPT real-time")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Stop ngobrol sama Nana")).toBeInTheDocument();
   });
 
   it("shows an error message when the GPT real-time session fails", async () => {

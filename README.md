@@ -164,8 +164,9 @@ tambahan). Buat aktifin:
   mode telepon hands-free dengan barge-in (TTS/STT lewat ElevenLabs) kalau
   `ELEVENLABS_API_KEY` di-set, bisa "liat" layar kamu lewat screen-share
   buat mode obrolan visual, plus tombol ⚡ terpisah di Memory Map buat
-  ngobrol suara real-time langsung ke GPT (OpenAI Realtime API, kalau
-  `OPENAI_API_KEY` di-set) -- ini di luar jalur data-mutating Aslan, cuma
+  ngobrol suara real-time sama "Nana" (OpenAI Realtime API, kalau
+  `OPENAI_API_KEY` di-set) -- persona/suara beda sengaja dari Aslan biar
+  nggak ketuker, dan di luar jalur data-mutating Aslan, cuma
   obrolan, kalau
   Gmail di-connect bisa cari/baca email, bikin draft balesan, liat/bikin event
   Google Calendar, plus ringkasan email belum dibaca otomatis sekali sehari,
