@@ -17,6 +17,97 @@ const SPEECH_CONFIRM_MS = 250;
 // immediate, while still ignoring brief clicks/coughs.
 const BARGE_IN_CONFIRM_MS = 300;
 
+// Short, varied acknowledgements -- only actually spoken when the real
+// reply isn't ready in time (see FILLER_GRACE_MS below), so a fast answer
+// never gets a bolted-on "uhh" and it doesn't feel like the same canned
+// line every turn.
+const FILLER_PHRASES = ["Hmm, bentar ya...", "Oke, aku cek dulu...", "Sebentar ya..."];
+// If Aslan's first spoken sentence isn't ready within this window --
+// typically a tool-calling turn waiting on a DB write or a Gmail/Calendar
+// round trip -- a filler clip plays first so the wait doesn't read as dead
+// air. Skipped entirely for turns that answer fast enough on their own.
+const FILLER_GRACE_MS = 600;
+
+type AudioQueueItem = Promise<Blob | null>;
+
+// A tiny producer/consumer queue: the chat-stream reader pushes one TTS
+// promise per sentence the moment its text is ready, while the player
+// consumes them in order -- so sentence 1 can start playing before
+// sentence 2's text (let alone its audio) even exists yet.
+export function createAudioQueue() {
+  const items: AudioQueueItem[] = [];
+  let closed = false;
+  let wake: (() => void) | null = null;
+
+  function push(item: AudioQueueItem) {
+    items.push(item);
+    wake?.();
+  }
+  function close() {
+    closed = true;
+    wake?.();
+  }
+  // `yield` on a promise inside an async generator resolves it before
+  // handing the value to the `for await` consumer, so this already yields
+  // `Blob | null` (not the promise itself) despite `items` holding promises.
+  async function* consume(): AsyncGenerator<Blob | null> {
+    let i = 0;
+    while (true) {
+      if (i < items.length) {
+        yield items[i];
+        i++;
+      } else if (closed) {
+        return;
+      } else {
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+      }
+    }
+  }
+  return { push, close, consume };
+}
+type AudioQueue = ReturnType<typeof createAudioQueue>;
+
+// Pulls complete sentences off the front of `buffer` as text streams in, so
+// each can go to TTS the moment it's ready instead of waiting for the whole
+// reply. A "sentence" ends in ./!/? followed by actual whitespace (so a
+// grouped number like "50.000" doesn't get split mid-digit), or a newline
+// on its own (which is already the boundary -- text on the very next
+// character, with no gap, still counts). Not linguistically perfect (an
+// abbreviation like "Rp." can stall a split) but it fails safe: anything
+// that never confidently splits just stays buffered and gets flushed as
+// one chunk once the stream ends, same as before this existed.
+const SENTENCE_BOUNDARY = /^[^.!?\n]*(?:[.!?]+(?:["')\]]*)\s+|\n+)/;
+export function extractSentences(buffer: string): { sentences: string[]; remainder: string } {
+  const sentences: string[] = [];
+  let rest = buffer;
+  while (true) {
+    const match = SENTENCE_BOUNDARY.exec(rest);
+    if (!match) break;
+    const piece = match[0];
+    if (piece.trim().length < 6) break; // too short to confidently be a real sentence yet
+    sentences.push(piece.trim());
+    rest = rest.slice(piece.length);
+  }
+  return { sentences, remainder: rest };
+}
+
+async function ttsBlob(text: string, signal: AbortSignal): Promise<Blob | null> {
+  try {
+    const res = await fetch("/api/assistant/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+      signal,
+    });
+    if (!res.ok) return null;
+    return await res.blob();
+  } catch {
+    return null;
+  }
+}
+
 const MIC_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
   noiseSuppression: true,
@@ -339,47 +430,138 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     });
   }
 
-  // Plays Aslan's reply while listening for an interruption. If the user
-  // barges in, returns the blob of what they said so the loop can skip
-  // straight to processing it instead of waiting through another silence.
-  async function speakWithBargeIn(text: string): Promise<Blob | null> {
+  // Plays each queued reply chunk (maybe a filler, then sentence-by-sentence
+  // TTS) in order while listening for an interruption -- same barge-in
+  // behavior as before, just spanning a sequence of clips instead of one.
+  // Aborts the producer (further chat-stream reading / TTS requests) the
+  // moment the user interrupts or the call ends, so nothing keeps
+  // generating audio that'll never play.
+  async function speakQueueWithBargeIn(
+    queue: AudioQueue,
+    turnAbort: AbortController
+  ): Promise<Blob | null> {
     const audio = audioRef.current;
     if (!audio) return null;
+    let spokenAny = false;
     try {
-      const res = await fetch("/api/assistant/speak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) return null;
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      audio.src = url;
-      // A play() rejection (autoplay blocked, no supported source, ...) used
-      // to be swallowed here -- Aslan's reply would generate fine server-side
-      // and then just never make a sound, with nothing telling the user why.
-      try {
-        await audio.play();
-      } catch (err) {
-        console.error("Aslan: audio.play() ditolak browser:", err);
-        setErrorMsg(
-          "Balasan Aslan gagal diputer (browser nolak audio-nya). Coba klik lagi tombol mic-nya."
-        );
-      }
-      const result = await watchForBargeIn(audio);
-      URL.revokeObjectURL(url);
+      for await (const blob of queue.consume()) {
+        if (stoppedRef.current) return null;
+        if (!blob || stoppedRef.current) continue;
 
-      if (result === "interrupted" && !stoppedRef.current) {
-        setPhase("listening");
+        if (!spokenAny) {
+          spokenAny = true;
+          setPhase("speaking");
+        }
+
+        const url = URL.createObjectURL(blob);
+        audio.src = url;
+        // A play() rejection (autoplay blocked, no supported source, ...) used
+        // to be swallowed here -- Aslan's reply would generate fine server-side
+        // and then just never make a sound, with nothing telling the user why.
         try {
-          return await recordUntilSilence();
-        } catch {
+          await audio.play();
+        } catch (err) {
+          console.error("Aslan: audio.play() ditolak browser:", err);
+          setErrorMsg(
+            "Balasan Aslan gagal diputer (browser nolak audio-nya). Coba klik lagi tombol mic-nya."
+          );
+        }
+        const result = await watchForBargeIn(audio);
+        URL.revokeObjectURL(url);
+
+        if (result === "interrupted") {
+          turnAbort.abort();
+          if (!stoppedRef.current) {
+            setPhase("listening");
+            try {
+              return await recordUntilSilence();
+            } catch {
+              return null;
+            }
+          }
           return null;
         }
       }
-      return null;
-    } catch {
-      return null;
+    } finally {
+      // No-op if the queue already finished on its own -- only matters for
+      // the early returns above (interrupted / stopped mid-loop).
+      turnAbort.abort();
+    }
+    return null;
+  }
+
+  // Fetches Aslan's reply as a stream and, as each sentence completes,
+  // fires off its TTS conversion immediately and pushes it onto `queue` --
+  // so the player above can start speaking sentence 1 while sentence 2 is
+  // still being generated, instead of waiting for the whole reply. If
+  // nothing is ready within FILLER_GRACE_MS (typically a tool-calling turn
+  // waiting on a DB write or a Gmail/Calendar round trip), a short filler
+  // clip is queued first so the wait doesn't read as dead air.
+  async function streamReplyIntoQueue(
+    text: string,
+    image: string | undefined,
+    queue: AudioQueue,
+    signal: AbortSignal
+  ) {
+    const fillerPhrase = FILLER_PHRASES[Math.floor(Math.random() * FILLER_PHRASES.length)];
+    const fillerPromise = ttsBlob(fillerPhrase, signal);
+    let firstSentenceArrived = false;
+    const fillerTimer = setTimeout(() => {
+      if (!firstSentenceArrived) queue.push(fillerPromise);
+    }, FILLER_GRACE_MS);
+
+    function queueSentence(sentence: string) {
+      if (!firstSentenceArrived) {
+        firstSentenceArrived = true;
+        clearTimeout(fillerTimer);
+      }
+      queue.push(ttsBlob(sentence, signal));
+    }
+
+    let reply = "";
+    let buffer = "";
+    try {
+      const res = await fetch("/api/assistant/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, model: modelRef.current, image }),
+        signal,
+      });
+      if (!res.ok || !res.body) {
+        reply = "Maaf, ada masalah pas mikir.";
+        queueSentence(reply);
+        setLastReply(reply);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        if (!chunk) continue;
+        reply += chunk;
+        buffer += chunk;
+        setLastReply(reply);
+
+        const { sentences, remainder } = extractSentences(buffer);
+        buffer = remainder;
+        for (const sentence of sentences) queueSentence(sentence);
+      }
+
+      const last = buffer.trim();
+      if (last) queueSentence(last);
+    } catch (err) {
+      const aborted = err instanceof DOMException && err.name === "AbortError";
+      if (!aborted && !reply) {
+        const fallback = "Maaf, ada masalah pas mikir.";
+        queueSentence(fallback);
+        setLastReply(fallback);
+      }
+    } finally {
+      clearTimeout(fillerTimer);
+      queue.close();
     }
   }
 
@@ -431,16 +613,15 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         // Grabbed fresh per turn (not once when sharing starts) so Aslan
         // always sees whatever's on screen right now, not a stale frame.
         const image = getScreenshot?.();
-        const res = await fetch("/api/assistant/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, model: modelRef.current, image }),
-        });
-        const reply = res.ok ? await res.text() : "Maaf, ada masalah pas mikir.";
-        if (stoppedRef.current) break;
-        setLastReply(reply);
-        setPhase("speaking");
-        pendingBlob = await speakWithBargeIn(reply);
+        const queue = createAudioQueue();
+        const turnAbort = new AbortController();
+        // Not awaited -- runs concurrently with speakQueueWithBargeIn below,
+        // which is the whole point: sentence 1 can start playing while this
+        // is still streaming/speaking sentence 3. Never throws (its own
+        // try/catch/finally always resolves), so nothing here needs to
+        // await or catch it.
+        void streamReplyIntoQueue(text, image, queue, turnAbort.signal);
+        pendingBlob = await speakQueueWithBargeIn(queue, turnAbort);
       } catch {
         // gagal ngehubungin Aslan, lanjut coba lagi dari listening
       }
