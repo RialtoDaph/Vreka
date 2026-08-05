@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 const MODULE_LINKS = [
   { href: "/dashboard", label: "Beranda" },
@@ -21,6 +22,7 @@ export default function GlobalPageError({
 }) {
   useEffect(() => {
     console.error(error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

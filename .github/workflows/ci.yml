@@ -23,3 +23,16 @@ jobs:
       - run: npm run typecheck
 
       - run: npm run test
+
+      # Build-only smoke check -- lint/typecheck/test all pass without ever
+      # invoking the Next.js compiler, so a build-time-only failure (bad
+      # dynamic import, edge-runtime incompatibility) could otherwise land
+      # on main undetected until the real Vercel deploy fails. Dummy values
+      # are enough since every other integration degrades gracefully at
+      # runtime when its env var is absent -- see lib/supabase/client.ts and
+      # README's env var table.
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "ci-placeholder"
+          ANTHROPIC_API_KEY: "ci-placeholder"
