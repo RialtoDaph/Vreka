@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { computeStreak } from "@/lib/habits";
+import { getCalendarAccessToken } from "@/lib/google/credentials";
+import { listUpcomingEvents } from "@/lib/google/calendar";
 
 export async function buildAssistantSystemPrompt(
   supabase: SupabaseClient,
@@ -201,4 +203,109 @@ ${habitLines}
 
 === Memory tersimpan tentang user ===
 ${memoryLines}`;
+}
+
+// Extra context appended only for the real-time voice button on Memory Map
+// -- that session can't call tools (it's audio-native, one-shot instructions
+// at connect time, no mid-call round trip), so anything it might get asked
+// about has to already be in the prompt. The regular Claude chat doesn't
+// need this: it can reach for `search_records` on demand instead of
+// carrying the full history on every single turn.
+export async function buildRealtimeExtraContext(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<string> {
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const sinceDate = threeMonthsAgo.toISOString().slice(0, 10);
+
+  const [
+    { data: allTasks },
+    { data: allNotes },
+    { data: journalEntries },
+    { data: recentTx },
+  ] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("title, status, priority, deadline, project")
+      .eq("user_id", userId)
+      .neq("status", "done")
+      .order("deadline", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("study_notes")
+      .select("title, category, progress, content")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("journal_entries")
+      .select("entry_date, content")
+      .eq("user_id", userId)
+      .order("entry_date", { ascending: false })
+      .limit(20),
+    supabase
+      .from("transactions")
+      .select("type, category, amount, description, occurred_on")
+      .eq("user_id", userId)
+      .gte("occurred_on", sinceDate)
+      .order("occurred_on", { ascending: false })
+      .limit(150),
+  ]);
+
+  const taskLines =
+    (allTasks ?? [])
+      .map(
+        (t) =>
+          `- [${t.priority}]${t.status === "in_progress" ? " [sedang dikerjain]" : ""} ${t.title}${t.project ? ` (${t.project})` : ""}${t.deadline ? ` — deadline ${formatDate(t.deadline)}` : ""}`
+      )
+      .join("\n") || "(nggak ada to-do aktif)";
+
+  const noteLines =
+    (allNotes ?? [])
+      .map((n) => {
+        const excerpt = n.content ? `: ${n.content.slice(0, 150).trim()}${n.content.length > 150 ? "..." : ""}` : "";
+        return `- ${n.title} (${n.category ?? "Umum"}) — progress ${n.progress}%${excerpt}`;
+      })
+      .join("\n") || "(belum ada catatan belajar)";
+
+  const journalLines =
+    (journalEntries ?? [])
+      .map((j) => `- ${formatDate(j.entry_date)}: ${j.content.slice(0, 300).trim()}${j.content.length > 300 ? "..." : ""}`)
+      .join("\n") || "(belum ada entri jurnal)";
+
+  const txLines =
+    (recentTx ?? [])
+      .map(
+        (t) =>
+          `- ${formatDate(t.occurred_on)} [${t.type === "income" ? "masuk" : "keluar"}] ${t.category}: ${formatCurrency(Number(t.amount))}${t.description ? ` (${t.description})` : ""}`
+      )
+      .join("\n") || "(nggak ada transaksi dalam 3 bulan terakhir)";
+
+  let calendarLines = "(Google Calendar belum terhubung)";
+  const calendarAccess = await getCalendarAccessToken(supabase, userId);
+  if ("accessToken" in calendarAccess) {
+    try {
+      const events = await listUpcomingEvents(calendarAccess.accessToken, { maxResults: 10 });
+      calendarLines =
+        events
+          .map((e) => `- ${e.summary} — ${formatDateTime(e.start)}${e.location ? ` @ ${e.location}` : ""}`)
+          .join("\n") || "(nggak ada event mendatang)";
+    } catch {
+      calendarLines = "(gagal ambil jadwal Calendar)";
+    }
+  }
+
+  return `=== Semua To-Do Aktif ===
+${taskLines}
+
+=== Semua Catatan Belajar ===
+${noteLines}
+
+=== Jurnal (20 entri terakhir) ===
+${journalLines}
+
+=== Transaksi (3 bulan terakhir, maks 150) ===
+${txLines}
+
+=== Jadwal Calendar Mendatang ===
+${calendarLines}`;
 }

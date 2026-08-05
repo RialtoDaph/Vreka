@@ -11,6 +11,7 @@ function mockAuth(user: { id: string } | null) {
 function mockContext() {
   vi.doMock("@/lib/assistant/context", () => ({
     buildAssistantSystemPrompt: vi.fn().mockResolvedValue("ringkasan data user"),
+    buildRealtimeExtraContext: vi.fn().mockResolvedValue("konteks tambahan lengkap"),
   }));
 }
 
@@ -84,6 +85,7 @@ describe("POST /api/assistant/realtime-session", () => {
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.session.instructions).toContain("santai");
     expect(body.session.instructions).toContain("ringkasan data user");
+    expect(body.session.instructions).toContain("konteks tambahan lengkap");
     expect(body.session.type).toBe("realtime");
   });
 
