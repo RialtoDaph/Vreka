@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { inputClass, primaryBtnClass, ghostBtnClass, dangerBtnClass } from "@/lib/ui";
+import { RECOVERY_CODE_COUNT, generateRecoveryCode, hashRecoveryCode } from "@/lib/mfaRecovery";
 
 type EnrollState = {
   factorId: string;
@@ -18,6 +19,8 @@ export default function TwoFactorAuth() {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
 
   async function loadFactors() {
     setLoading(true);
@@ -44,6 +47,27 @@ export default function TwoFactorAuth() {
     setEnroll({ factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret });
   }
 
+  // Overwrites any existing codes -- old ones (from a previous enroll or an
+  // earlier "regenerate") stop working the moment new ones are generated,
+  // so there's never more than one valid batch outstanding.
+  async function generateAndStoreRecoveryCodes() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => generateRecoveryCode());
+    const hashes = await Promise.all(codes.map(hashRecoveryCode));
+    await supabase.from("mfa_recovery_codes").delete().eq("user_id", user.id);
+    const { error: insertError } = await supabase
+      .from("mfa_recovery_codes")
+      .insert(hashes.map((code_hash) => ({ user_id: user.id, code_hash })));
+    if (insertError) {
+      setError("2FA aktif, tapi gagal bikin recovery codes. Coba \"Bikin ulang recovery codes\" di bawah.");
+      return;
+    }
+    setRecoveryCodes(codes);
+  }
+
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     if (!enroll || code.trim().length !== 6) return;
@@ -53,8 +77,8 @@ export default function TwoFactorAuth() {
       factorId: enroll.factorId,
       code: code.trim(),
     });
-    setBusy(false);
     if (error) {
+      setBusy(false);
       setError("Kode salah. Coba lagi.");
       setCode("");
       return;
@@ -62,6 +86,15 @@ export default function TwoFactorAuth() {
     setEnroll(null);
     setCode("");
     setActiveFactorId(enroll.factorId);
+    await generateAndStoreRecoveryCodes();
+    setBusy(false);
+  }
+
+  async function handleRegenerateRecoveryCodes() {
+    setRegenerating(true);
+    setError(null);
+    await generateAndStoreRecoveryCodes();
+    setRegenerating(false);
   }
 
   async function handleCancelEnroll() {
@@ -76,12 +109,18 @@ export default function TwoFactorAuth() {
     setBusy(true);
     setError(null);
     const { error } = await supabase.auth.mfa.unenroll({ factorId: activeFactorId });
-    setBusy(false);
     if (error) {
+      setBusy(false);
       setError(error.message);
       return;
     }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) await supabase.from("mfa_recovery_codes").delete().eq("user_id", user.id);
     setActiveFactorId(null);
+    setRecoveryCodes(null);
+    setBusy(false);
   }
 
   if (loading) {
@@ -104,9 +143,14 @@ export default function TwoFactorAuth() {
           </p>
         </div>
         {activeFactorId && !enroll && (
-          <button onClick={handleDisable} disabled={busy} className={dangerBtnClass}>
-            Matikan 2FA
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={handleRegenerateRecoveryCodes} disabled={busy || regenerating} className={ghostBtnClass}>
+              {regenerating ? "Bikin ulang..." : "Bikin ulang recovery codes"}
+            </button>
+            <button onClick={handleDisable} disabled={busy} className={dangerBtnClass}>
+              Matikan 2FA
+            </button>
+          </div>
         )}
         {!activeFactorId && !enroll && (
           <button onClick={handleStartEnroll} disabled={busy} className={primaryBtnClass}>
@@ -116,6 +160,33 @@ export default function TwoFactorAuth() {
       </div>
 
       {error && <p className="text-xs text-rose-glow mt-2">{error}</p>}
+
+      {recoveryCodes && (
+        <div className="mt-4 space-y-3 bg-panel2/60 border border-line rounded-sm p-3.5">
+          <p className="text-xs text-slate-300">
+            <strong className="text-white">Simpen recovery codes ini sekarang</strong> — cuma ditampilin
+            sekali. Kalau HP/app authenticator kamu ilang, satu kode ini bisa dipake buat matiin 2FA lagi
+            (kamu tetep login pake password, terus bisa setup 2FA baru).
+          </p>
+          <div className="grid grid-cols-2 gap-1.5 font-mono text-xs text-cyan-glow bg-void/60 rounded-sm p-3">
+            {recoveryCodes.map((c) => (
+              <span key={c}>{c}</span>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(recoveryCodes.join("\n"))}
+              className={ghostBtnClass}
+            >
+              Salin semua
+            </button>
+            <button type="button" onClick={() => setRecoveryCodes(null)} className={primaryBtnClass}>
+              Udah disimpen
+            </button>
+          </div>
+        </div>
+      )}
 
       {enroll && (
         <div className="mt-4 space-y-3">

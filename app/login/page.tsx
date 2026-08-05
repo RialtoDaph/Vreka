@@ -15,14 +15,17 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // /auth/callback bounces its failures back here as ?error=. Read it off
-  // window rather than useSearchParams so this page stays statically rendered.
+  // /auth/callback bounces its failures back here as ?error=, and
+  // /mfa's recovery-code flow bounces back here as ?notice= after
+  // disabling 2FA. Read them off window rather than useSearchParams so
+  // this page stays statically rendered.
   useEffect(() => {
-    const reason = new URLSearchParams(window.location.search).get("error");
-    if (reason) {
-      setError(reason);
-      window.history.replaceState(null, "", window.location.pathname);
-    }
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get("error");
+    const note = params.get("notice");
+    if (reason) setError(reason);
+    if (note) setNotice(note);
+    if (reason || note) window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

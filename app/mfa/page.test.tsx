@@ -99,4 +99,61 @@ describe("MfaChallengePage", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
     expect(signOut).toHaveBeenCalled();
   });
+
+  describe("recovery code flow", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("switches to the recovery-code form and back", async () => {
+      mockSupabase({});
+      const { default: MfaChallengePage } = await import("./page");
+      render(<MfaChallengePage />);
+
+      fireEvent.click(await screen.findByText(/Pakai recovery code/));
+      expect(screen.getByPlaceholderText("XXXXX-XXXXX")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText("Balik ke kode authenticator"));
+      expect(screen.getByPlaceholderText("000000")).toBeInTheDocument();
+    });
+
+    it("recovers successfully: signs out and redirects to /login with a notice", async () => {
+      const { signOut } = mockSupabase({});
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+      );
+      const { default: MfaChallengePage } = await import("./page");
+      render(<MfaChallengePage />);
+
+      fireEvent.click(await screen.findByText(/Pakai recovery code/));
+      fireEvent.change(screen.getByPlaceholderText("XXXXX-XXXXX"), { target: { value: "AB12C-DE34F" } });
+      fireEvent.click(screen.getByText("Pulihkan & Matikan 2FA"));
+
+      await waitFor(() => expect(signOut).toHaveBeenCalled());
+      expect(push).toHaveBeenCalledWith(expect.stringContaining("/login?notice="));
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/mfa/recover",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ code: "AB12C-DE34F" }) })
+      );
+    });
+
+    it("shows an error and does not sign out when the recovery code is rejected", async () => {
+      const { signOut } = mockSupabase({});
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: "Kode recovery salah." }) })
+      );
+      const { default: MfaChallengePage } = await import("./page");
+      render(<MfaChallengePage />);
+
+      fireEvent.click(await screen.findByText(/Pakai recovery code/));
+      fireEvent.change(screen.getByPlaceholderText("XXXXX-XXXXX"), { target: { value: "WRONG" } });
+      fireEvent.click(screen.getByText("Pulihkan & Matikan 2FA"));
+
+      expect(await screen.findByText("Kode recovery salah.")).toBeInTheDocument();
+      expect(signOut).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+  });
 });
