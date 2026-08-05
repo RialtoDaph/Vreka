@@ -56,9 +56,33 @@ describe("deriveHabitStreakMilestones", () => {
 describe("splitByStartDate", () => {
   it("sorts and splits entries at the given start date, boundary inclusive on 'since'", () => {
     const entries = [
-      { id: "a", title: "A", occurred_on: "2020-01-01", category: "pendidikan" as const, description: null, auto: false },
-      { id: "b", title: "B", occurred_on: "2026-01-15", category: "karier" as const, description: null, auto: false },
-      { id: "c", title: "C", occurred_on: "2015-06-01", category: "pendidikan" as const, description: null, auto: false },
+      {
+        id: "a",
+        title: "A",
+        occurred_on: "2020-01-01",
+        ended_on: null,
+        category: "pendidikan" as const,
+        description: null,
+        auto: false,
+      },
+      {
+        id: "b",
+        title: "B",
+        occurred_on: "2026-01-15",
+        ended_on: null,
+        category: "karier" as const,
+        description: null,
+        auto: false,
+      },
+      {
+        id: "c",
+        title: "C",
+        occurred_on: "2015-06-01",
+        ended_on: null,
+        category: "pendidikan" as const,
+        description: null,
+        auto: false,
+      },
     ];
     const { before, since } = splitByStartDate(entries, "2026-01-15");
     expect(before.map((e) => e.id)).toEqual(["c", "a"]);

@@ -36,11 +36,37 @@ export default function TimelineKehidupanPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | TimelineCategory>("all");
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [occurredOn, setOccurredOn] = useState(() => localDateKey(new Date()));
+  const [endedOn, setEndedOn] = useState("");
   const [category, setCategory] = useState<MilestoneCategory>("pendidikan");
   const [description, setDescription] = useState("");
+
+  function resetForm() {
+    setEditingId(null);
+    setTitle("");
+    setOccurredOn(localDateKey(new Date()));
+    setEndedOn("");
+    setCategory("pendidikan");
+    setDescription("");
+  }
+
+  function toggleForm() {
+    resetForm();
+    setShowForm((s) => !s);
+  }
+
+  function startEdit(entry: LifeTimelineEntry) {
+    setEditingId(entry.id);
+    setTitle(entry.title);
+    setOccurredOn(entry.occurred_on);
+    setEndedOn(entry.ended_on ?? "");
+    setCategory(entry.category as MilestoneCategory);
+    setDescription(entry.description ?? "");
+    setShowForm(true);
+  }
 
   async function load() {
     setLoading(true);
@@ -81,10 +107,14 @@ export default function TimelineKehidupanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
     setError(null);
+    if (endedOn && endedOn < occurredOn) {
+      setError("Tanggal selesai nggak boleh sebelum tanggal mulai.");
+      return;
+    }
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -92,30 +122,52 @@ export default function TimelineKehidupanPage() {
       setError("Sesi login habis. Refresh halaman terus coba lagi.");
       return;
     }
-    const { data, error: insertError } = await supabase
-      .from("life_milestones")
-      .insert({
-        user_id: user.id,
-        title: title.trim(),
-        occurred_on: occurredOn,
-        category,
-        description: description.trim() || null,
-      })
-      .select("*")
-      .single();
-    if (insertError || !data) {
-      setError("Gagal nyimpen milestone. Coba lagi.");
-      return;
+    const payload = {
+      title: title.trim(),
+      occurred_on: occurredOn,
+      ended_on: endedOn || null,
+      category,
+      description: description.trim() || null,
+    };
+
+    if (editingId) {
+      const { data, error: updateError } = await supabase
+        .from("life_milestones")
+        .update(payload)
+        .eq("id", editingId)
+        .select("*")
+        .single();
+      if (updateError || !data) {
+        setError("Gagal update milestone. Coba lagi.");
+        return;
+      }
+      setMilestones((prev) =>
+        prev.map((m) => (m.id === editingId ? data : m)).sort((a, b) => a.occurred_on.localeCompare(b.occurred_on))
+      );
+    } else {
+      const { data, error: insertError } = await supabase
+        .from("life_milestones")
+        .insert({ user_id: user.id, ...payload })
+        .select("*")
+        .single();
+      if (insertError || !data) {
+        setError("Gagal nyimpen milestone. Coba lagi.");
+        return;
+      }
+      setMilestones((prev) => [...prev, data].sort((a, b) => a.occurred_on.localeCompare(b.occurred_on)));
     }
-    setMilestones((prev) => [...prev, data].sort((a, b) => a.occurred_on.localeCompare(b.occurred_on)));
-    setTitle("");
-    setDescription("");
+
+    resetForm();
     setShowForm(false);
   }
 
   async function handleDelete(id: string) {
     const previous = milestones;
     setMilestones((prev) => prev.filter((m) => m.id !== id));
+    if (id === editingId) {
+      resetForm();
+      setShowForm(false);
+    }
     const { error: deleteError } = await supabase.from("life_milestones").delete().eq("id", id);
     if (deleteError) {
       setMilestones(previous);
@@ -128,6 +180,7 @@ export default function TimelineKehidupanPage() {
       id: m.id,
       title: m.title,
       occurred_on: m.occurred_on,
+      ended_on: m.ended_on,
       category: m.category,
       description: m.description,
       auto: false,
@@ -145,7 +198,7 @@ export default function TimelineKehidupanPage() {
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">Modul 07</p>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">Timeline Kehidupan</h1>
         </div>
-        <button onClick={() => setShowForm((s) => !s)} className={ghostBtnClass}>
+        <button onClick={toggleForm} className={ghostBtnClass}>
           {showForm ? "Batal" : "+ Milestone"}
         </button>
       </header>
@@ -170,25 +223,40 @@ export default function TimelineKehidupanPage() {
 
       {showForm && (
         <HudPanel>
-          <form onSubmit={handleAdd} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className={labelClass}>Judul</label>
+              <input
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Wisuda, kerja baru, dll"
+                className={inputClass}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className={labelClass}>Judul</label>
+                <label htmlFor="milestone-start" className={labelClass}>
+                  Tanggal mulai
+                </label>
                 <input
-                  required
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Wisuda, kerja baru, dll"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Tanggal</label>
-                <input
+                  id="milestone-start"
                   type="date"
                   required
                   value={occurredOn}
                   onChange={(e) => setOccurredOn(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="milestone-end" className={labelClass}>
+                  Tanggal selesai (opsional)
+                </label>
+                <input
+                  id="milestone-end"
+                  type="date"
+                  value={endedOn}
+                  onChange={(e) => setEndedOn(e.target.value)}
                   className={inputClass}
                 />
               </div>
@@ -219,7 +287,7 @@ export default function TimelineKehidupanPage() {
               </div>
             </div>
             <button type="submit" className={primaryBtnClass}>
-              Simpan
+              {editingId ? "Update Milestone" : "Simpan"}
             </button>
           </form>
         </HudPanel>
@@ -238,7 +306,7 @@ export default function TimelineKehidupanPage() {
           {before.length > 0 && (
             <div className="ml-[13px] border-l-2 border-line pl-6 space-y-4 mb-6">
               {before.map((entry) => (
-                <TimelineRow key={entry.id} entry={entry} onDelete={handleDelete} />
+                <TimelineRow key={entry.id} entry={entry} onEdit={startEdit} onDelete={handleDelete} />
               ))}
             </div>
           )}
@@ -254,7 +322,7 @@ export default function TimelineKehidupanPage() {
           {since.length > 0 ? (
             <div className="ml-[13px] border-l-2 border-line pl-6 space-y-4">
               {since.map((entry) => (
-                <TimelineRow key={entry.id} entry={entry} onDelete={handleDelete} />
+                <TimelineRow key={entry.id} entry={entry} onEdit={startEdit} onDelete={handleDelete} />
               ))}
             </div>
           ) : (
@@ -268,8 +336,19 @@ export default function TimelineKehidupanPage() {
   );
 }
 
-function TimelineRow({ entry, onDelete }: { entry: LifeTimelineEntry; onDelete: (id: string) => void }) {
+function TimelineRow({
+  entry,
+  onEdit,
+  onDelete,
+}: {
+  entry: LifeTimelineEntry;
+  onEdit: (entry: LifeTimelineEntry) => void;
+  onDelete: (id: string) => void;
+}) {
   const meta = MILESTONE_CATEGORY_META[entry.category];
+  const dateLabel = entry.ended_on
+    ? `${formatDate(entry.occurred_on)} – ${formatDate(entry.ended_on)}`
+    : formatDate(entry.occurred_on);
   return (
     <div className="relative">
       <span
@@ -278,7 +357,7 @@ function TimelineRow({ entry, onDelete }: { entry: LifeTimelineEntry; onDelete: 
         aria-hidden="true"
       />
       <p className="font-mono text-[10px] text-slate-500 mb-0.5">
-        {formatDate(entry.occurred_on)} · <span style={{ color: meta.color }}>{meta.label}</span>
+        {dateLabel} · <span style={{ color: meta.color }}>{meta.label}</span>
       </p>
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -286,13 +365,22 @@ function TimelineRow({ entry, onDelete }: { entry: LifeTimelineEntry; onDelete: 
           {entry.description && <p className="text-xs text-slate-500 mt-0.5">{entry.description}</p>}
         </div>
         {!entry.auto && (
-          <button
-            onClick={() => onDelete(entry.id)}
-            aria-label={`Hapus milestone ${entry.title}`}
-            className="text-slate-600 hover:text-rose-glow text-sm leading-none shrink-0"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => onEdit(entry)}
+              aria-label={`Edit milestone ${entry.title}`}
+              className="text-slate-600 hover:text-cyan-glow text-xs font-mono leading-none"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => onDelete(entry.id)}
+              aria-label={`Hapus milestone ${entry.title}`}
+              className="text-slate-600 hover:text-rose-glow text-sm leading-none"
+            >
+              ×
+            </button>
+          </div>
         )}
       </div>
     </div>
