@@ -33,6 +33,17 @@ const TOOL_LABEL: Record<string, string> = {
   add_calendar_event: "Bikin event kalender",
   add_journal_entry: "Nambah catatan jurnal",
   search_records: "Cari data",
+  add_debt: "Catat utang/piutang",
+  update_debt: "Update utang/piutang",
+  delete_debt: "Hapus utang/piutang",
+  add_savings_goal: "Bikin target tabungan",
+  update_savings_goal: "Update target tabungan",
+  delete_savings_goal: "Hapus target tabungan",
+  add_recurring_item: "Tambah item rutin",
+  delete_recurring_item: "Hapus item rutin",
+  add_milestone: "Tambah milestone",
+  update_milestone: "Update milestone",
+  delete_milestone: "Hapus milestone",
 };
 
 const ACTIVITY_DAYS = 14;
