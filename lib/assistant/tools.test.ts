@@ -8,13 +8,15 @@ afterEach(() => {
 type Row = Record<string, unknown>;
 
 // Minimal Supabase query-builder double: supports the .select/.eq/.ilike
-// chain findOneByColumn() uses, plus insert()/update()/delete() as thenables
-// that actually mutate the in-memory table so a find-then-write flow
-// (e.g. update_debt) sees its own effect.
+// chain findOneByColumn() uses, plus insert()/update()/delete()/upsert() as
+// thenables and maybeSingle() as a terminal, all mutating the in-memory
+// table so a find-then-write flow (e.g. update_debt, toggle_habit) sees its
+// own effect.
 function makeSupabase(tables: Record<string, Row[]>) {
   const inserted: { table: string; payload: Row }[] = [];
   const updated: { table: string; payload: Row }[] = [];
   const deleted: { table: string; id: unknown }[] = [];
+  const upserted: { table: string; payload: Row }[] = [];
 
   function builder(table: string) {
     let pendingOp: "update" | "delete" | null = null;
@@ -24,8 +26,23 @@ function makeSupabase(tables: Record<string, Row[]>) {
     const obj: Record<string, unknown> = {
       select: () => obj,
       insert: (payload: Row) => {
-        inserted.push({ table, payload });
-        tables[table] = [...(tables[table] ?? []), { id: `new-${(tables[table]?.length ?? 0) + 1}`, ...payload }];
+        const rows = Array.isArray(payload) ? payload : [payload];
+        for (const row of rows) {
+          inserted.push({ table, payload: row });
+          tables[table] = [...(tables[table] ?? []), { id: `new-${(tables[table]?.length ?? 0) + 1}`, ...row }];
+        }
+        return Promise.resolve({ error: null });
+      },
+      upsert: (payload: Row, opts?: { onConflict?: string }) => {
+        upserted.push({ table, payload });
+        const rows = tables[table] ?? [];
+        const conflictCols = (opts?.onConflict ?? "").split(",").filter(Boolean);
+        const existing = conflictCols.length
+          ? rows.find((r) => conflictCols.every((c) => r[c] === payload[c]))
+          : undefined;
+        tables[table] = existing
+          ? rows.map((r) => (r === existing ? { ...r, ...payload } : r))
+          : [...rows, { id: `new-${rows.length + 1}`, ...payload }];
         return Promise.resolve({ error: null });
       },
       update: (payload: Row) => {
@@ -48,6 +65,11 @@ function makeSupabase(tables: Record<string, Row[]>) {
       },
       limit: () => obj,
       order: () => obj,
+      maybeSingle: () => {
+        const rows = tables[table] ?? [];
+        const matched = rows.filter((r) => filters.every((f) => f(r)));
+        return Promise.resolve({ data: matched[0] ?? null, error: null });
+      },
       then: (resolve: (v: { data?: Row[]; error: null }) => unknown) => {
         const rows = tables[table] ?? [];
         const matched = rows.filter((r) => filters.every((f) => f(r)));
@@ -67,7 +89,7 @@ function makeSupabase(tables: Record<string, Row[]>) {
     return obj;
   }
 
-  return { inserted, updated, deleted, tables, from: (table: string) => builder(table) };
+  return { inserted, updated, deleted, upserted, tables, from: (table: string) => builder(table) };
 }
 
 describe("executeAssistantTool: search_records", () => {
@@ -283,5 +305,497 @@ describe("executeAssistantTool: life milestones", () => {
     });
     expect(res.ok).toBe(false);
     expect(res.result).toContain("Nggak nemu");
+  });
+});
+
+describe("executeAssistantTool: memory", () => {
+  it("remembers a fact", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ assistant_memories: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "remember", {
+      content: "Suka kopi item.",
+    });
+    expect(res).toEqual({ ok: true, result: "Tersimpan." });
+    expect(supabase.inserted[0]).toMatchObject({
+      table: "assistant_memories",
+      payload: { user_id: "user-1", content: "Suka kopi item." },
+    });
+  });
+
+  it("rejects an empty fact", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ assistant_memories: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "remember", { content: "  " });
+    expect(res).toEqual({ ok: false, result: "content kosong." });
+  });
+
+  it("forgets a memory found by query", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      assistant_memories: [{ id: "m1", user_id: "user-1", content: "Suka kopi item." }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "forget", { query: "kopi" });
+    expect(res).toEqual({ ok: true, result: "Memory dihapus." });
+    expect(supabase.deleted).toEqual([{ table: "assistant_memories", id: "m1" }]);
+  });
+
+  it("reports ambiguity when several memories match", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      assistant_memories: [
+        { id: "m1", user_id: "user-1", content: "Suka kopi item." },
+        { id: "m2", user_id: "user-1", content: "Suka kopi susu." },
+      ],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "forget", { query: "kopi" });
+    expect(res.ok).toBe(false);
+    expect(res.result).toContain("Ada 2 memory");
+  });
+});
+
+describe("executeAssistantTool: transactions", () => {
+  it("adds a transaction, defaulting occurred_on to today", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ transactions: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_transaction", {
+      type: "expense",
+      category: "Makanan",
+      amount: 25,
+    });
+    expect(res.ok).toBe(true);
+    const payload = supabase.inserted[0].payload;
+    expect(payload).toMatchObject({ type: "expense", category: "Makanan", amount: 25 });
+    expect(payload.occurred_on).toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  it("rejects a non-positive amount", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ transactions: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_transaction", {
+      type: "expense",
+      category: "Makanan",
+      amount: -5,
+    });
+    expect(res).toEqual({ ok: false, result: "amount harus > 0." });
+  });
+
+  it("deletes a transaction found by category or description", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      transactions: [
+        { id: "t1", user_id: "user-1", category: "Makanan", description: "Nasi goreng", amount: 25 },
+      ],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "delete_transaction", {
+      query: "nasi goreng",
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.deleted).toEqual([{ table: "transactions", id: "t1" }]);
+  });
+
+  it("reports when several transactions match the query", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      transactions: [
+        { id: "t1", user_id: "user-1", category: "Makanan", description: "Nasi goreng", amount: 25 },
+        { id: "t2", user_id: "user-1", category: "Makanan", description: "Nasi padang", amount: 30 },
+      ],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "delete_transaction", {
+      query: "makanan",
+    });
+    expect(res.ok).toBe(false);
+    expect(res.result).toContain("Ada 2 transaksi");
+  });
+});
+
+describe("executeAssistantTool: tasks", () => {
+  it("adds a task, defaulting priority to medium", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ tasks: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_task", { title: "Bayar listrik" });
+    expect(res.ok).toBe(true);
+    expect(supabase.inserted[0].payload).toMatchObject({
+      title: "Bayar listrik",
+      priority: "medium",
+      status: "todo",
+    });
+  });
+
+  it("rejects an empty title", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ tasks: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_task", { title: "  " });
+    expect(res).toEqual({ ok: false, result: "title kosong." });
+  });
+
+  it("updates a task found by title, only patching fields that were given", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      tasks: [{ id: "t1", user_id: "user-1", title: "Bayar listrik", priority: "medium", status: "todo" }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "update_task", {
+      title_query: "listrik",
+      new_status: "done",
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.updated[0].payload).toEqual({ status: "done" });
+  });
+
+  it("rejects an update with no recognized fields", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      tasks: [{ id: "t1", user_id: "user-1", title: "Bayar listrik" }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "update_task", {
+      title_query: "listrik",
+    });
+    expect(res).toEqual({ ok: false, result: "Nggak ada perubahan yang disebutin." });
+  });
+
+  it("deletes a task found by title", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ tasks: [{ id: "t1", user_id: "user-1", title: "Bayar listrik" }] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "delete_task", { title_query: "listrik" });
+    expect(res.ok).toBe(true);
+    expect(supabase.deleted).toEqual([{ table: "tasks", id: "t1" }]);
+  });
+
+  it("adds a sub-task to a task found by title", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      tasks: [{ id: "t1", user_id: "user-1", title: "Bayar listrik" }],
+      task_subtasks: [],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_subtask", {
+      title_query: "listrik",
+      subtask_title: "Cek tagihan",
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.inserted[0]).toMatchObject({
+      table: "task_subtasks",
+      payload: { task_id: "t1", title: "Cek tagihan" },
+    });
+  });
+
+  it("toggles a sub-task found under its parent task", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      tasks: [{ id: "t1", user_id: "user-1", title: "Bayar listrik" }],
+      task_subtasks: [{ id: "s1", task_id: "t1", user_id: "user-1", title: "Cek tagihan", done: false }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "toggle_subtask", {
+      title_query: "listrik",
+      subtask_query: "cek tagihan",
+      done: true,
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.updated[0]).toMatchObject({ table: "task_subtasks", payload: { done: true } });
+  });
+
+  it("reports when the sub-task query doesn't match anything under that task", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      tasks: [{ id: "t1", user_id: "user-1", title: "Bayar listrik" }],
+      task_subtasks: [{ id: "s1", task_id: "t1", user_id: "user-1", title: "Cek tagihan", done: false }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "toggle_subtask", {
+      title_query: "listrik",
+      subtask_query: "nggak ada",
+      done: true,
+    });
+    expect(res.ok).toBe(false);
+    expect(res.result).toContain("Nggak nemu sub-task");
+  });
+});
+
+describe("executeAssistantTool: study notes", () => {
+  it("adds a study note, clamping progress into 0-100", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ study_notes: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_study_note", {
+      title: "Kalkulus II",
+      progress: 150,
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.inserted[0].payload).toMatchObject({ title: "Kalkulus II", progress: 100 });
+  });
+
+  it("updates a study note's progress found by title", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      study_notes: [{ id: "n1", user_id: "user-1", title: "Kalkulus II", progress: 40 }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "update_study_note", {
+      title_query: "kalkulus",
+      new_progress: 80,
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.updated[0].payload).toEqual({ progress: 80 });
+  });
+
+  it("deletes a study note found by title", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ study_notes: [{ id: "n1", user_id: "user-1", title: "Kalkulus II" }] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "delete_study_note", {
+      title_query: "kalkulus",
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.deleted).toEqual([{ table: "study_notes", id: "n1" }]);
+  });
+});
+
+describe("executeAssistantTool: budgets", () => {
+  it("creates a new budget via upsert when the category has none yet", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ budgets: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "set_budget", {
+      category: "Makanan",
+      monthly_limit: 500,
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.upserted[0].payload).toEqual({
+      user_id: "user-1",
+      category: "Makanan",
+      monthly_limit: 500,
+    });
+  });
+
+  it("rejects a non-positive monthly_limit", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ budgets: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "set_budget", {
+      category: "Makanan",
+      monthly_limit: 0,
+    });
+    expect(res).toEqual({ ok: false, result: "monthly_limit harus > 0." });
+  });
+
+  it("deletes a budget by category", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      budgets: [{ id: "b1", user_id: "user-1", category: "Makanan", monthly_limit: 500 }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "delete_budget", {
+      category: "Makanan",
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.deleted).toEqual([{ table: "budgets", id: "b1" }]);
+  });
+});
+
+describe("executeAssistantTool: habits", () => {
+  it("checks off a habit not yet done today", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      habits: [{ id: "h1", user_id: "user-1", title: "Olahraga" }],
+      habit_checks: [],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "toggle_habit", {
+      title_query: "olahraga",
+    });
+    expect(res.ok).toBe(true);
+    expect(res.result).toContain("ditandain selesai");
+    expect(supabase.inserted[0]).toMatchObject({ table: "habit_checks", payload: { habit_id: "h1" } });
+  });
+
+  it("no-ops when the habit is already checked today", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      habits: [{ id: "h1", user_id: "user-1", title: "Olahraga" }],
+      habit_checks: [{ id: "c1", habit_id: "h1", period: today }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "toggle_habit", {
+      title_query: "olahraga",
+    });
+    expect(res.ok).toBe(true);
+    expect(res.result).toContain("udah dicentang hari ini");
+    expect(supabase.inserted).toHaveLength(0);
+  });
+});
+
+describe("executeAssistantTool: journal", () => {
+  it("starts today's journal entry when there isn't one yet", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ journal_entries: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_journal_entry", {
+      content: "Hari yang produktif.",
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.upserted[0].payload).toMatchObject({ content: "Hari yang produktif." });
+  });
+
+  it("appends to today's existing entry instead of overwriting it", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      journal_entries: [
+        { id: "j1", user_id: "user-1", entry_date: today, content: "Pagi ini lari." },
+      ],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_journal_entry", {
+      content: "Sore ini belajar.",
+    });
+    expect(res.ok).toBe(true);
+    expect(supabase.upserted[0].payload.content).toBe("Pagi ini lari.\n\nSore ini belajar.");
+  });
+
+  it("rejects empty content", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ journal_entries: [] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_journal_entry", { content: "  " });
+    expect(res).toEqual({ ok: false, result: "content kosong." });
+  });
+});
+
+describe("executeAssistantTool: Gmail", () => {
+  function mockGmail({
+    accessToken = "token-1",
+    messages = [],
+    getMessageResult,
+  }: {
+    accessToken?: string | null;
+    messages?: { id: string }[];
+    getMessageResult?: (id: string) => Record<string, unknown>;
+  }) {
+    vi.doMock("@/lib/google/credentials", () => ({
+      getGmailAccessToken: vi.fn().mockResolvedValue(accessToken),
+      getCalendarAccessToken: vi.fn(),
+    }));
+    vi.doMock("@/lib/google/gmail", () => ({
+      listMessages: vi.fn().mockResolvedValue(messages),
+      getMessage: vi.fn().mockImplementation(async (_token: string, id: string) =>
+        getMessageResult
+          ? getMessageResult(id)
+          : { id, subject: "Subjek", from: "a@b.com", date: "2026-08-01", snippet: "cuplikan", bodyText: "isi" }
+      ),
+      createDraftReply: vi.fn().mockResolvedValue({}),
+    }));
+  }
+
+  it("search_email reports when Gmail isn't connected", async () => {
+    mockGmail({ accessToken: null });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "search_email", { query: "invoice" });
+    expect(res.ok).toBe(false);
+    expect(res.result).toContain("Gmail belum di-connect");
+  });
+
+  it("search_email summarizes matches wrapped in the untrusted-data note", async () => {
+    mockGmail({ messages: [{ id: "m1" }] });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "search_email", { query: "invoice" });
+    expect(res.ok).toBe(true);
+    expect(res.result).toContain("DATA EMAIL DARI LUAR");
+    expect(res.result).toContain("Subjek");
+  });
+
+  it("read_email returns the full body for a single match", async () => {
+    mockGmail({ messages: [{ id: "m1" }] });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "read_email", { query: "invoice" });
+    expect(res.ok).toBe(true);
+    expect(res.result).toContain("isi");
+  });
+
+  it("read_email asks for clarification when multiple emails match", async () => {
+    mockGmail({
+      messages: [{ id: "m1" }, { id: "m2" }],
+      getMessageResult: (id) => ({ id, subject: `Subjek ${id}`, from: "a@b.com", date: "2026-08-01", snippet: "" }),
+    });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "read_email", { query: "invoice" });
+    expect(res.ok).toBe(false);
+    expect(res.result).toContain("Ada 2 email");
+  });
+
+  it("draft_email_reply rejects an empty body", async () => {
+    mockGmail({ messages: [{ id: "m1" }] });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "draft_email_reply", {
+      query: "invoice",
+      body: "  ",
+    });
+    expect(res).toEqual({ ok: false, result: "Isi balesan kosong." });
+  });
+
+  it("draft_email_reply creates a draft for a single match", async () => {
+    mockGmail({ messages: [{ id: "m1" }] });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "draft_email_reply", {
+      query: "invoice",
+      body: "Sip, ditransfer sore ini.",
+    });
+    expect(res.ok).toBe(true);
+    expect(res.result).toContain("Draft balesan");
+  });
+});
+
+describe("executeAssistantTool: Google Calendar", () => {
+  function mockCalendar({
+    cred = { accessToken: "token-1" } as { accessToken: string } | { error: string },
+    events = [],
+    createEventImpl,
+  }: {
+    cred?: { accessToken: string } | { error: string };
+    events?: { summary: string; start: string; location: string | null }[];
+    createEventImpl?: ReturnType<typeof vi.fn>;
+  } = {}) {
+    vi.doMock("@/lib/google/credentials", () => ({
+      getGmailAccessToken: vi.fn(),
+      getCalendarAccessToken: vi.fn().mockResolvedValue(cred),
+    }));
+    vi.doMock("@/lib/google/calendar", () => ({
+      listUpcomingEvents: vi.fn().mockResolvedValue(events),
+      createEvent: createEventImpl ?? vi.fn().mockResolvedValue({}),
+    }));
+  }
+
+  it("check_calendar reports the connection error when Calendar isn't linked", async () => {
+    mockCalendar({ cred: { error: "Google Calendar belum di-connect." } });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "check_calendar", {});
+    expect(res).toEqual({ ok: false, result: "Google Calendar belum di-connect." });
+  });
+
+  it("check_calendar lists upcoming events", async () => {
+    mockCalendar({ events: [{ summary: "Standup", start: "2026-08-05T09:00:00Z", location: null }] });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "check_calendar", { days_ahead: 3 });
+    expect(res.ok).toBe(true);
+    expect(res.result).toContain("Standup");
+  });
+
+  it("check_calendar reports an empty range plainly", async () => {
+    mockCalendar({ events: [] });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "check_calendar", {});
+    expect(res).toEqual({ ok: true, result: "Nggak ada event di rentang waktu itu." });
+  });
+
+  it("add_calendar_event rejects missing required fields", async () => {
+    mockCalendar();
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "add_calendar_event", {
+      summary: "Meeting",
+    });
+    expect(res).toEqual({ ok: false, result: "summary/start/end kosong." });
+  });
+
+  it("add_calendar_event creates the event via the Calendar client", async () => {
+    const createEventImpl = vi.fn().mockResolvedValue({});
+    mockCalendar({ createEventImpl });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "add_calendar_event", {
+      summary: "Meeting",
+      start: "2026-08-05T14:00:00+02:00",
+      end: "2026-08-05T15:00:00+02:00",
+    });
+    expect(res.ok).toBe(true);
+    expect(createEventImpl).toHaveBeenCalledWith(
+      "token-1",
+      expect.objectContaining({ summary: "Meeting" })
+    );
   });
 });
