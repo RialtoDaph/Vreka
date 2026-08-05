@@ -16,24 +16,18 @@ const REALTIME_SESSION_RATE_WINDOW_MS = 5 * 60 * 1000;
 // this writing (the "-mini" tier keeps cost down; the full gpt-realtime-2.1
 // trades some latency for GPT-5-class reasoning). Env-overridable in case
 // the exact name drifts -- same reasoning as the other provider model IDs.
+// "echo" -- described by OpenAI as resonant/deep -- picked specifically as
+// a male-sounding voice (the previous default, "alloy", read as female).
+// This button gives up trying to rename itself away from "Aslan": the
+// shared buildAssistantSystemPrompt() below bakes in "Nama kamu Aslan" and
+// an explicit "introduce yourself as Aslan" instruction, and overriding
+// that per-session proved unreliable in practice -- easier to just accept
+// it's still Aslan here, with a different (male) voice.
 const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1-mini";
-const REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || "alloy";
+const REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || "echo";
 
-// Casual, ngobrol-santai persona for the dedicated GPT real-time voice
-// button on Memory Map -- separate from Aslan's own (Claude-driven) voice
-// loop, this is a lighter-weight, always-available "quick chat" option.
-// Named "Nana" (not Aslan) deliberately, since this button runs on a
-// different voice engine (OpenAI's own, not ElevenLabs) -- reusing Aslan's
-// name here would read as the same character with a mismatched voice.
-//
-// This has to come AFTER basePrompt (not before) and be explicit about
-// overriding it -- buildAssistantSystemPrompt() itself opens with "Nama
-// kamu Aslan" and instructs "kalau ditanya siapa kamu, perkenalkan diri
-// sebagai Aslan", so a name override placed earlier (or phrased as just
-// another fact) loses to that instruction and the session kept calling
-// itself Aslan anyway.
-const REALTIME_PERSONA_OVERRIDE =
-  "PENTING, abaikan instruksi nama di atas: buat sesi ngobrol suara ini, nama kamu BUKAN Aslan -- nama kamu Nana. Kalau user nanya siapa kamu atau minta kenalan, jawab Nana, jangan pernah bilang Aslan. Gaya ngobrol kamu santai, ramah, bahasa kasual sehari-hari -- kayak lagi ngobrol sama temen deket. Jangan kaku atau kelewat formal.";
+const REALTIME_TONE =
+  "Gaya ngobrol kamu santai, ramah, bahasa kasual sehari-hari -- kayak lagi ngobrol sama temen deket. Jangan kaku atau kelewat formal.";
 
 // Mints a short-lived client secret the browser uses to open a WebRTC
 // connection directly to OpenAI -- the real OPENAI_API_KEY never reaches the
@@ -61,7 +55,7 @@ export async function POST() {
   }
 
   const basePrompt = await buildAssistantSystemPrompt(supabase, user.id);
-  const instructions = `${basePrompt}\n\n${REALTIME_PERSONA_OVERRIDE}\n\nKamu lagi ngobrol lewat suara real-time. Kamu cuma bisa ngobrol -- kamu TIDAK bisa nyatet transaksi, nambah tugas, atau ngelakuin aksi apa pun ke data user, cuma bisa cerita/jelasin dari info di atas.`;
+  const instructions = `${basePrompt}\n\n${REALTIME_TONE}\n\nKamu lagi ngobrol lewat suara real-time. Kamu cuma bisa ngobrol -- kamu TIDAK bisa nyatet transaksi, nambah tugas, atau ngelakuin aksi apa pun ke data user, cuma bisa cerita/jelasin dari info di atas.`;
 
   try {
     const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {

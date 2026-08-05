@@ -68,7 +68,7 @@ describe("POST /api/assistant/realtime-session", () => {
     expect(body.model).toBe("gpt-realtime-2.1-mini");
   });
 
-  it("bakes the Nana persona and the user's data summary into the session instructions", async () => {
+  it("bakes the casual tone and the user's data summary into the session instructions", async () => {
     mockAuth({ id: "user-1" });
     mockContext();
     const fetchMock = vi.fn().mockResolvedValue({
@@ -82,16 +82,12 @@ describe("POST /api/assistant/realtime-session", () => {
     await POST();
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.session.instructions).toContain("nama kamu Nana");
+    expect(body.session.instructions).toContain("santai");
     expect(body.session.instructions).toContain("ringkasan data user");
     expect(body.session.type).toBe("realtime");
   });
 
-  // Regression: buildAssistantSystemPrompt() itself opens with "Nama kamu
-  // Aslan" and tells the model to introduce itself as Aslan -- the Nana
-  // override has to come *after* that base prompt (not before) or it loses
-  // and the session keeps calling itself Aslan.
-  it("places the Nana override after the base prompt so it wins over the 'you are Aslan' instruction", async () => {
+  it("uses a male-sounding voice by default", async () => {
     mockAuth({ id: "user-1" });
     mockContext();
     const fetchMock = vi.fn().mockResolvedValue({
@@ -105,8 +101,7 @@ describe("POST /api/assistant/realtime-session", () => {
     await POST();
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-    const instructions: string = body.session.instructions;
-    expect(instructions.indexOf("ringkasan data user")).toBeLessThan(instructions.indexOf("nama kamu Nana"));
+    expect(body.session.audio.output.voice).toBe("echo");
   });
 
   it("returns 500 when the upstream session request fails", async () => {
