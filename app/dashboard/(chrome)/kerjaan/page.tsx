@@ -228,7 +228,7 @@ export default function KerjaanPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-3">
+      <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
             Modul 02

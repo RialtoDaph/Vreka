@@ -371,7 +371,7 @@ export default function KalenderPage() {
               <button
                 onClick={closeDay}
                 aria-label="Tutup"
-                className="w-6 h-6 rounded-sm border border-line text-slate-400 hover:text-slate-200 text-sm shrink-0"
+                className="w-8 h-8 rounded-sm border border-line text-slate-400 hover:text-slate-200 text-sm shrink-0"
               >
                 ×
               </button>

@@ -10,8 +10,10 @@ export const primaryBtnClass =
 export const ghostBtnClass =
   "border border-line text-slate-400 hover:text-slate-200 hover:border-slate-500 font-mono uppercase tracking-wider text-xs py-2.5 px-4 rounded-sm transition-colors";
 
+// py-2/-my-2 enlarges the tap target on touch devices without shifting the
+// text's visible position or affecting the row's line height.
 export const dangerBtnClass =
-  "text-rose-glow/70 hover:text-rose-glow text-xs font-mono transition-colors";
+  "text-rose-glow/70 hover:text-rose-glow text-xs font-mono transition-colors py-2 -my-2";
 
 export const errorBannerClass =
   "text-xs text-rose-glow bg-rose-glow/10 border border-rose-glow/30 rounded-sm px-3 py-2";

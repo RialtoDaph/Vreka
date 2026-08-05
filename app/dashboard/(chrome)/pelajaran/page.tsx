@@ -484,7 +484,7 @@ export default function PelajaranPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-3">
+      <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
             Modul 03
@@ -711,20 +711,20 @@ export default function PelajaranPage() {
                           ))}
                         </ul>
                       )}
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <input
                           type="text"
                           value={resourceLabel}
                           onChange={(e) => setResourceLabel(e.target.value)}
                           placeholder="Label"
-                          className={`${inputClass} text-xs py-1.5 w-1/3`}
+                          className={`${inputClass} text-xs py-1.5 w-full sm:w-1/3 min-w-0`}
                         />
                         <input
                           type="url"
                           value={resourceUrl}
                           onChange={(e) => setResourceUrl(e.target.value)}
                           placeholder="https://..."
-                          className={`${inputClass} text-xs py-1.5`}
+                          className={`${inputClass} text-xs py-1.5 min-w-0 flex-1`}
                         />
                         <button
                           onClick={() => handleAddResource(note.id)}

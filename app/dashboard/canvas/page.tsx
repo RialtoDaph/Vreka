@@ -439,7 +439,7 @@ export default function CanvasKerjaPage() {
         </div>
       </div>
 
-      <div className="absolute top-5 left-5 z-[2] flex flex-col gap-2.5">
+      <div className="absolute top-5 left-5 z-[2] flex flex-col gap-2.5 max-w-[150px] sm:max-w-none">
         <div className="flex items-center gap-2">
           <span className="w-[26px] h-[26px] rounded-full border-2 border-cyan-glow/50 flex items-center justify-center shrink-0">
             <span className="w-2 h-2 rounded-full bg-cyan-glow" />
