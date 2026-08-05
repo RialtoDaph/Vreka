@@ -49,6 +49,16 @@ const COLUMNS: { key: TaskStatus; label: string; tone: string }[] = [
   { key: "done", label: "Selesai", tone: "text-mint-glow" },
 ];
 
+// Inverse of the `new Date(deadline).toISOString()` conversion done on
+// save -- an <input type="datetime-local"> needs "YYYY-MM-DDTHH:mm" in the
+// browser's local time, not the raw stored ISO/UTC string.
+function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function KerjaanPage() {
   const supabase = createClient();
   const [items, setItems] = useState<Task[]>([]);
@@ -58,7 +68,10 @@ export default function KerjaanPage() {
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [subtaskInput, setSubtaskInput] = useState("");
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [subtaskEditValue, setSubtaskEditValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -66,6 +79,30 @@ export default function KerjaanPage() {
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [project, setProject] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
+
+  function resetForm() {
+    setEditingId(null);
+    setTitle("");
+    setDescription("");
+    setDeadline("");
+    setPriority("medium");
+    setProject("");
+  }
+
+  function toggleForm() {
+    resetForm();
+    setShowForm((s) => !s);
+  }
+
+  function startEdit(task: Task) {
+    setEditingId(task.id);
+    setTitle(task.title);
+    setDescription(task.description ?? "");
+    setDeadline(toDatetimeLocalValue(task.deadline));
+    setPriority(task.priority);
+    setProject(task.project ?? "");
+    setShowForm(true);
+  }
 
   async function load() {
     setLoading(true);
@@ -90,47 +127,53 @@ export default function KerjaanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title) return;
     setSaving(true);
     setError(null);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setError("Sesi login habis. Refresh halaman terus coba lagi.");
-      setSaving(false);
-      return;
-    }
 
-    const { error: saveError } = await supabase.from("tasks").insert({
-      user_id: user.id,
+    // `deadline` comes from an <input type="datetime-local">, e.g.
+    // "2026-08-05T21:00" with no timezone offset. `new Date(...)` parses
+    // that as local time (per spec), so converting to ISO here stores the
+    // correct UTC instant instead of letting Postgres interpret the raw
+    // offset-less string as UTC (which would silently shift it by the
+    // browser's UTC offset).
+    const payload = {
       title,
       description: description || null,
-      // `deadline` comes from an <input type="datetime-local">, e.g.
-      // "2026-08-05T21:00" with no timezone offset. `new Date(...)` parses
-      // that as local time (per spec), so converting to ISO here stores the
-      // correct UTC instant instead of letting Postgres interpret the raw
-      // offset-less string as UTC (which would silently shift it by the
-      // browser's UTC offset).
       deadline: deadline ? new Date(deadline).toISOString() : null,
       priority,
-      status: "todo",
       project: project.trim() || null,
-    });
+    };
 
-    if (saveError) {
-      setError("Gagal simpan to-do. Coba lagi.");
-      setSaving(false);
-      return;
+    if (editingId) {
+      const { error: updateError } = await supabase.from("tasks").update(payload).eq("id", editingId);
+      if (updateError) {
+        setError("Gagal update to-do. Coba lagi.");
+        setSaving(false);
+        return;
+      }
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setError("Sesi login habis. Refresh halaman terus coba lagi.");
+        setSaving(false);
+        return;
+      }
+      const { error: insertError } = await supabase
+        .from("tasks")
+        .insert({ user_id: user.id, ...payload, status: "todo" });
+      if (insertError) {
+        setError("Gagal simpan to-do. Coba lagi.");
+        setSaving(false);
+        return;
+      }
     }
 
-    setTitle("");
-    setDescription("");
-    setDeadline("");
-    setPriority("medium");
-    setProject("");
+    resetForm();
     setSaving(false);
     setShowForm(false);
     load();
@@ -158,6 +201,10 @@ export default function KerjaanPage() {
       delete next[id];
       return next;
     });
+    if (id === editingId) {
+      resetForm();
+      setShowForm(false);
+    }
     const { error: deleteError } = await supabase.from("tasks").delete().eq("id", id);
     if (deleteError) {
       setItems(previousItems);
@@ -210,6 +257,33 @@ export default function KerjaanPage() {
     }
   }
 
+  function startEditSubtask(subtask: TaskSubtask) {
+    setEditingSubtaskId(subtask.id);
+    setSubtaskEditValue(subtask.title);
+  }
+
+  async function saveSubtaskEdit(subtask: TaskSubtask) {
+    const newTitle = subtaskEditValue.trim();
+    setEditingSubtaskId(null);
+    if (!newTitle || newTitle === subtask.title) return;
+    setError(null);
+    const previous = subtasksByTask;
+    setSubtasksByTask((prev) => ({
+      ...prev,
+      [subtask.task_id]: (prev[subtask.task_id] ?? []).map((s) =>
+        s.id === subtask.id ? { ...s, title: newTitle } : s
+      ),
+    }));
+    const { error: updateError } = await supabase
+      .from("task_subtasks")
+      .update({ title: newTitle })
+      .eq("id", subtask.id);
+    if (updateError) {
+      setSubtasksByTask(previous);
+      setError("Gagal update sub-task. Coba lagi.");
+    }
+  }
+
   async function deleteSubtask(subtask: TaskSubtask) {
     setError(null);
     const previous = subtasksByTask;
@@ -241,7 +315,7 @@ export default function KerjaanPage() {
           <Link href="/dashboard/canvas" className={ghostBtnClass}>
             ⌗ Canvas
           </Link>
-          <button onClick={() => setShowForm((s) => !s)} className={primaryBtnClass}>
+          <button onClick={toggleForm} className={primaryBtnClass}>
             {showForm ? "Batal" : "+ To-do Baru"}
           </button>
         </div>
@@ -251,7 +325,7 @@ export default function KerjaanPage() {
 
       {showForm && (
         <HudPanel>
-          <form onSubmit={handleAdd} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className={labelClass}>Judul</label>
               <input
@@ -308,7 +382,7 @@ export default function KerjaanPage() {
               </div>
             </div>
             <button type="submit" disabled={saving} className={primaryBtnClass}>
-              {saving ? "Menyimpan..." : "Simpan"}
+              {saving ? "Menyimpan..." : editingId ? "Update To-do" : "Simpan"}
             </button>
           </form>
         </HudPanel>
@@ -379,9 +453,18 @@ export default function KerjaanPage() {
                             >
                               {task.title}
                             </p>
-                            <button onClick={() => handleDelete(task.id)} className={dangerBtnClass}>
-                              Hapus
-                            </button>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => startEdit(task)}
+                                aria-label={`Edit to-do ${task.title}`}
+                                className="text-slate-600 hover:text-cyan-glow text-xs font-mono leading-none"
+                              >
+                                Edit
+                              </button>
+                              <button onClick={() => handleDelete(task.id)} className={dangerBtnClass}>
+                                Hapus
+                              </button>
+                            </div>
                           </div>
                           {task.description && (
                             <p className="text-xs text-slate-500 truncate mt-0.5">{task.description}</p>
@@ -469,29 +552,54 @@ export default function KerjaanPage() {
 
                           {expanded && (
                             <div className="mt-3 pt-3 border-t border-line/60 space-y-2">
-                              {subtasks.map((s) => (
-                                <div key={s.id} className="flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={s.done}
-                                    onChange={() => toggleSubtask(s)}
-                                    className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-cyan-glow"
-                                  />
-                                  <span
-                                    className={`text-xs flex-1 truncate ${
-                                      s.done ? "text-slate-500 line-through" : "text-slate-300"
-                                    }`}
-                                  >
-                                    {s.title}
-                                  </span>
-                                  <button
-                                    onClick={() => deleteSubtask(s)}
-                                    className="text-[10px] text-rose-glow/70 hover:text-rose-glow font-mono"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
+                              {subtasks.map((s) =>
+                                editingSubtaskId === s.id ? (
+                                  <div key={s.id} className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={subtaskEditValue}
+                                      onChange={(e) => setSubtaskEditValue(e.target.value)}
+                                      onBlur={() => saveSubtaskEdit(s)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          saveSubtaskEdit(s);
+                                        } else if (e.key === "Escape") {
+                                          setEditingSubtaskId(null);
+                                        }
+                                      }}
+                                      className={`${inputClass} text-xs py-1 flex-1`}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div key={s.id} className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={s.done}
+                                      onChange={() => toggleSubtask(s)}
+                                      className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-cyan-glow"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditSubtask(s)}
+                                      title="Klik buat ganti judul"
+                                      className={`text-xs flex-1 truncate text-left bg-transparent border-none p-0 cursor-text ${
+                                        s.done ? "text-slate-500 line-through" : "text-slate-300"
+                                      }`}
+                                    >
+                                      {s.title}
+                                    </button>
+                                    <button
+                                      onClick={() => deleteSubtask(s)}
+                                      aria-label={`Hapus sub-task ${s.title}`}
+                                      className="text-[10px] text-rose-glow/70 hover:text-rose-glow font-mono"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                )
+                              )}
                               <div className="flex gap-2">
                                 <input
                                   type="text"

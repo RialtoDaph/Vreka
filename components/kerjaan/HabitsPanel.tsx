@@ -19,6 +19,8 @@ export default function HabitsPanel() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [heatmapRange, setHeatmapRange] = useState<HeatmapRange>(7);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   async function load() {
     setLoading(true);
@@ -101,6 +103,25 @@ export default function HabitsPanel() {
     }
   }
 
+  function startEdit(habit: Habit) {
+    setEditingId(habit.id);
+    setEditValue(habit.title);
+  }
+
+  async function saveEdit(habit: Habit) {
+    const title = editValue.trim();
+    setEditingId(null);
+    if (!title || title === habit.title) return;
+    setError(null);
+    const previous = habits;
+    setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, title } : h)));
+    const { error: updateError } = await supabase.from("habits").update({ title }).eq("id", habit.id);
+    if (updateError) {
+      setHabits(previous);
+      setError("Gagal update kebiasaan. Coba lagi.");
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!window.confirm("Yakin mau hapus kebiasaan ini? Riwayat streak-nya ikut hilang.")) return;
     setError(null);
@@ -170,7 +191,33 @@ export default function HabitsPanel() {
                     onChange={() => toggleToday(habit)}
                     className="h-4 w-4 shrink-0 cursor-pointer accent-cyan-glow"
                   />
-                  <span className="text-sm text-slate-200 flex-1 truncate">{habit.title}</span>
+                  {editingId === habit.id ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => saveEdit(habit)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          saveEdit(habit);
+                        } else if (e.key === "Escape") {
+                          setEditingId(null);
+                        }
+                      }}
+                      className={`${inputClass} text-sm py-1 flex-1`}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEdit(habit)}
+                      title="Klik buat ganti nama"
+                      className="text-sm text-slate-200 flex-1 truncate text-left bg-transparent border-none p-0 cursor-text"
+                    >
+                      {habit.title}
+                    </button>
+                  )}
                   {streak > 0 && (
                     <span className="text-xs font-mono text-amber-glow shrink-0">🔥 {streak} hari</span>
                   )}
