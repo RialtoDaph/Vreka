@@ -18,14 +18,18 @@ type SupabaseData = {
   habits?: unknown[];
   habitChecks?: unknown[];
   dailyBriefings?: unknown[];
+  studyNotes?: unknown[];
+  journalEntries?: unknown[];
+  milestones?: unknown[];
 };
 
 // Thenable + fluent chain -- matches whatever combination of
-// .select/.gte/.lt/.neq/.not/.order/.limit/.upsert the page chains per table.
+// .select/.gte/.lte/.lt/.neq/.not/.order/.limit/.upsert the page chains per table.
 function chainable(data: unknown[]) {
   const obj: Record<string, unknown> = {
     select: () => obj,
     gte: () => obj,
+    lte: () => obj,
     lt: () => obj,
     neq: () => obj,
     not: () => obj,
@@ -47,6 +51,9 @@ function mockSupabase(rows: SupabaseData) {
         if (table === "habits") return chainable(rows.habits ?? []);
         if (table === "habit_checks") return chainable(rows.habitChecks ?? []);
         if (table === "daily_briefings") return chainable(rows.dailyBriefings ?? []);
+        if (table === "study_notes") return chainable(rows.studyNotes ?? []);
+        if (table === "journal_entries") return chainable(rows.journalEntries ?? []);
+        if (table === "life_milestones") return chainable(rows.milestones ?? []);
         if (table === "tasks") {
           // Distinguish the due-today vs overdue query by call order --
           // page.tsx issues due first, then overdue.
@@ -157,4 +164,36 @@ describe("RingkasanPage", () => {
     await screen.findByText(/Nggak ada deadline mendesak hari ini\./);
     expect(screen.queryByText("Riwayat Briefing")).not.toBeInTheDocument();
   });
+
+  it("omits Pelajaran, Jurnal, and Timeline when there's nothing to report for them", async () => {
+    mockSupabase({});
+    const { default: RingkasanPage } = await import("./page");
+    render(<RingkasanPage />);
+
+    await screen.findByText(/Nggak ada deadline mendesak hari ini\./);
+    expect(screen.queryByText("Pelajaran")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jurnal")).not.toBeInTheDocument();
+    expect(screen.queryByText("Timeline")).not.toBeInTheDocument();
+  });
+
+  it("surfaces stale study notes, journal streak, and an upcoming milestone once there's data", async () => {
+    mockSupabase({
+      studyNotes: [
+        { title: "Kalkulus II", progress: 40, updated_at: "2020-01-01T00:00:00Z" },
+      ],
+      journalEntries: [{ entry_date: todayKeyForTest() }],
+      milestones: [{ title: "Anniversary kerja", occurred_on: todayKeyForTest() }],
+    });
+    const { default: RingkasanPage } = await import("./page");
+    render(<RingkasanPage />);
+
+    expect(await screen.findByText(/Kalkulus II/)).toBeInTheDocument();
+    expect(screen.getByText(/Udah nulis jurnal hari ini/)).toBeInTheDocument();
+    expect(screen.getByText(/Anniversary kerja \(Hari ini\)/)).toBeInTheDocument();
+  });
 });
+
+function todayKeyForTest(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}

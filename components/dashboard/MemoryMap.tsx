@@ -34,6 +34,7 @@ const FILTERS: { id: MemoryNodeType; label: string; dot: string }[] = [
   { id: "note", label: "Pelajaran", dot: TYPE_META.note.color },
   { id: "event", label: "Kalender", dot: TYPE_META.event.color },
   { id: "journal", label: "Jurnal", dot: TYPE_META.journal.color },
+  { id: "milestone", label: "Timeline", dot: TYPE_META.milestone.color },
   { id: "contact", label: "Kontak", dot: TYPE_META.contact.color },
 ];
 

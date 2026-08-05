@@ -4,7 +4,7 @@ import CommandPalette from "@/components/CommandPalette";
 import { buildMemoryMapData } from "@/lib/memoryMap";
 import { getCalendarAccessToken } from "@/lib/google/credentials";
 import { listUpcomingEvents, type CalendarEvent } from "@/lib/google/calendar";
-import { Task, SavingsGoal, Debt, StudyNote, Budget, Habit, HabitCheck, JournalEntry } from "@/lib/types";
+import { Task, SavingsGoal, Debt, StudyNote, Budget, Habit, HabitCheck, JournalEntry, LifeMilestone } from "@/lib/types";
 import { daysUntil } from "@/lib/format";
 import { buildDailyActivity } from "@/lib/assistantActivity";
 
@@ -30,6 +30,7 @@ export default async function OverviewPage() {
     { data: habits },
     { data: habitChecks },
     { data: journalEntries },
+    { data: milestones },
     {
       data: { user },
     },
@@ -54,6 +55,7 @@ export default async function OverviewPage() {
     supabase.from("habits").select("*").order("created_at", { ascending: true }),
     supabase.from("habit_checks").select("*"),
     supabase.from("journal_entries").select("*").order("entry_date", { ascending: false }),
+    supabase.from("life_milestones").select("*").order("occurred_on", { ascending: false }),
     supabase.auth.getUser(),
     supabase.from("google_credentials").select("email_address, scope").maybeSingle(),
     supabase.from("telegram_links").select("linked_at").not("linked_at", "is", null).maybeSingle(),
@@ -94,6 +96,7 @@ export default async function OverviewPage() {
     habits: (habits ?? []) as Habit[],
     habitChecks: (habitChecks ?? []) as HabitCheck[],
     journalEntries: (journalEntries ?? []) as JournalEntry[],
+    milestones: (milestones ?? []) as LifeMilestone[],
     calendarEvents,
     calendarConnected,
     gmailEmail: gmailCred?.email_address ?? null,

@@ -1,9 +1,10 @@
-import { Budget, Debt, Habit, HabitCheck, JournalEntry, SavingsGoal, StudyNote, Task } from "@/lib/types";
+import { Budget, Debt, Habit, HabitCheck, JournalEntry, LifeMilestone, SavingsGoal, StudyNote, Task } from "@/lib/types";
 import type { CalendarEvent } from "@/lib/google/calendar";
 import { formatCurrency, formatDate, formatDateTime, daysUntil } from "@/lib/format";
 import { computeStreak } from "@/lib/habits";
+import { MILESTONE_CATEGORY_META } from "@/lib/lifeTimeline";
 
-export type MemoryNodeType = "hub" | "task" | "finance" | "note" | "contact" | "event" | "journal";
+export type MemoryNodeType = "hub" | "task" | "finance" | "note" | "contact" | "event" | "journal" | "milestone";
 
 export type MemoryField = { k: string; v: string };
 
@@ -40,15 +41,20 @@ export const TYPE_META: Record<MemoryNodeType, { color: string; typeLabel: strin
   contact: { color: "#b98bff", typeLabel: "Kontak" },
   event: { color: "#5b8dff", typeLabel: "Kalender" },
   journal: { color: "#f2d94b", typeLabel: "Jurnal" },
+  milestone: { color: "#e879c9", typeLabel: "Timeline" },
 };
 
+// Evenly spaced around the ring (360/7deg) -- Timeline sits between Jurnal
+// and Asisten, matching the module order everywhere else in the app (see
+// components/Sidebar.tsx's NAV list).
 const HUB_DEFS: { id: string; label: string; angle: number; y: number; r: number; href: string }[] = [
   { id: "h-kerjaan", label: "Kerjaan", angle: 0, y: 45, r: 7, href: "/dashboard/kerjaan" },
-  { id: "h-keuangan", label: "Keuangan", angle: 60, y: -45, r: 7, href: "/dashboard/keuangan" },
-  { id: "h-pelajaran", label: "Pelajaran", angle: 120, y: 45, r: 6.5, href: "/dashboard/pelajaran" },
-  { id: "h-kalender", label: "Kalender", angle: 180, y: -45, r: 6.5, href: "/dashboard/kalender" },
-  { id: "h-jurnal", label: "Jurnal", angle: 240, y: 45, r: 6, href: "/dashboard/jurnal" },
-  { id: "h-asisten", label: "Asisten", angle: 300, y: -45, r: 6, href: "/dashboard/asisten" },
+  { id: "h-keuangan", label: "Keuangan", angle: 51.4, y: -45, r: 7, href: "/dashboard/keuangan" },
+  { id: "h-pelajaran", label: "Pelajaran", angle: 102.9, y: 45, r: 6.5, href: "/dashboard/pelajaran" },
+  { id: "h-kalender", label: "Kalender", angle: 154.3, y: -45, r: 6.5, href: "/dashboard/kalender" },
+  { id: "h-jurnal", label: "Jurnal", angle: 205.7, y: 45, r: 6, href: "/dashboard/jurnal" },
+  { id: "h-timeline", label: "Timeline", angle: 257.1, y: -45, r: 6, href: "/dashboard/timeline" },
+  { id: "h-asisten", label: "Asisten", angle: 308.6, y: 45, r: 6, href: "/dashboard/asisten" },
 ];
 const HUB_RADIUS = 85;
 
@@ -105,6 +111,7 @@ type BuildInput = {
   habits: Habit[];
   habitChecks: HabitCheck[];
   journalEntries: JournalEntry[];
+  milestones: LifeMilestone[];
   calendarEvents: CalendarEvent[];
   calendarConnected: boolean;
   gmailEmail: string | null;
@@ -121,6 +128,7 @@ export function buildMemoryMapData({
   habits,
   habitChecks,
   journalEntries,
+  milestones,
   calendarEvents,
   calendarConnected,
   gmailEmail,
@@ -370,6 +378,25 @@ export function buildMemoryMapData({
       i,
       recentEntries.length,
       "/dashboard/jurnal"
+    );
+  });
+
+  // --- Timeline: most recent life milestones ---
+  const recentMilestones = milestones.slice(0, 8);
+  recentMilestones.forEach((m, i) => {
+    addLeaf(
+      `ms-${m.id}`,
+      m.title,
+      "milestone",
+      "h-timeline",
+      3.0,
+      [
+        { k: "Kategori", v: MILESTONE_CATEGORY_META[m.category].label },
+        { k: "Tanggal", v: m.ended_on ? `${formatDate(m.occurred_on)} – ${formatDate(m.ended_on)}` : formatDate(m.occurred_on) },
+      ],
+      i,
+      recentMilestones.length,
+      "/dashboard/timeline"
     );
   });
 

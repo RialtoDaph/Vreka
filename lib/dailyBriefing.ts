@@ -4,6 +4,8 @@ export type BriefingTask = { title: string };
 export type BriefingBudgetAlert = { category: string; pct: number };
 export type BriefingHabit = { title: string; streak: number };
 export type BriefingCalendarEvent = { summary: string; start: string };
+export type BriefingStudyNote = { title: string };
+export type BriefingMilestone = { title: string; dateLabel: string };
 
 export type BriefingInput = {
   income: number;
@@ -18,9 +20,20 @@ export type BriefingInput = {
   pendingHabits: BriefingHabit[];
   calendarEvents: BriefingCalendarEvent[];
   calendarConnected: boolean;
+  /** True if the user has at least one study note tracked at all. */
+  hasStudyNotes: boolean;
+  /** Incomplete notes not touched in the last 14 days. */
+  staleStudyNotes: BriefingStudyNote[];
+  /** True if the user has written at least one journal entry ever. */
+  hasJournalHistory: boolean;
+  journaledToday: boolean;
+  /** Current consecutive-day journal streak (0 if none or already broken). */
+  journalStreak: number;
+  /** Milestones (already formatted date label) landing within the next 7 days. */
+  upcomingMilestones: BriefingMilestone[];
 };
 
-export type BriefingColor = "rose" | "amber" | "mint" | "cyan";
+export type BriefingColor = "rose" | "amber" | "mint" | "cyan" | "violet";
 
 export type BriefingPriority = {
   tag: string;
@@ -44,9 +57,9 @@ export type DailyBriefing = {
 };
 
 // Fixed precedence, not a score -- overdue work always outranks a tight
-// budget, which always outranks a habit streak. Each category contributes
-// at most one candidate (the single worst instance), so this naturally
-// caps out at 4 candidates before the top-3 slice below.
+// budget, which always outranks a habit or journal streak. Each category
+// contributes at most one candidate (the single worst instance), so this
+// naturally caps out at 5 candidates before the top-3 slice below.
 function buildPriorities(input: BriefingInput): BriefingPriority[] {
   const candidates: BriefingPriority[] = [];
 
@@ -104,6 +117,17 @@ function buildPriorities(input: BriefingInput): BriefingPriority[] {
     });
   }
 
+  if (!input.journaledToday && input.journalStreak > 0) {
+    candidates.push({
+      tag: "Streak jurnal berisiko",
+      title: `${input.journalStreak} hari beruntun nulis jurnal`,
+      reason: "Belum nulis hari ini, jangan putus",
+      action: "Tulis Jurnal",
+      href: "/dashboard/jurnal",
+      color: "violet",
+    });
+  }
+
   return candidates.slice(0, 3);
 }
 
@@ -146,6 +170,37 @@ function buildSections(input: BriefingInput): BriefingSection[] {
         ? input.calendarEvents.map((e) => `${e.summary} (${formatDateTime(e.start)})`)
         : ["Nggak ada jadwal Google Calendar hari ini."];
     sections.push({ title: "Jadwal", color: "cyan", items });
+  }
+
+  if (input.hasStudyNotes) {
+    const items =
+      input.staleStudyNotes.length > 0
+        ? [
+            `${input.staleStudyNotes.length} catatan belum disentuh 14+ hari: ${input.staleStudyNotes.map((n) => n.title).join(", ")}.`,
+          ]
+        : ["Nggak ada catatan yang butuh perhatian."];
+    sections.push({ title: "Pelajaran", color: "violet", items });
+  }
+
+  if (input.hasJournalHistory) {
+    const items = input.journaledToday
+      ? [
+          input.journalStreak > 1
+            ? `Udah nulis jurnal hari ini -- streak ${input.journalStreak} hari.`
+            : "Udah nulis jurnal hari ini.",
+        ]
+      : input.journalStreak > 0
+        ? [`Belum nulis jurnal hari ini -- streak ${input.journalStreak} hari, jangan putus.`]
+        : ["Belum nulis jurnal hari ini."];
+    sections.push({ title: "Jurnal", color: "violet", items });
+  }
+
+  if (input.upcomingMilestones.length > 0) {
+    sections.push({
+      title: "Timeline",
+      color: "violet",
+      items: input.upcomingMilestones.map((m) => `${m.title} (${m.dateLabel})`),
+    });
   }
 
   return sections;

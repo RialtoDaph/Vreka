@@ -11,6 +11,12 @@ function baseInput(overrides: Partial<BriefingInput> = {}): BriefingInput {
     pendingHabits: [],
     calendarEvents: [],
     calendarConnected: false,
+    hasStudyNotes: false,
+    staleStudyNotes: [],
+    hasJournalHistory: false,
+    journaledToday: false,
+    journalStreak: 0,
+    upcomingMilestones: [],
     ...overrides,
   };
 }
@@ -73,6 +79,23 @@ describe("buildDailyBriefing priorities", () => {
     );
     expect(priorities[0].reason).toBe("+2 tugas telat lainnya");
   });
+
+  it("surfaces an at-risk journal streak as a priority when not yet written today", () => {
+    const { priorities } = buildDailyBriefing(
+      "Senin",
+      baseInput({ journaledToday: false, journalStreak: 6 })
+    );
+    expect(priorities).toHaveLength(1);
+    expect(priorities[0]).toMatchObject({ tag: "Streak jurnal berisiko", color: "violet" });
+  });
+
+  it("does not surface a journal streak priority once today's entry is written", () => {
+    const { priorities } = buildDailyBriefing(
+      "Senin",
+      baseInput({ journaledToday: true, journalStreak: 6 })
+    );
+    expect(priorities).toHaveLength(0);
+  });
 });
 
 describe("buildDailyBriefing sections", () => {
@@ -100,6 +123,54 @@ describe("buildDailyBriefing sections", () => {
     const { sections } = buildDailyBriefing("Senin", baseInput());
     const kebiasaan = sections.find((s) => s.title === "Kebiasaan")!;
     expect(kebiasaan.items).toEqual(["Semua kebiasaan udah dicentang hari ini."]);
+  });
+
+  it("only includes Pelajaran when the user has any study notes at all", () => {
+    const none = buildDailyBriefing("Senin", baseInput());
+    expect(none.sections.some((s) => s.title === "Pelajaran")).toBe(false);
+
+    const stale = buildDailyBriefing(
+      "Senin",
+      baseInput({ hasStudyNotes: true, staleStudyNotes: [{ title: "Kalkulus II" }] })
+    );
+    const pelajaran = stale.sections.find((s) => s.title === "Pelajaran");
+    expect(pelajaran?.items[0]).toContain("Kalkulus II");
+
+    const upToDate = buildDailyBriefing("Senin", baseInput({ hasStudyNotes: true, staleStudyNotes: [] }));
+    expect(upToDate.sections.find((s) => s.title === "Pelajaran")?.items).toEqual([
+      "Nggak ada catatan yang butuh perhatian.",
+    ]);
+  });
+
+  it("only includes Jurnal when the user has ever written an entry, wording depends on today+streak", () => {
+    const none = buildDailyBriefing("Senin", baseInput());
+    expect(none.sections.some((s) => s.title === "Jurnal")).toBe(false);
+
+    const writtenWithStreak = buildDailyBriefing(
+      "Senin",
+      baseInput({ hasJournalHistory: true, journaledToday: true, journalStreak: 4 })
+    );
+    expect(writtenWithStreak.sections.find((s) => s.title === "Jurnal")?.items[0]).toContain("streak 4 hari");
+
+    const notWrittenWithStreak = buildDailyBriefing(
+      "Senin",
+      baseInput({ hasJournalHistory: true, journaledToday: false, journalStreak: 3 })
+    );
+    expect(notWrittenWithStreak.sections.find((s) => s.title === "Jurnal")?.items[0]).toContain(
+      "jangan putus"
+    );
+  });
+
+  it("only includes Timeline when a milestone lands in the next 7 days", () => {
+    const none = buildDailyBriefing("Senin", baseInput());
+    expect(none.sections.some((s) => s.title === "Timeline")).toBe(false);
+
+    const upcoming = buildDailyBriefing(
+      "Senin",
+      baseInput({ upcomingMilestones: [{ title: "Anniversary kerja", dateLabel: "3 hari lagi" }] })
+    );
+    const timeline = upcoming.sections.find((s) => s.title === "Timeline");
+    expect(timeline?.items[0]).toBe("Anniversary kerja (3 hari lagi)");
   });
 });
 
