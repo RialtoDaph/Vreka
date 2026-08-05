@@ -27,7 +27,8 @@ Dibangun dengan Next.js (App Router) + Supabase + Tailwind CSS.
 
 Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `ANTHROPIC_API_KEY`, dan `ELEVENLABS_API_KEY` (mode suara) di environment
-variables Vercel. Semua key AI itu cuma dipakai server-side (route
+variables Vercel, plus opsional `OPENAI_API_KEY` (buat tombol ⚡ GPT
+real-time di Memory Map). Semua key AI itu cuma dipakai server-side (route
 `/api/assistant/*`), jangan pernah ditaruh di env var yang di-prefix
 `NEXT_PUBLIC_`. Env var yang ditambah setelah deploy nggak berlaku surut —
 harus ada build baru buat kepake.
@@ -162,7 +163,10 @@ tambahan). Buat aktifin:
   lewat chat (tool-calling), nyimpen memory jangka panjang soal kamu, punya
   mode telepon hands-free dengan barge-in (TTS/STT lewat ElevenLabs) kalau
   `ELEVENLABS_API_KEY` di-set, bisa "liat" layar kamu lewat screen-share
-  buat mode obrolan visual, kalau
+  buat mode obrolan visual, plus tombol ⚡ terpisah di Memory Map buat
+  ngobrol suara real-time langsung ke GPT (OpenAI Realtime API, kalau
+  `OPENAI_API_KEY` di-set) -- ini di luar jalur data-mutating Aslan, cuma
+  obrolan, kalau
   Gmail di-connect bisa cari/baca email, bikin draft balesan, liat/bikin event
   Google Calendar, plus ringkasan email belum dibaca otomatis sekali sehari,
   kalau Telegram di-connect bisa diajak chat langsung dari Telegram dan dapet

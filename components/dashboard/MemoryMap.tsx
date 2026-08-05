@@ -5,6 +5,7 @@ import Link from "next/link";
 import * as THREE from "three";
 import { TYPE_META, type MemoryMapData, type MemoryNodeType } from "@/lib/memoryMap";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
+import { useGptRealtime } from "@/lib/assistant/useGptRealtime";
 import { THEME } from "@/lib/theme";
 import SignOutButton from "@/components/SignOutButton";
 import ToolbarIconButton from "@/components/asisten/ToolbarIconButton";
@@ -177,6 +178,14 @@ export default function MemoryMap({ data, vitals }: Props) {
   });
   const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
   const voiceBusy = voicePhase !== "idle" && voicePhase !== "wake-listening" && voicePhase !== "error";
+
+  const {
+    phase: gptRealtimePhase,
+    errorMsg: gptRealtimeError,
+    audioRef: gptRealtimeAudioRef,
+    toggle: toggleGptRealtime,
+  } = useGptRealtime();
+  const gptRealtimeBusy = gptRealtimePhase !== "idle" && gptRealtimePhase !== "error";
 
   // At least one type must stay active -- turning off the last one would
   // hide every leaf node with no way back short of the "Semua" reset.
@@ -1138,6 +1147,12 @@ export default function MemoryMap({ data, vitals }: Props) {
       {!focusMode && (
         <div className="absolute z-[2] bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5">
           <div className="flex items-center gap-2 bg-panel/85 border border-line rounded-full p-1.5 backdrop-blur-sm">
+            <ToolbarIconButton
+              icon="⚡"
+              label={gptRealtimeBusy ? "Stop GPT real-time" : "Ngobrol real-time sama GPT"}
+              active={gptRealtimeBusy}
+              onClick={toggleGptRealtime}
+            />
             {screenShareSupported && (
               <ToolbarIconButton
                 icon="🖥️"
@@ -1176,6 +1191,7 @@ export default function MemoryMap({ data, vitals }: Props) {
           )}
           {screenShareError && <p className="text-[9.5px] font-mono text-rose-glow">{screenShareError}</p>}
           {voiceError && <p className="text-[9.5px] font-mono text-rose-glow">{voiceError}</p>}
+          {gptRealtimeError && <p className="text-[9.5px] font-mono text-rose-glow">{gptRealtimeError}</p>}
         </div>
       )}
 
@@ -1183,6 +1199,7 @@ export default function MemoryMap({ data, vitals }: Props) {
           never shown to the user directly. */}
       <video ref={screenVideoRef} className="hidden" muted playsInline />
       <audio ref={audioRef} className="hidden" />
+      <audio ref={gptRealtimeAudioRef} className="hidden" />
     </div>
   );
 }

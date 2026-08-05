@@ -59,6 +59,25 @@ function mockVoice({
   return { toggle, toggleHandsFree };
 }
 
+type GptRealtimeMock = {
+  phase?: "idle" | "listening" | "speaking" | "error";
+  errorMsg?: string | null;
+  toggle?: () => void;
+};
+
+function mockGptRealtime({ phase = "idle", errorMsg = null, toggle = vi.fn() }: GptRealtimeMock = {}) {
+  vi.doMock("@/lib/assistant/useGptRealtime", () => ({
+    useGptRealtime: () => ({
+      phase,
+      errorMsg,
+      lastReply: null,
+      audioRef: { current: null },
+      toggle,
+    }),
+  }));
+  return { toggle };
+}
+
 const DATA: MemoryMapData = { nodes: [], edges: [] };
 const VITALS: MemoryMapVitals = {
   memoryCount: 0,
@@ -71,6 +90,7 @@ const VITALS: MemoryMapVitals = {
 describe("MemoryMap toolbar (relocated from Aslan page)", () => {
   it("starts and stops screen share, showing the active banner while sharing", async () => {
     mockVoice();
+    mockGptRealtime();
     const stop = vi.fn();
     const addEventListener = vi.fn();
     const getDisplayMedia = vi.fn().mockResolvedValue({
@@ -92,6 +112,7 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
 
   it("shows an error and stays inactive when the browser denies screen share", async () => {
     mockVoice();
+    mockGptRealtime();
     Object.defineProperty(navigator, "mediaDevices", {
       value: { getDisplayMedia: vi.fn().mockRejectedValue(new Error("NotAllowedError")) },
       configurable: true,
@@ -107,6 +128,7 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
 
   it("opens a quick-peek of the Aslan page from the tools icon", async () => {
     mockVoice();
+    mockGptRealtime();
     const { default: MemoryMap } = await import("./MemoryMap");
     render(<MemoryMap data={DATA} vitals={VITALS} />);
 
@@ -117,6 +139,7 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
 
   it("toggles hands-free mode from the toolbar", async () => {
     const { toggleHandsFree } = mockVoice({ handsFreeMode: false });
+    mockGptRealtime();
     const { default: MemoryMap } = await import("./MemoryMap");
     render(<MemoryMap data={DATA} vitals={VITALS} />);
 
@@ -126,6 +149,7 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
 
   it("hides the hands-free icon when the browser doesn't support wake-word listening", async () => {
     mockVoice({ handsFreeSupported: false });
+    mockGptRealtime();
     const { default: MemoryMap } = await import("./MemoryMap");
     render(<MemoryMap data={DATA} vitals={VITALS} />);
 
@@ -135,6 +159,7 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
 
   it("toggles voice mode from the toolbar mic icon", async () => {
     const { toggle } = mockVoice();
+    mockGptRealtime();
     const { default: MemoryMap } = await import("./MemoryMap");
     render(<MemoryMap data={DATA} vitals={VITALS} />);
 
@@ -144,10 +169,39 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
 
   it("hides the mic icon when the browser doesn't support voice mode", async () => {
     mockVoice({ supported: false });
+    mockGptRealtime();
     const { default: MemoryMap } = await import("./MemoryMap");
     render(<MemoryMap data={DATA} vitals={VITALS} />);
 
     await screen.findByLabelText("Tools & Integrasi");
     expect(screen.queryByLabelText("Mode suara")).not.toBeInTheDocument();
+  });
+
+  it("starts a GPT real-time session from the toolbar's lightning icon", async () => {
+    mockVoice();
+    const { toggle } = mockGptRealtime({ phase: "idle" });
+    const { default: MemoryMap } = await import("./MemoryMap");
+    render(<MemoryMap data={DATA} vitals={VITALS} />);
+
+    fireEvent.click(await screen.findByLabelText("Ngobrol real-time sama GPT"));
+    expect(toggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the GPT real-time button as active while a session is live", async () => {
+    mockVoice();
+    mockGptRealtime({ phase: "listening" });
+    const { default: MemoryMap } = await import("./MemoryMap");
+    render(<MemoryMap data={DATA} vitals={VITALS} />);
+
+    expect(await screen.findByLabelText("Stop GPT real-time")).toBeInTheDocument();
+  });
+
+  it("shows an error message when the GPT real-time session fails", async () => {
+    mockVoice();
+    mockGptRealtime({ phase: "error", errorMsg: "Gagal mulai GPT real-time." });
+    const { default: MemoryMap } = await import("./MemoryMap");
+    render(<MemoryMap data={DATA} vitals={VITALS} />);
+
+    expect(await screen.findByText("Gagal mulai GPT real-time.")).toBeInTheDocument();
   });
 });
