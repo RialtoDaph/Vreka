@@ -6,6 +6,7 @@ import { listMessages, getMessage, createDraftReply, type ParsedEmail } from "@/
 import { listUpcomingEvents, createEvent } from "@/lib/google/calendar";
 import { formatDateTime } from "@/lib/format";
 import { searchAll } from "@/lib/search";
+import { checkBudgetAlertAndNotify } from "@/lib/budgetAlerts";
 
 // Email content comes from whoever sent the email, not the user -- a
 // crafted "instruction" buried in a subject/body shouldn't be able to
@@ -591,6 +592,11 @@ export async function executeAssistantTool(
             : new Date().toISOString().slice(0, 10),
       });
       if (error) return { ok: false, result: error.message };
+      if (type === "expense") {
+        // Fire-and-forget -- a budget-threshold push shouldn't block or
+        // fail the tool call itself.
+        checkBudgetAlertAndNotify(supabase, userId, category).catch(() => {});
+      }
       return { ok: true, result: "Transaksi dicatat." };
     }
 

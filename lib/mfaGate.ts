@@ -51,6 +51,7 @@ export function resolveAuthRedirect(params: {
 const MFA_GATED_API_PREFIXES = [
   "/api/assistant/",
   "/api/google/",
+  "/api/keuangan/",
   "/api/push/",
   "/api/telegram/link",
   "/api/telegram/setup",
