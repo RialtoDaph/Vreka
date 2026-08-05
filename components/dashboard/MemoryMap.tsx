@@ -1149,7 +1149,7 @@ export default function MemoryMap({ data, vitals }: Props) {
           <div className="flex items-center gap-2 bg-panel/85 border border-line rounded-full p-1.5 backdrop-blur-sm">
             <ToolbarIconButton
               icon="⚡"
-              label={gptRealtimeBusy ? "Stop ngobrol sama Nana" : "Ngobrol real-time sama Nana"}
+              label={gptRealtimeBusy ? "Stop ngobrol sama Aslan" : "Ngobrol real-time sama Aslan"}
               active={gptRealtimeBusy}
               onClick={toggleGptRealtime}
             />
