@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DEFAULT_ASLAN_MODE, detectModeCommand, getAslanMode, isValidAslanMode, type AslanModeId } from "@/lib/assistant/modes";
-import { startRealtimeSession } from "@/lib/assistant/realtimeVoice";
+import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel, type AssistantModelId } from "@/lib/assistant/models";
 
-const MODE_STORAGE_KEY = "vreka-assistant-mode";
+const MODEL_STORAGE_KEY = "vreka-assistant-model";
 const SILENCE_THRESHOLD = 0.02;
 const SILENCE_DURATION_MS = 900;
 const MIN_SPEECH_MS = 400;
@@ -43,10 +42,9 @@ const WAKE_PHRASE = "aslan";
 export type VoicePhase = "idle" | "wake-listening" | "listening" | "processing" | "speaking" | "error";
 
 export type UseVoiceAssistantOptions = {
-  // Called right before each turn-based chat request goes out, so a caller
-  // with an active screen-share (currently only the Memory Map) can attach
-  // a fresh snapshot to that turn. Not consulted by the Realtime engine --
-  // Santai's live voice call has no per-turn request to attach an image to.
+  // Called right before each chat request goes out, so a caller with an
+  // active screen-share (currently only the Memory Map) can attach a fresh
+  // snapshot to that turn.
   getScreenshot?: () => string | undefined;
 };
 
@@ -68,19 +66,15 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
   const stoppedRef = useRef(true);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const modeRef = useRef<AslanModeId>(DEFAULT_ASLAN_MODE);
-  // Mirrors modeRef for display purposes — components render off state (not
-  // a ref) so they actually re-render when the active mode changes. This is
-  // the single source of truth for "which mode is active" -- callers (the
-  // Aslan page's mode buttons, voice command detection below) all go
-  // through `setMode` so an in-progress voice call picks up a change
-  // immediately instead of only on the next hook mount.
-  const [mode, setModeState] = useState<AslanModeId>(DEFAULT_ASLAN_MODE);
+  const modelRef = useRef<AssistantModelId>(DEFAULT_ASSISTANT_MODEL);
+  // Mirrors modelRef for display purposes — components render off state (not
+  // a ref) so they actually re-render when the picked model changes.
+  const [model, setModelState] = useState<AssistantModelId>(DEFAULT_ASSISTANT_MODEL);
 
-  function setMode(next: AslanModeId) {
-    modeRef.current = next;
-    setModeState(next);
-    window.localStorage.setItem(MODE_STORAGE_KEY, next);
+  function setModel(next: AssistantModelId) {
+    modelRef.current = next;
+    setModelState(next);
+    window.localStorage.setItem(MODEL_STORAGE_KEY, next);
   }
 
   const [handsFreeSupported, setHandsFreeSupported] = useState(false);
@@ -90,26 +84,18 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
   const handsFreeModeRef = useRef(false);
   const recognitionRef = useRef<MinimalSpeechRecognition | null>(null);
 
-  // Which engine the *currently active* call is using -- decided once when
-  // the call starts (from the mode active at that moment) so a mode command
-  // heard mid-call doesn't leave toggle()'s stop logic guessing which
-  // teardown path applies.
-  const activeVoiceEngineRef = useRef<"realtime" | "turnbased">("turnbased");
-  const realtimeStopRef = useRef<(() => void) | null>(null);
-
   useEffect(() => {
     setSupported(
       typeof window.MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia
     );
     setHandsFreeSupported(!!getSpeechRecognitionCtor());
-    const saved = window.localStorage.getItem(MODE_STORAGE_KEY);
-    if (isValidAslanMode(saved)) {
-      modeRef.current = saved;
-      setModeState(saved);
+    const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
+    if (isValidAssistantModel(saved)) {
+      modelRef.current = saved;
+      setModelState(saved);
     }
     return () => {
       stoppedRef.current = true;
-      realtimeStopRef.current?.();
       recognitionRef.current?.stop();
     };
   }, []);
@@ -149,7 +135,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
           stoppedRef.current = false;
           setErrorMsg(null);
           setLastReply(null);
-          startActiveCall();
+          runLoop();
           return;
         }
       }
@@ -441,26 +427,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         setPhase("processing");
       }
 
-      // An explicit spoken command ("ganti mode ke fokus") switches modes
-      // right here instead of being forwarded to the chat API as a real
-      // question -- confirmed with a short spoken reply, then straight back
-      // to listening for whatever the user actually wants to ask.
-      const commandedMode = detectModeCommand(text);
-      if (commandedMode) {
-        setMode(commandedMode);
-        if (stoppedRef.current) break;
-        setPhase("speaking");
-        pendingBlob = await speakWithBargeIn(`Oke, mode ${getAslanMode(commandedMode).label} aktif.`);
-        if (getAslanMode(commandedMode).voiceEngine === "realtime") {
-          // Hand off to the realtime engine instead of continuing this
-          // turn-based loop -- exits cleanly, runRealtimeLoop() takes over.
-          activeVoiceEngineRef.current = "realtime";
-          runRealtimeLoop();
-          return;
-        }
-        continue;
-      }
-
       try {
         // Grabbed fresh per turn (not once when sharing starts) so Aslan
         // always sees whatever's on screen right now, not a stale frame.
@@ -468,7 +434,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         const res = await fetch("/api/assistant/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, mode: modeRef.current, image }),
+          body: JSON.stringify({ message: text, model: modelRef.current, image }),
         });
         const reply = res.ok ? await res.text() : "Maaf, ada masalah pas mikir.";
         if (stoppedRef.current) break;
@@ -490,79 +456,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     }
   }
 
-  // OpenAI's Realtime API is audio-native end-to-end (no separate
-  // transcribe/chat/speak steps) -- Mode Santai's voice call runs through
-  // this instead of runLoop(). See lib/assistant/realtimeVoice.ts for the
-  // actual WebRTC wiring; this just maps its events onto the same
-  // phase/errorMsg/lastReply state runLoop() uses so the rest of the app
-  // (the call UI, the Memory Map dial) can't tell which engine is live.
-  async function runRealtimeLoop() {
-    const audio = audioRef.current;
-    if (!audio) {
-      setErrorMsg("Nggak ada elemen audio buat mode realtime.");
-      setPhase("error");
-      stoppedRef.current = true;
-      return;
-    }
-    setPhase("listening");
-    try {
-      const session = await startRealtimeSession(audio, {
-        onUserTranscript: (text) => {
-          const commandedMode = detectModeCommand(text);
-          // Switching to a different mode tears down the realtime
-          // connection and falls back to the turn-based loop under that
-          // mode -- saying "mode santai" while already in Santai is a
-          // no-op, there's nothing to hand off to.
-          if (commandedMode && commandedMode !== "santai") {
-            realtimeStopRef.current?.();
-            realtimeStopRef.current = null;
-            setMode(commandedMode);
-            activeVoiceEngineRef.current = "turnbased";
-            stoppedRef.current = false;
-            runLoop();
-          }
-        },
-        onAssistantTranscriptDone: (text) => setLastReply(text),
-        onSpeechStarted: () => setPhase("listening"),
-        onResponseStarted: () => setPhase("speaking"),
-        onResponseDone: () => setPhase("listening"),
-        onError: (message) => {
-          realtimeStopRef.current = null;
-          setErrorMsg(message);
-          setPhase("error");
-          stoppedRef.current = true;
-        },
-      });
-      if (stoppedRef.current) {
-        // toggle() was clicked to stop while the session was still
-        // connecting -- tear it straight back down instead of leaving a
-        // live call the rest of the hook no longer knows about.
-        session.stop();
-        return;
-      }
-      realtimeStopRef.current = session.stop;
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Gagal mulai mode realtime.");
-      setPhase("error");
-      stoppedRef.current = true;
-    }
-  }
-
-  // Single entry point for starting a call -- picks the engine from
-  // whichever mode is active *right now*. `initialText` (a typed message)
-  // always goes through the turn-based path: Realtime is specifically the
-  // live voice-call experience, and typed messages already work fine
-  // through the normal chat API regardless of mode.
-  function startActiveCall(initialText?: string) {
-    if (!initialText && getAslanMode(modeRef.current).voiceEngine === "realtime") {
-      activeVoiceEngineRef.current = "realtime";
-      runRealtimeLoop();
-    } else {
-      activeVoiceEngineRef.current = "turnbased";
-      runLoop(initialText);
-    }
-  }
-
   function toggle() {
     if (stoppedRef.current) {
       const recognition = recognitionRef.current;
@@ -571,16 +464,10 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       stoppedRef.current = false;
       setErrorMsg(null);
       setLastReply(null);
-      startActiveCall();
+      runLoop();
     } else {
       stoppedRef.current = true;
       audioRef.current?.pause();
-      if (activeVoiceEngineRef.current === "realtime") {
-        realtimeStopRef.current?.();
-        realtimeStopRef.current = null;
-        setPhase(handsFreeModeRef.current ? "wake-listening" : "idle");
-        if (handsFreeModeRef.current) startWakeListening();
-      }
     }
   }
 
@@ -595,7 +482,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     stoppedRef.current = false;
     setErrorMsg(null);
     setLastReply(null);
-    startActiveCall(trimmed);
+    runLoop(trimmed);
   }
 
   return {
@@ -605,8 +492,8 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     toggle,
     sendText,
     audioRef,
-    mode,
-    setMode,
+    model,
+    setModel,
     lastReply,
     handsFreeSupported,
     handsFreeMode,

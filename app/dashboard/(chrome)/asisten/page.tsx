@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
-import type { AssistantProvider } from "@/lib/assistant/models";
-import { ASLAN_MODES, getAslanMode, type AslanMode } from "@/lib/assistant/modes";
+import { ASSISTANT_MODELS } from "@/lib/assistant/models";
 import { useVoiceAssistant } from "@/lib/assistant/useVoiceAssistant";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
@@ -104,41 +103,6 @@ function AssistantReplyCard({ content }: { content: string }) {
   );
 }
 
-// One of the 4 mode buttons (Santai/Fokus/Intel/Ultra) that pick Aslan's
-// brain + persona + color together -- replaces the old plain model dropdown.
-function ModeButton({
-  mode,
-  active,
-  disabled,
-  onClick,
-}: {
-  mode: AslanMode;
-  active: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={disabled ? `${mode.label} — key server belum di-set` : mode.tagline}
-      aria-pressed={active}
-      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors shrink-0 ${
-        active
-          ? "shadow-glow"
-          : disabled
-            ? "border-line/50 text-slate-700 cursor-not-allowed"
-            : "border-line text-slate-400 hover:text-slate-200"
-      }`}
-      style={active ? { borderColor: mode.colorHex, backgroundColor: `${mode.colorHex}1a`, color: mode.colorHex } : undefined}
-    >
-      <span aria-hidden="true">{mode.emoji}</span>
-      <span>{mode.label}</span>
-    </button>
-  );
-}
-
 // A LINK/UNLINK integration card in the AI Core panel's integrations grid.
 function IntegrationCard({
   title,
@@ -197,10 +161,9 @@ export default function AsistenPage() {
 
   // Voice controls (screen share, hands-free, mic) live on the Memory Map
   // now -- this page keeps `supported` (an informational capability check
-  // for StatusAslan/AI Core) and `mode`/`setMode` (the mode buttons below
-  // still live here) but doesn't drive an active call itself.
-  const { supported: voiceSupported, mode, setMode } = useVoiceAssistant();
-  const activeMode = getAslanMode(mode);
+  // for StatusAslan/AI Core) and `model`/`setModel` (the model dropdown
+  // below still lives here) but doesn't drive an active call itself.
+  const { supported: voiceSupported, model, setModel } = useVoiceAssistant();
 
   const [gmailEmail, setGmailEmail] = useState<string | null>(null);
   const [gmailLoading, setGmailLoading] = useState(true);
@@ -214,25 +177,6 @@ export default function AsistenPage() {
   const [telegramError, setTelegramError] = useState<string | null>(null);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Which providers have a server-side API key configured -- null while
-  // loading. Kept "fail open" (null = don't disable anything yet) so a slow
-  // or failed status check never blocks picking a model.
-  const [providerStatus, setProviderStatus] = useState<Record<AssistantProvider, boolean> | null>(null);
-
-  useEffect(() => {
-    async function loadProviderStatus() {
-      try {
-        const res = await fetch("/api/assistant/providers");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.configured) setProviderStatus(data.configured);
-      } catch {
-        // stays null -- dropdown just shows every option enabled
-      }
-    }
-    loadProviderStatus();
-  }, []);
 
   // Real counts only, same rule as StatusAslan's header pill -- no fabricated
   // latency/uptime numbers in the AI Core stat grid.
@@ -416,7 +360,7 @@ export default function AsistenPage() {
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, mode }),
+        body: JSON.stringify({ message: text, model }),
         signal: controller.signal,
       });
 
@@ -491,8 +435,7 @@ export default function AsistenPage() {
           <img
             src="/aslan.png"
             alt=""
-            className="w-11 h-11 rounded-full border-2 shadow-glow"
-            style={{ borderColor: activeMode.colorHex }}
+            className="w-11 h-11 rounded-full border border-cyan-glow/40 shadow-glow"
           />
           <div>
             <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
@@ -506,19 +449,19 @@ export default function AsistenPage() {
         <div className="flex items-end gap-3 flex-wrap">
           <div>
             <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
-              Mode
+              Model
             </label>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {ASLAN_MODES.map((m) => (
-                <ModeButton
-                  key={m.id}
-                  mode={m}
-                  active={mode === m.id}
-                  disabled={providerStatus ? !providerStatus[m.primaryProvider] : false}
-                  onClick={() => setMode(m.id)}
-                />
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value as typeof model)}
+              className="bg-panel2 border border-line rounded-sm px-3 py-2 text-sm text-white focus:border-cyan-glow/60 transition-colors"
+            >
+              {ASSISTANT_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} — {m.tagline}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
         </div>
       </header>

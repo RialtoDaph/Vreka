@@ -6,7 +6,6 @@ import * as THREE from "three";
 import { TYPE_META, type MemoryMapData, type MemoryNodeType } from "@/lib/memoryMap";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
 import { THEME } from "@/lib/theme";
-import { getAslanMode } from "@/lib/assistant/modes";
 import SignOutButton from "@/components/SignOutButton";
 import ToolbarIconButton from "@/components/asisten/ToolbarIconButton";
 
@@ -169,7 +168,6 @@ export default function MemoryMap({ data, vitals }: Props) {
     errorMsg: voiceError,
     toggle: toggleVoice,
     audioRef,
-    mode: voiceMode,
     lastReply,
     handsFreeSupported,
     handsFreeMode,
@@ -179,7 +177,6 @@ export default function MemoryMap({ data, vitals }: Props) {
   });
   const voiceStyle = VOICE_PHASE_STYLE[voicePhase];
   const voiceBusy = voicePhase !== "idle" && voicePhase !== "wake-listening" && voicePhase !== "error";
-  const activeAslanMode = getAslanMode(voiceMode);
 
   // At least one type must stay active -- turning off the last one would
   // hide every leaf node with no way back short of the "Semua" reset.
@@ -1017,12 +1014,6 @@ export default function MemoryMap({ data, vitals }: Props) {
           <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ backgroundColor: voiceStyle.color }} />
           {voiceStyle.label}
         </p>
-        <span
-          className="flex items-center gap-1.5 bg-panel/75 border border-line rounded-full px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.15em] backdrop-blur-sm"
-          style={{ color: activeAslanMode.colorHex }}
-        >
-          {activeAslanMode.emoji} {activeAslanMode.label}
-        </span>
         {lastReply && (
           <div className="w-[240px] bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm shadow-glow">
             <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow mb-1.5">

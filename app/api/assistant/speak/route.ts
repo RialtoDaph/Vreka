@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getOpenAiApiKey, sanitizeForSpeech, TTS_MODEL_ID, TTS_VOICE } from "@/lib/assistant/voice";
+import { getElevenLabsClient, sanitizeForSpeech, DEFAULT_VOICE_ID, TTS_MODEL_ID } from "@/lib/assistant/voice";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +14,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Belum login." }, { status: 401 });
   }
 
-  const apiKey = getOpenAiApiKey();
-  if (!apiKey) {
-    return NextResponse.json({ error: "OPENAI_API_KEY belum di-set di server." }, { status: 500 });
+  const elevenlabs = getElevenLabsClient();
+  if (!elevenlabs) {
+    return NextResponse.json(
+      { error: "ELEVENLABS_API_KEY belum di-set di server." },
+      { status: 500 }
+    );
   }
 
   const body = await request.json().catch(() => null);
@@ -27,24 +30,15 @@ export async function POST(request: NextRequest) {
   const text = sanitizeForSpeech(rawText);
 
   try {
-    const res = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: TTS_MODEL_ID,
-        voice: TTS_VOICE,
-        input: text,
-        response_format: "mp3",
-      }),
+    const voiceId = process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID;
+    const audioStream = await elevenlabs.textToSpeech.convert(voiceId, {
+      text,
+      modelId: TTS_MODEL_ID,
+      outputFormat: "mp3_44100_128",
     });
-
-    if (!res.ok || !res.body) {
-      const detail = await res.text().catch(() => "");
-      console.error(`POST /api/assistant/speak gagal (${res.status}):`, detail.slice(0, 500));
-      return NextResponse.json({ error: `Gagal bikin suara (${res.status}). ${detail.slice(0, 200)}` }, { status: 500 });
-    }
-
-    return new NextResponse(res.body, { headers: { "Content-Type": "audio/mpeg" } });
+    return new NextResponse(audioStream as unknown as ReadableStream<Uint8Array>, {
+      headers: { "Content-Type": "audio/mpeg" },
+    });
   } catch (error) {
     console.error("POST /api/assistant/speak gagal:", error);
     return NextResponse.json(

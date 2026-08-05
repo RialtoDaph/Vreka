@@ -9,16 +9,14 @@ function mockAuth(user: { id: string } | null) {
   }));
 }
 
-function mockOpenAiSpeak(response: { ok: boolean; status?: number; body?: unknown; text?: string }) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({
-      ok: response.ok,
-      status: response.status ?? (response.ok ? 200 : 500),
-      body: response.body ?? null,
-      text: async () => response.text ?? "",
-    })
-  );
+function mockElevenLabs(convert: ReturnType<typeof vi.fn> | null) {
+  vi.doMock("@/lib/assistant/voice", () => ({
+    getElevenLabsClient: () =>
+      convert ? { textToSpeech: { convert } } : null,
+    sanitizeForSpeech: (text: string) => text.replace(/[*_#`]/g, ""),
+    DEFAULT_VOICE_ID: "JBFqnCBsd6RMkjVDRZzb",
+    TTS_MODEL_ID: "eleven_flash_v2_5",
+  }));
 }
 
 function makeRequest(body: unknown) {
@@ -30,7 +28,7 @@ function makeRequest(body: unknown) {
 }
 
 beforeEach(() => {
-  vi.stubEnv("OPENAI_API_KEY", "test-key");
+  vi.stubEnv("ELEVENLABS_API_KEY", "test-key");
 });
 
 afterEach(() => {
@@ -42,6 +40,7 @@ afterEach(() => {
 describe("POST /api/assistant/speak", () => {
   it("rejects unauthenticated requests", async () => {
     mockAuth(null);
+    mockElevenLabs(vi.fn());
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ text: "halo" }));
     expect(res.status).toBe(401);
@@ -49,32 +48,35 @@ describe("POST /api/assistant/speak", () => {
 
   it("rejects an empty text", async () => {
     mockAuth({ id: "user-1" });
+    mockElevenLabs(vi.fn());
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ text: "   " }));
     expect(res.status).toBe(400);
   });
 
-  it("streams back audio/mpeg from OpenAI's speech endpoint", async () => {
+  it("streams back audio/mpeg from ElevenLabs's speech endpoint", async () => {
     mockAuth({ id: "user-1" });
-    const fakeBody = new ReadableStream();
-    mockOpenAiSpeak({ ok: true, body: fakeBody });
+    const fakeStream = new ReadableStream();
+    mockElevenLabs(vi.fn().mockResolvedValue(fakeStream));
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ text: "**Halo!**" }));
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("audio/mpeg");
   });
 
-  it("returns 500 when the upstream speech request fails", async () => {
+  it("returns 500 and logs when the ElevenLabs SDK call throws", async () => {
     mockAuth({ id: "user-1" });
-    mockOpenAiSpeak({ ok: false, status: 502, text: "upstream error" });
+    mockElevenLabs(vi.fn().mockRejectedValue(new Error("upstream error")));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ text: "halo" }));
     expect(res.status).toBe(500);
+    expect(errorSpy).toHaveBeenCalled();
   });
 
-  it("returns 500 when OPENAI_API_KEY is missing", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "");
+  it("returns 500 when ELEVENLABS_API_KEY is missing", async () => {
     mockAuth({ id: "user-1" });
+    mockElevenLabs(null);
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ text: "halo" }));
     expect(res.status).toBe(500);

@@ -58,42 +58,32 @@ function mockSupabase(messages: unknown[] = []) {
 
 type VoiceMock = {
   supported?: boolean;
-  mode?: string;
-  setMode?: (m: string) => void;
+  model?: string;
+  setModel?: (m: string) => void;
 };
 
-// The Aslan page only reads `supported`/`mode`/`setMode` off the hook now --
+// The Aslan page only reads `supported`/`model`/`setModel` off the hook now --
 // the mic/hands-free/screen-share controls moved to the Memory Map, which
 // has its own tests exercising the rest of useVoiceAssistant's surface.
-function mockVoice({ supported = true, mode = "intel", setMode = vi.fn() }: VoiceMock = {}) {
+function mockVoice({ supported = true, model = "claude-sonnet-5", setModel = vi.fn() }: VoiceMock = {}) {
   vi.doMock("@/lib/assistant/useVoiceAssistant", () => ({
     useVoiceAssistant: () => ({
       supported,
-      mode,
-      setMode,
+      model,
+      setModel,
     }),
   }));
-  return { setMode };
+  return { setModel };
 }
 
-// Routes fetch by URL so a test can stub /api/assistant/providers and
-// /api/assistant/chat independently without clobbering each other.
 function mockFetchRouter({
-  configured,
   chatReply,
   captureChatBody,
 }: {
-  configured?: Record<string, boolean>;
   chatReply?: string;
   captureChatBody?: (body: Record<string, unknown>) => void;
 } = {}) {
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    if (url === "/api/assistant/providers") {
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({ configured: configured ?? { anthropic: true, openai: true, gemini: true, grok: true } }),
-      });
-    }
     if (url === "/api/assistant/chat") {
       if (init?.body) captureChatBody?.(JSON.parse(init.body as string));
       let done = false;
@@ -163,50 +153,24 @@ describe("AsistenPage", () => {
     expect(await screen.findByText("Siap dicatet!")).toBeInTheDocument();
   });
 
-  it("disables mode buttons whose provider key isn't configured on the server", async () => {
+  it("shows the active model selected in the dropdown and calls setModel when a different one is picked", async () => {
     mockSupabase([]);
-    mockVoice();
-    mockFetchRouter({ configured: { anthropic: true, openai: false, gemini: false, grok: false } });
-
-    const { default: AsistenPage } = await import("./page");
-    render(<AsistenPage />);
-
-    expect(await screen.findByRole("button", { name: /Santai/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Fokus/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Ultra/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Intel/ })).not.toBeDisabled();
-  });
-
-  it("does not disable any mode button while the provider status is still loading", async () => {
-    mockSupabase([]);
-    mockVoice();
+    const { setModel } = mockVoice({ model: "claude-sonnet-5" });
     mockFetchRouter();
 
     const { default: AsistenPage } = await import("./page");
     render(<AsistenPage />);
 
-    expect(await screen.findByRole("button", { name: /Santai/ })).not.toBeDisabled();
+    const select = await screen.findByRole("combobox");
+    expect(select).toHaveValue("claude-sonnet-5");
+
+    fireEvent.change(select, { target: { value: "claude-opus-5" } });
+    expect(setModel).toHaveBeenCalledWith("claude-opus-5");
   });
 
-  it("marks the active mode's button pressed and calls setMode when a different mode is clicked", async () => {
+  it("sends the active model in the chat request body", async () => {
     mockSupabase([]);
-    const { setMode } = mockVoice({ mode: "intel" });
-    mockFetchRouter();
-
-    const { default: AsistenPage } = await import("./page");
-    render(<AsistenPage />);
-
-    const intelButton = await screen.findByRole("button", { name: /Intel/ });
-    expect(intelButton).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /Fokus/ })).toHaveAttribute("aria-pressed", "false");
-
-    fireEvent.click(screen.getByRole("button", { name: /Fokus/ }));
-    expect(setMode).toHaveBeenCalledWith("fokus");
-  });
-
-  it("sends the active mode (not a model id) in the chat request body", async () => {
-    mockSupabase([]);
-    mockVoice({ mode: "fokus" });
+    mockVoice({ model: "claude-haiku-4-5" });
     const captured: Record<string, unknown>[] = [];
     mockFetchRouter({ captureChatBody: (body) => captured.push(body) });
 
@@ -218,7 +182,7 @@ describe("AsistenPage", () => {
     fireEvent.click(screen.getByText("Kirim"));
 
     await screen.findByText("ok");
-    expect(captured[0]).toMatchObject({ mode: "fokus" });
+    expect(captured[0]).toMatchObject({ model: "claude-haiku-4-5" });
   });
 
   it("renders a short assistant reply as a plain bubble with no pagination chrome", async () => {

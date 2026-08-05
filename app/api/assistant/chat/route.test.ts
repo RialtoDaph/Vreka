@@ -68,7 +68,7 @@ function fakeStream(turn: FakeTurn) {
 
 function mockAnthropic(turns: FakeTurn[]) {
   let call = 0;
-  const streamSpy = vi.fn<(params: { model: string }) => ReturnType<typeof fakeStream>>(() => {
+  const streamSpy = vi.fn<(params: { model: string; messages: unknown[] }) => ReturnType<typeof fakeStream>>(() => {
     const turn = turns[Math.min(call, turns.length - 1)];
     call += 1;
     return fakeStream(turn);
@@ -181,6 +181,52 @@ describe("POST /api/assistant/chat", () => {
     expect(streamSpy).toHaveBeenCalledTimes(2);
   });
 
+  it("uses whichever model is requested in the body", async () => {
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    const streamSpy = mockAnthropic([
+      { deltas: ["ok"], response: { stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] } },
+    ]);
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ message: "halo", model: "claude-haiku-4-5" }));
+    await res.text();
+
+    expect(streamSpy.mock.calls[0][0].model).toBe("claude-haiku-4-5");
+  });
+
+  it("falls back to the default model when none (or an invalid one) is given", async () => {
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    const streamSpy = mockAnthropic([
+      { deltas: ["ok"], response: { stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] } },
+    ]);
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ message: "halo", model: "not-a-real-model" }));
+    await res.text();
+
+    expect(streamSpy.mock.calls[0][0].model).toBe("claude-sonnet-5");
+  });
+
+  it("attaches a screen-share image as vision content on the last user message", async () => {
+    mockSupabaseServer({ id: "user-1" });
+    mockAfter();
+    mockTools();
+    const streamSpy = mockAnthropic([
+      { deltas: ["Aku liat layarnya."], response: { stop_reason: "end_turn", content: [{ type: "text", text: "Aku liat layarnya." }] } },
+    ]);
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest({ message: "ini apa?", image: "data:image/jpeg;base64,AAAA" }));
+    await res.text();
+
+    const lastMessage = streamSpy.mock.calls[0][0].messages.at(-1) as { content: Array<{ type: string }> };
+    expect(lastMessage.content.some((block) => block.type === "image")).toBe(true);
+  });
+
   it("returns 429 once the per-user rate limit is hit", async () => {
     mockSupabaseServer({ id: "user-rl" });
     mockAfter();
@@ -210,118 +256,5 @@ describe("POST /api/assistant/chat", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toBeTruthy();
-  });
-
-  it("routes a non-Anthropic mode through the provider chat helper instead of the Anthropic SDK", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
-    mockSupabaseServer({ id: "user-1" });
-    mockAfter();
-    mockTools();
-    const streamSpy = mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
-    vi.doMock("@/lib/assistant/otherProviders", () => ({
-      runOtherProviderChat: vi.fn().mockImplementation(async (_provider, args) => {
-        args.onDelta?.("Halo dari GPT!");
-        return "Halo dari GPT!";
-      }),
-    }));
-
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ message: "halo", mode: "santai" }));
-
-    expect(res.status).toBe(200);
-    const text = await res.text();
-    expect(text).toBe("Halo dari GPT!");
-    expect(streamSpy).not.toHaveBeenCalled();
-  });
-
-  it("returns 500 naming the right env var when a non-Anthropic mode's key is missing", async () => {
-    mockSupabaseServer({ id: "user-1" });
-    mockAfter();
-    mockTools();
-    mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
-
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ message: "halo", mode: "ultra" }));
-
-    expect(res.status).toBe(500);
-    const body = await res.json();
-    expect(body.error).toContain("GEMINI_API_KEY");
-  });
-
-  it("forces Intel (Claude) when an image is attached even if a non-Anthropic mode was selected", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
-    mockSupabaseServer({ id: "user-1" });
-    mockAfter();
-    mockTools();
-    const streamSpy = mockAnthropic([
-      { deltas: ["Aku liat layarnya."], response: { stop_reason: "end_turn", content: [{ type: "text", text: "Aku liat layarnya." }] } },
-    ]);
-    const otherProviderSpy = vi.fn();
-    vi.doMock("@/lib/assistant/otherProviders", () => ({ runOtherProviderChat: otherProviderSpy }));
-
-    const { POST } = await import("./route");
-    const res = await POST(
-      makeRequest({ message: "ini apa?", mode: "santai", image: "data:image/jpeg;base64,AAAA" })
-    );
-
-    expect(res.status).toBe(200);
-    await res.text();
-    expect(otherProviderSpy).not.toHaveBeenCalled();
-    expect(streamSpy).toHaveBeenCalledTimes(1);
-    expect(streamSpy.mock.calls[0][0].model).toBe("claude-sonnet-5");
-  });
-
-  it("folds the active mode's persona into the Claude system prompt", async () => {
-    mockSupabaseServer({ id: "user-1" });
-    mockAfter();
-    mockTools();
-    const streamSpy = mockAnthropic([
-      { deltas: ["ok"], response: { stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] } },
-    ]);
-
-    const { POST } = await import("./route");
-    // No `mode` in the body -- falls back to the default mode (Intel), whose
-    // persona should still show up ahead of the base system prompt.
-    const res = await POST(makeRequest({ message: "halo" }));
-    await res.text();
-
-    const call = streamSpy.mock.calls[0][0] as unknown as { system: Array<{ text: string }> };
-    expect(call.system[0].text).toContain("Mode INTEL lagi aktif");
-  });
-
-  it("passes a consult tool config through when the active mode's secondary provider key is configured", async () => {
-    vi.stubEnv("XAI_API_KEY", "test-xai-key");
-    vi.stubEnv("GEMINI_API_KEY", "test-gemini-key");
-    mockSupabaseServer({ id: "user-1" });
-    mockAfter();
-    mockTools();
-    mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
-    const otherProviderSpy = vi.fn().mockResolvedValue("jawaban dari grok");
-    vi.doMock("@/lib/assistant/otherProviders", () => ({ runOtherProviderChat: otherProviderSpy }));
-
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ message: "cari trending topic hari ini", mode: "fokus" }));
-    await res.text();
-
-    expect(otherProviderSpy).toHaveBeenCalledWith(
-      "grok",
-      expect.objectContaining({ consult: expect.objectContaining({ toolName: "consult_second_opinion" }) })
-    );
-  });
-
-  it("omits the consult tool when the secondary provider's key isn't configured", async () => {
-    vi.stubEnv("XAI_API_KEY", "test-xai-key");
-    mockSupabaseServer({ id: "user-1" });
-    mockAfter();
-    mockTools();
-    mockAnthropic([{ deltas: [], response: { stop_reason: "end_turn", content: [] } }]);
-    const otherProviderSpy = vi.fn().mockResolvedValue("jawaban dari grok");
-    vi.doMock("@/lib/assistant/otherProviders", () => ({ runOtherProviderChat: otherProviderSpy }));
-
-    const { POST } = await import("./route");
-    const res = await POST(makeRequest({ message: "cari trending topic hari ini", mode: "fokus" }));
-    await res.text();
-
-    expect(otherProviderSpy).toHaveBeenCalledWith("grok", expect.objectContaining({ consult: undefined }));
   });
 });
