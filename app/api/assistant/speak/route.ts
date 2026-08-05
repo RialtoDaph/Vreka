@@ -5,7 +5,11 @@ import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
-const SPEAK_RATE_LIMIT = 40;
+// Voice mode now speaks sentence-by-sentence (plus an occasional filler
+// clip) instead of one call per turn, so a single reply can fire several
+// of these -- sized well above normal multi-sentence conversation pace,
+// while still bounding a genuine runaway loop.
+const SPEAK_RATE_LIMIT = 150;
 const SPEAK_RATE_WINDOW_MS = 5 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
