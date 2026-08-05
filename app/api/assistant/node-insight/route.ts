@@ -2,8 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel } from "@/lib/assistant/models";
 import { getNodeInsight, type NodeInsightInput } from "@/lib/assistant/nodeInsight";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
+
+const NODE_INSIGHT_RATE_LIMIT = 20;
+const NODE_INSIGHT_RATE_WINDOW_MS = 5 * 60 * 1000;
 
 function parseFields(value: unknown): NodeInsightInput["fields"] {
   if (!Array.isArray(value)) return [];
@@ -28,6 +32,14 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Belum login." }, { status: 401 });
+  }
+
+  const limit = checkRateLimit(`node-insight:${user.id}`, NODE_INSIGHT_RATE_LIMIT, NODE_INSIGHT_RATE_WINDOW_MS);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Kebanyakan permintaan, tunggu bentar ya." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const body = await request.json().catch(() => null);

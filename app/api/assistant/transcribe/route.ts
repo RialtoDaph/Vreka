@@ -1,8 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getElevenLabsClient, STT_MODEL_ID } from "@/lib/assistant/voice";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
+
+const TRANSCRIBE_RATE_LIMIT = 40;
+const TRANSCRIBE_RATE_WINDOW_MS = 5 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -12,6 +16,14 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Belum login." }, { status: 401 });
+  }
+
+  const limit = checkRateLimit(`transcribe:${user.id}`, TRANSCRIBE_RATE_LIMIT, TRANSCRIBE_RATE_WINDOW_MS);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Kebanyakan permintaan, tunggu bentar ya." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const elevenlabs = getElevenLabsClient();
