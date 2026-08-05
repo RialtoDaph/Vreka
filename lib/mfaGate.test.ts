@@ -88,6 +88,7 @@ describe("isMfaGatedApiRoute", () => {
     expect(isMfaGatedApiRoute("/api/google/oauth/start")).toBe(true);
     expect(isMfaGatedApiRoute("/api/google/oauth/callback")).toBe(true);
     expect(isMfaGatedApiRoute("/api/google/calendar/list")).toBe(true);
+    expect(isMfaGatedApiRoute("/api/keuangan/budget-alert-check")).toBe(true);
     expect(isMfaGatedApiRoute("/api/push/subscribe")).toBe(true);
     expect(isMfaGatedApiRoute("/api/push/unsubscribe")).toBe(true);
     expect(isMfaGatedApiRoute("/api/telegram/link")).toBe(true);
@@ -104,5 +105,9 @@ describe("isMfaGatedApiRoute", () => {
     expect(isMfaGatedApiRoute("/dashboard/keuangan")).toBe(false);
     expect(isMfaGatedApiRoute("/auth/callback")).toBe(false);
     expect(isMfaGatedApiRoute("/")).toBe(false);
+  });
+
+  it("deliberately never gates /api/mfa/recover -- it exists precisely for a session stuck at aal1", () => {
+    expect(isMfaGatedApiRoute("/api/mfa/recover")).toBe(false);
   });
 });

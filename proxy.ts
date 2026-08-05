@@ -66,6 +66,7 @@ export const config = {
     "/mfa",
     "/api/assistant/:path*",
     "/api/google/:path*",
+    "/api/keuangan/:path*",
     "/api/push/:path*",
     "/api/telegram/link",
     "/api/telegram/setup",

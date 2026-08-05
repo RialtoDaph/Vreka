@@ -243,6 +243,16 @@ export default function TransactionsTab() {
       return;
     }
 
+    // Fire-and-forget -- a budget-threshold push shouldn't block or fail
+    // the transaction save itself.
+    if (type === "expense") {
+      fetch("/api/keuangan/budget-alert-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category }),
+      }).catch(() => {});
+    }
+
     setError(uploadWarning);
     resetForm();
     setSaving(false);

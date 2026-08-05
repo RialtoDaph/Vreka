@@ -379,6 +379,28 @@ describe("executeAssistantTool: transactions", () => {
     expect(res).toEqual({ ok: false, result: "amount harus > 0." });
   });
 
+  it("checks the budget threshold after adding an expense, but not an income", async () => {
+    const checkBudgetAlertAndNotify = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@/lib/budgetAlerts", () => ({ checkBudgetAlertAndNotify }));
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ transactions: [] });
+
+    await executeAssistantTool(supabase as never, "user-1", "add_transaction", {
+      type: "expense",
+      category: "Makanan",
+      amount: 25,
+    });
+    expect(checkBudgetAlertAndNotify).toHaveBeenCalledWith(supabase, "user-1", "Makanan");
+
+    checkBudgetAlertAndNotify.mockClear();
+    await executeAssistantTool(supabase as never, "user-1", "add_transaction", {
+      type: "income",
+      category: "Gaji",
+      amount: 5000,
+    });
+    expect(checkBudgetAlertAndNotify).not.toHaveBeenCalled();
+  });
+
   it("deletes a transaction found by category or description", async () => {
     const { executeAssistantTool } = await import("./tools");
     const supabase = makeSupabase({
