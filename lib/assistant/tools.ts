@@ -317,6 +317,161 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
       required: ["query"],
     },
   },
+  {
+    name: "add_debt",
+    description: "Catat utang/piutang baru ke modul Keuangan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        party_name: { type: "string", description: "Nama orang/pihak terkait." },
+        direction: {
+          type: "string",
+          enum: ["i_owe", "owed_to_me"],
+          description: "i_owe = user yang punya utang, owed_to_me = user yang dipinjemin/dihutangin orang lain.",
+        },
+        amount: { type: "number", description: "Jumlah dalam Euro (EUR), harus > 0." },
+        due_date: { type: "string", description: "Tanggal jatuh tempo format YYYY-MM-DD, opsional." },
+        notes: { type: "string", description: "Catatan opsional." },
+      },
+      required: ["party_name", "direction", "amount"],
+    },
+  },
+  {
+    name: "update_debt",
+    description:
+      "Ubah utang/piutang yang udah ada (misal tandain lunas, ganti jumlah/jatuh tempo). Cari pake party_query (nama pihak terkait).",
+    input_schema: {
+      type: "object",
+      properties: {
+        party_query: { type: "string", description: "Kata kunci buat nyari nama pihak terkait." },
+        new_status: { type: "string", enum: ["unpaid", "paid"] },
+        new_amount: { type: "number", description: "Harus > 0." },
+        new_due_date: { type: "string", description: "YYYY-MM-DD." },
+        new_notes: { type: "string" },
+      },
+      required: ["party_query"],
+    },
+  },
+  {
+    name: "delete_debt",
+    description: "Hapus catatan utang/piutang. Cari pake party_query (nama pihak terkait).",
+    input_schema: {
+      type: "object",
+      properties: { party_query: { type: "string" } },
+      required: ["party_query"],
+    },
+  },
+  {
+    name: "add_savings_goal",
+    description: "Bikin target tabungan baru di modul Keuangan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        target_amount: { type: "number", description: "Target total dalam Euro (EUR), harus > 0." },
+        deadline: { type: "string", description: "Tanggal target format YYYY-MM-DD, opsional." },
+      },
+      required: ["name", "target_amount"],
+    },
+  },
+  {
+    name: "update_savings_goal",
+    description:
+      "Update target tabungan yang udah ada -- misal nyatet progress nabung terbaru, atau ganti target/deadline. Cari pake title_query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string" },
+        new_current_amount: {
+          type: "number",
+          description: "Jumlah yang udah ketabung sekarang (total, bukan nambahan), dalam Euro (EUR).",
+        },
+        new_target_amount: { type: "number", description: "Harus > 0." },
+        new_deadline: { type: "string", description: "YYYY-MM-DD." },
+      },
+      required: ["title_query"],
+    },
+  },
+  {
+    name: "delete_savings_goal",
+    description: "Hapus target tabungan. Cari pake title_query.",
+    input_schema: {
+      type: "object",
+      properties: { title_query: { type: "string" } },
+      required: ["title_query"],
+    },
+  },
+  {
+    name: "add_recurring_item",
+    description:
+      "Tambah item pemasukan/pengeluaran rutin (misal langganan bulanan, gaji) ke modul Keuangan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["income", "expense"] },
+        name: { type: "string" },
+        category: {
+          type: "string",
+          description: `Kategori. Untuk income: ${INCOME_CATEGORIES.join(", ")}. Untuk expense: ${EXPENSE_CATEGORIES.join(", ")}.`,
+        },
+        amount: { type: "number", description: "Jumlah per periode dalam Euro (EUR), harus > 0." },
+        day_of_month: { type: "integer", description: "Tanggal tiap bulan (1-31), opsional." },
+      },
+      required: ["type", "name", "category", "amount"],
+    },
+  },
+  {
+    name: "delete_recurring_item",
+    description: "Hapus item pemasukan/pengeluaran rutin. Cari pake name_query.",
+    input_schema: {
+      type: "object",
+      properties: { name_query: { type: "string" } },
+      required: ["name_query"],
+    },
+  },
+  {
+    name: "add_milestone",
+    description: "Tambah momen/milestone baru ke Timeline Kehidupan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        category: { type: "string", enum: ["pendidikan", "karier", "keluarga", "lainnya"] },
+        occurred_on: { type: "string", description: "Tanggal mulai format YYYY-MM-DD." },
+        ended_on: {
+          type: "string",
+          description: "Tanggal selesai format YYYY-MM-DD, opsional -- buat momen yang berlangsung dalam rentang waktu.",
+        },
+        description: { type: "string", description: "Catatan opsional." },
+      },
+      required: ["title", "category", "occurred_on"],
+    },
+  },
+  {
+    name: "update_milestone",
+    description: "Ubah milestone yang udah ada di Timeline Kehidupan. Cari pake title_query.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string" },
+        new_title: { type: "string" },
+        new_category: { type: "string", enum: ["pendidikan", "karier", "keluarga", "lainnya"] },
+        new_occurred_on: { type: "string", description: "YYYY-MM-DD." },
+        new_ended_on: { type: "string", description: "YYYY-MM-DD." },
+        new_description: { type: "string" },
+      },
+      required: ["title_query"],
+    },
+  },
+  {
+    name: "delete_milestone",
+    description: "Hapus milestone dari Timeline Kehidupan. Cari pake title_query.",
+    input_schema: {
+      type: "object",
+      properties: { title_query: { type: "string" } },
+      required: ["title_query"],
+    },
+  },
 ];
 
 type FindResult = { error?: string; id?: string; label?: string };
@@ -788,6 +943,200 @@ export async function executeAssistantTool(
           .map((r) => `- [${labels[r.source]}] ${r.title} — ${r.snippet}`)
           .join("\n"),
       };
+    }
+
+    case "add_debt": {
+      const partyName = String(input.party_name ?? "").trim();
+      if (!partyName) return { ok: false, result: "party_name kosong." };
+      const direction = input.direction === "owed_to_me" ? "owed_to_me" : "i_owe";
+      const amount = Number(input.amount);
+      if (!amount || amount <= 0) return { ok: false, result: "amount harus > 0." };
+      const { error } = await supabase.from("debts").insert({
+        user_id: userId,
+        party_name: partyName,
+        direction,
+        amount,
+        due_date: input.due_date ? String(input.due_date) : null,
+        notes: input.notes ? String(input.notes) : null,
+      });
+      if (error) return { ok: false, result: error.message };
+      return {
+        ok: true,
+        result: `${direction === "i_owe" ? "Utang ke" : "Piutang dari"} "${partyName}" dicatat.`,
+      };
+    }
+
+    case "update_debt": {
+      const found = await findOneByColumn(supabase, "debts", userId, "party_name", String(input.party_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const patch: Record<string, unknown> = {};
+      if (input.new_status === "paid" || input.new_status === "unpaid") patch.status = input.new_status;
+      if (input.new_amount !== undefined) {
+        const a = Number(input.new_amount);
+        if (a > 0) patch.amount = a;
+      }
+      if (typeof input.new_due_date === "string") patch.due_date = input.new_due_date || null;
+      if (typeof input.new_notes === "string") patch.notes = input.new_notes || null;
+      if (Object.keys(patch).length === 0) return { ok: false, result: "Nggak ada perubahan yang disebutin." };
+      const { error } = await supabase.from("debts").update(patch).eq("id", found.id).eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Utang/piutang "${found.label}" diupdate.` };
+    }
+
+    case "delete_debt": {
+      const found = await findOneByColumn(supabase, "debts", userId, "party_name", String(input.party_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const { error } = await supabase.from("debts").delete().eq("id", found.id).eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Utang/piutang "${found.label}" dihapus.` };
+    }
+
+    case "add_savings_goal": {
+      const name = String(input.name ?? "").trim();
+      if (!name) return { ok: false, result: "name kosong." };
+      const targetAmount = Number(input.target_amount);
+      if (!targetAmount || targetAmount <= 0) return { ok: false, result: "target_amount harus > 0." };
+      const { error } = await supabase.from("savings_goals").insert({
+        user_id: userId,
+        name,
+        target_amount: targetAmount,
+        current_amount: 0,
+        deadline: input.deadline ? String(input.deadline) : null,
+      });
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Target tabungan "${name}" dibikin.` };
+    }
+
+    case "update_savings_goal": {
+      const found = await findOneByColumn(supabase, "savings_goals", userId, "name", String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const patch: Record<string, unknown> = {};
+      if (input.new_current_amount !== undefined) {
+        const a = Number(input.new_current_amount);
+        if (!Number.isNaN(a) && a >= 0) patch.current_amount = a;
+      }
+      if (input.new_target_amount !== undefined) {
+        const a = Number(input.new_target_amount);
+        if (a > 0) patch.target_amount = a;
+      }
+      if (typeof input.new_deadline === "string") patch.deadline = input.new_deadline || null;
+      if (Object.keys(patch).length === 0) return { ok: false, result: "Nggak ada perubahan yang disebutin." };
+      const { error } = await supabase
+        .from("savings_goals")
+        .update(patch)
+        .eq("id", found.id)
+        .eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Target tabungan "${found.label}" diupdate.` };
+    }
+
+    case "delete_savings_goal": {
+      const found = await findOneByColumn(supabase, "savings_goals", userId, "name", String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const { error } = await supabase.from("savings_goals").delete().eq("id", found.id).eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Target tabungan "${found.label}" dihapus.` };
+    }
+
+    case "add_recurring_item": {
+      const name = String(input.name ?? "").trim();
+      if (!name) return { ok: false, result: "name kosong." };
+      const type = input.type === "income" ? "income" : "expense";
+      const amount = Number(input.amount);
+      if (!amount || amount <= 0) return { ok: false, result: "amount harus > 0." };
+      const category = String(input.category ?? "Lainnya");
+      let dayOfMonth: number | null = null;
+      if (input.day_of_month !== undefined) {
+        const d = Number(input.day_of_month);
+        if (d >= 1 && d <= 31) dayOfMonth = Math.round(d);
+      }
+      const { error } = await supabase.from("recurring_items").insert({
+        user_id: userId,
+        type,
+        category,
+        name,
+        amount,
+        day_of_month: dayOfMonth,
+      });
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Item rutin "${name}" ditambahin.` };
+    }
+
+    case "delete_recurring_item": {
+      const found = await findOneByColumn(
+        supabase,
+        "recurring_items",
+        userId,
+        "name",
+        String(input.name_query ?? "")
+      );
+      if (found.error) return { ok: false, result: found.error };
+      const { error } = await supabase.from("recurring_items").delete().eq("id", found.id).eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Item rutin "${found.label}" dihapus.` };
+    }
+
+    case "add_milestone": {
+      const title = String(input.title ?? "").trim();
+      if (!title) return { ok: false, result: "title kosong." };
+      const category = ["pendidikan", "karier", "keluarga", "lainnya"].includes(String(input.category))
+        ? (input.category as string)
+        : "lainnya";
+      const occurredOn = String(input.occurred_on ?? "").trim();
+      if (!occurredOn) return { ok: false, result: "occurred_on kosong." };
+      const { error } = await supabase.from("life_milestones").insert({
+        user_id: userId,
+        title,
+        category,
+        occurred_on: occurredOn,
+        ended_on: input.ended_on ? String(input.ended_on) : null,
+        description: input.description ? String(input.description) : null,
+      });
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Milestone "${title}" ditambahin ke Timeline Kehidupan.` };
+    }
+
+    case "update_milestone": {
+      const found = await findOneByColumn(
+        supabase,
+        "life_milestones",
+        userId,
+        "title",
+        String(input.title_query ?? "")
+      );
+      if (found.error) return { ok: false, result: found.error };
+      const patch: Record<string, unknown> = {};
+      if (typeof input.new_title === "string" && input.new_title.trim()) patch.title = input.new_title.trim();
+      if (["pendidikan", "karier", "keluarga", "lainnya"].includes(String(input.new_category))) {
+        patch.category = input.new_category;
+      }
+      if (typeof input.new_occurred_on === "string" && input.new_occurred_on) {
+        patch.occurred_on = input.new_occurred_on;
+      }
+      if (typeof input.new_ended_on === "string") patch.ended_on = input.new_ended_on || null;
+      if (typeof input.new_description === "string") patch.description = input.new_description || null;
+      if (Object.keys(patch).length === 0) return { ok: false, result: "Nggak ada perubahan yang disebutin." };
+      const { error } = await supabase
+        .from("life_milestones")
+        .update(patch)
+        .eq("id", found.id)
+        .eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Milestone "${found.label}" diupdate.` };
+    }
+
+    case "delete_milestone": {
+      const found = await findOneByColumn(
+        supabase,
+        "life_milestones",
+        userId,
+        "title",
+        String(input.title_query ?? "")
+      );
+      if (found.error) return { ok: false, result: found.error };
+      const { error } = await supabase.from("life_milestones").delete().eq("id", found.id).eq("user_id", userId);
+      if (error) return { ok: false, result: error.message };
+      return { ok: true, result: `Milestone "${found.label}" dihapus.` };
     }
 
     default:
