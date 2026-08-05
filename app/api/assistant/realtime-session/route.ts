@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { buildAssistantSystemPrompt } from "@/lib/assistant/context";
+import { buildAssistantSystemPrompt, buildRealtimeExtraContext } from "@/lib/assistant/context";
 import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -54,8 +54,17 @@ export async function POST() {
     return NextResponse.json({ error: "OPENAI_API_KEY belum di-set di server." }, { status: 500 });
   }
 
-  const basePrompt = await buildAssistantSystemPrompt(supabase, user.id);
-  const instructions = `${basePrompt}\n\n${REALTIME_TONE}\n\nKamu lagi ngobrol lewat suara real-time. Kamu cuma bisa ngobrol -- kamu TIDAK bisa nyatet transaksi, nambah tugas, atau ngelakuin aksi apa pun ke data user, cuma bisa cerita/jelasin dari info di atas.`;
+  // This session can't call tools mid-call (audio-native, one-shot
+  // instructions at connect time) -- so unlike the regular Claude chat
+  // (which can reach for search_records on demand), it needs the fuller
+  // picture up front: every active task/note, recent journal entries, a
+  // wider transaction window, and upcoming Calendar events, not just the
+  // trimmed snapshot buildAssistantSystemPrompt gives every other surface.
+  const [basePrompt, extraContext] = await Promise.all([
+    buildAssistantSystemPrompt(supabase, user.id),
+    buildRealtimeExtraContext(supabase, user.id),
+  ]);
+  const instructions = `${basePrompt}\n\n${extraContext}\n\n${REALTIME_TONE}\n\nKamu lagi ngobrol lewat suara real-time. Kamu cuma bisa ngobrol -- kamu TIDAK bisa nyatet transaksi, nambah tugas, atau ngelakuin aksi apa pun ke data user, cuma bisa cerita/jelasin dari info di atas.`;
 
   try {
     const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
