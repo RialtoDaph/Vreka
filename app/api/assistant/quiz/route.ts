@@ -1,9 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+
+const QUIZ_RATE_LIMIT = 10;
+const QUIZ_RATE_WINDOW_MS = 5 * 60 * 1000;
 
 type QuizQuestion = { question: string; options: string[]; correct_index: number };
 
@@ -14,6 +18,14 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Belum login." }, { status: 401 });
+  }
+
+  const limit = checkRateLimit(`quiz:${user.id}`, QUIZ_RATE_LIMIT, QUIZ_RATE_WINDOW_MS);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Kebanyakan permintaan, tunggu bentar ya." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
