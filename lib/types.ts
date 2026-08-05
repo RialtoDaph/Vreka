@@ -234,3 +234,10 @@ export type DailyBriefingRow = {
   preview: string;
   created_at: string;
 };
+
+export type MfaRecoveryCode = {
+  id: string;
+  user_id: string;
+  code_hash: string;
+  created_at: string;
+};

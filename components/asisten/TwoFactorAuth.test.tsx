@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 afterEach(() => {
@@ -23,9 +23,11 @@ function mockSupabase({
   const enroll = vi.fn().mockResolvedValue(enrollResult);
   const challengeAndVerify = vi.fn().mockResolvedValue(verifyResult);
   const unenroll = vi.fn().mockResolvedValue(unenrollResult);
+  const insertedCodes: unknown[] = [];
   vi.doMock("@/lib/supabase/client", () => ({
     createClient: () => ({
       auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1" } } }),
         mfa: {
           listFactors: vi.fn().mockResolvedValue({ data: { totp: factors }, error: null }),
           enroll,
@@ -33,9 +35,16 @@ function mockSupabase({
           unenroll,
         },
       },
+      from: (table: string) => ({
+        delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+        insert: (rows: unknown[]) => {
+          if (table === "mfa_recovery_codes") insertedCodes.push(...rows);
+          return Promise.resolve({ error: null });
+        },
+      }),
     }),
   }));
-  return { enroll, challengeAndVerify, unenroll };
+  return { enroll, challengeAndVerify, unenroll, insertedCodes };
 }
 
 describe("TwoFactorAuth", () => {
@@ -115,5 +124,48 @@ describe("TwoFactorAuth", () => {
 
     expect(unenroll).toHaveBeenCalledWith({ factorId: "f1" });
     expect(await screen.findByText("Aktifkan 2FA")).toBeInTheDocument();
+  });
+
+  it("generates and shows 10 recovery codes right after enabling 2FA", async () => {
+    const { insertedCodes } = mockSupabase({ factors: [] });
+    const { default: TwoFactorAuth } = await import("./TwoFactorAuth");
+    render(<TwoFactorAuth />);
+
+    fireEvent.click(await screen.findByText("Aktifkan 2FA"));
+    await screen.findByAltText("QR code 2FA");
+    fireEvent.change(screen.getByPlaceholderText("000000"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByText("Verifikasi"));
+
+    expect(await screen.findByText(/Simpen recovery codes ini sekarang/)).toBeInTheDocument();
+    expect(insertedCodes).toHaveLength(10);
+    // Dismissing just hides the panel -- the codes stay stored.
+    fireEvent.click(screen.getByText("Udah disimpen"));
+    expect(screen.queryByText(/Simpen recovery codes ini sekarang/)).not.toBeInTheDocument();
+  });
+
+  it("regenerates recovery codes on demand, replacing any existing batch", async () => {
+    const { insertedCodes } = mockSupabase({ factors: [{ id: "f1", status: "verified" }] });
+    const { default: TwoFactorAuth } = await import("./TwoFactorAuth");
+    render(<TwoFactorAuth />);
+
+    fireEvent.click(await screen.findByText("Bikin ulang recovery codes"));
+
+    expect(await screen.findByText(/Simpen recovery codes ini sekarang/)).toBeInTheDocument();
+    expect(insertedCodes).toHaveLength(10);
+  });
+
+  it("clears the recovery-codes panel when 2FA is disabled", async () => {
+    mockSupabase({ factors: [{ id: "f1", status: "verified" }] });
+    const { default: TwoFactorAuth } = await import("./TwoFactorAuth");
+    render(<TwoFactorAuth />);
+
+    fireEvent.click(await screen.findByText("Bikin ulang recovery codes"));
+    await screen.findByText(/Simpen recovery codes ini sekarang/);
+
+    fireEvent.click(screen.getByText("Matikan 2FA"));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Simpen recovery codes ini sekarang/)).not.toBeInTheDocument()
+    );
   });
 });
