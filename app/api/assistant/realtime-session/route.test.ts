@@ -82,9 +82,31 @@ describe("POST /api/assistant/realtime-session", () => {
     await POST();
 
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.session.instructions).toContain("Nama kamu Nana");
+    expect(body.session.instructions).toContain("nama kamu Nana");
     expect(body.session.instructions).toContain("ringkasan data user");
     expect(body.session.type).toBe("realtime");
+  });
+
+  // Regression: buildAssistantSystemPrompt() itself opens with "Nama kamu
+  // Aslan" and tells the model to introduce itself as Aslan -- the Nana
+  // override has to come *after* that base prompt (not before) or it loses
+  // and the session keeps calling itself Aslan.
+  it("places the Nana override after the base prompt so it wins over the 'you are Aslan' instruction", async () => {
+    mockAuth({ id: "user-1" });
+    mockContext();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ value: "ek_abc123" }),
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { POST } = await import("./route");
+    await POST();
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const instructions: string = body.session.instructions;
+    expect(instructions.indexOf("ringkasan data user")).toBeLessThan(instructions.indexOf("nama kamu Nana"));
   });
 
   it("returns 500 when the upstream session request fails", async () => {

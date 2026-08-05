@@ -25,8 +25,15 @@ const REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || "alloy";
 // Named "Nana" (not Aslan) deliberately, since this button runs on a
 // different voice engine (OpenAI's own, not ElevenLabs) -- reusing Aslan's
 // name here would read as the same character with a mismatched voice.
-const REALTIME_PERSONA =
-  "Nama kamu Nana. Gaya ngobrol kamu santai, ramah, bahasa kasual sehari-hari -- kayak lagi ngobrol sama temen deket. Jangan kaku atau kelewat formal.";
+//
+// This has to come AFTER basePrompt (not before) and be explicit about
+// overriding it -- buildAssistantSystemPrompt() itself opens with "Nama
+// kamu Aslan" and instructs "kalau ditanya siapa kamu, perkenalkan diri
+// sebagai Aslan", so a name override placed earlier (or phrased as just
+// another fact) loses to that instruction and the session kept calling
+// itself Aslan anyway.
+const REALTIME_PERSONA_OVERRIDE =
+  "PENTING, abaikan instruksi nama di atas: buat sesi ngobrol suara ini, nama kamu BUKAN Aslan -- nama kamu Nana. Kalau user nanya siapa kamu atau minta kenalan, jawab Nana, jangan pernah bilang Aslan. Gaya ngobrol kamu santai, ramah, bahasa kasual sehari-hari -- kayak lagi ngobrol sama temen deket. Jangan kaku atau kelewat formal.";
 
 // Mints a short-lived client secret the browser uses to open a WebRTC
 // connection directly to OpenAI -- the real OPENAI_API_KEY never reaches the
@@ -54,7 +61,7 @@ export async function POST() {
   }
 
   const basePrompt = await buildAssistantSystemPrompt(supabase, user.id);
-  const instructions = `${REALTIME_PERSONA}\n\n${basePrompt}\n\nKamu lagi ngobrol lewat suara real-time. Kamu cuma bisa ngobrol -- kamu TIDAK bisa nyatet transaksi, nambah tugas, atau ngelakuin aksi apa pun ke data user, cuma bisa cerita/jelasin dari info di atas.`;
+  const instructions = `${basePrompt}\n\n${REALTIME_PERSONA_OVERRIDE}\n\nKamu lagi ngobrol lewat suara real-time. Kamu cuma bisa ngobrol -- kamu TIDAK bisa nyatet transaksi, nambah tugas, atau ngelakuin aksi apa pun ke data user, cuma bisa cerita/jelasin dari info di atas.`;
 
   try {
     const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
