@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 afterEach(() => {
@@ -21,6 +21,45 @@ function mockSupabase(entries: unknown[]) {
       }),
     }),
   }));
+}
+
+// getUserSequence lets a test say "unauthenticated on the first call, then
+// authenticated" to simulate a stale access token that only recovers after
+// an explicit refreshSession() call.
+function mockSupabaseForSave(opts: {
+  entries?: unknown[];
+  getUserSequence: Array<{ id: string } | null>;
+  upsertResult?: { data: unknown; error: unknown };
+}) {
+  const { entries = [], getUserSequence, upsertResult } = opts;
+  let getUserCall = 0;
+  const refreshSession = vi.fn().mockResolvedValue({ data: {}, error: null });
+  const getUser = vi.fn().mockImplementation(() => {
+    const user = getUserSequence[Math.min(getUserCall, getUserSequence.length - 1)];
+    getUserCall += 1;
+    return Promise.resolve({ data: { user } });
+  });
+  const upsert = vi.fn().mockReturnValue({
+    select: () => ({
+      single: () =>
+        Promise.resolve(
+          upsertResult ?? {
+            data: { id: "new1", entry_date: todayStr(), content: "Catatan baru", created_at: "t", updated_at: "t" },
+            error: null,
+          }
+        ),
+    }),
+  });
+  vi.doMock("@/lib/supabase/client", () => ({
+    createClient: () => ({
+      auth: { getUser, refreshSession },
+      from: () => ({
+        select: () => ({ order: () => Promise.resolve({ data: entries, error: null }) }),
+        upsert,
+      }),
+    }),
+  }));
+  return { getUser, refreshSession, upsert };
 }
 
 describe("JurnalPage", () => {
@@ -104,5 +143,53 @@ describe("JurnalPage", () => {
 
     await screen.findByText("Simpan Catatan");
     expect(screen.queryByText(/hari beruntun/)).not.toBeInTheDocument();
+  });
+
+  it("saves normally when the session is already valid", async () => {
+    const { upsert, refreshSession } = mockSupabaseForSave({ getUserSequence: [{ id: "u1" }] });
+    const { default: JurnalPage } = await import("./page");
+    render(<JurnalPage />);
+
+    fireEvent.change(await screen.findByPlaceholderText("Tulis apa aja..."), {
+      target: { value: "Catatan baru" },
+    });
+    fireEvent.click(screen.getByText("Simpan Catatan"));
+
+    await waitFor(() => expect(upsert).toHaveBeenCalled());
+    expect(refreshSession).not.toHaveBeenCalled();
+  });
+
+  it("retries with a session refresh when the access token looks stale, and still saves", async () => {
+    // First getUser() call comes back empty (stale token after the tab was
+    // backgrounded), second one (after refreshSession) succeeds.
+    const { upsert, refreshSession } = mockSupabaseForSave({
+      getUserSequence: [null, { id: "u1" }],
+    });
+    const { default: JurnalPage } = await import("./page");
+    render(<JurnalPage />);
+
+    fireEvent.change(await screen.findByPlaceholderText("Tulis apa aja..."), {
+      target: { value: "Catatan baru" },
+    });
+    fireEvent.click(screen.getByText("Simpan Catatan"));
+
+    await waitFor(() => expect(upsert).toHaveBeenCalled());
+    expect(refreshSession).toHaveBeenCalled();
+    expect(screen.queryByText(/Sesi login habis/)).not.toBeInTheDocument();
+  });
+
+  it("shows a login-again message (without wiping the draft) when the session is truly gone", async () => {
+    mockSupabaseForSave({ getUserSequence: [null, null] });
+    const { default: JurnalPage } = await import("./page");
+    render(<JurnalPage />);
+
+    const textarea = (await screen.findByPlaceholderText("Tulis apa aja...")) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "Catatan penting" } });
+    fireEvent.click(screen.getByText("Simpan Catatan"));
+
+    expect(await screen.findByText(/Sesi login habis/)).toBeInTheDocument();
+    // The draft stays in the textarea -- the user shouldn't be told to
+    // reload the page, since that would actually lose this content.
+    expect(textarea.value).toBe("Catatan penting");
   });
 });
