@@ -95,3 +95,48 @@ export async function createEvent(
   }
   return parseEvent((await res.json()) as GoogleCalendarEventRaw);
 }
+
+// PATCH (not PUT) -- only the fields actually passed get changed, so
+// rescheduling just the time doesn't require re-sending the summary/
+// description too.
+export async function updateEvent(
+  accessToken: string,
+  eventId: string,
+  params: { summary?: string; startIso?: string; endIso?: string; description?: string }
+): Promise<CalendarEvent> {
+  const body: Record<string, unknown> = {};
+  if (params.summary !== undefined) body.summary = params.summary;
+  if (params.description !== undefined) body.description = params.description;
+  if (params.startIso !== undefined) body.start = { dateTime: params.startIso };
+  if (params.endIso !== undefined) body.end = { dateTime: params.endIso };
+
+  const res = await fetch(`${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const responseBody = await res.text();
+    console.error(`Google Calendar: gagal update event (status ${res.status}): ${responseBody}`);
+    throw new Error(extractGoogleErrorMessage(responseBody));
+  }
+  return parseEvent((await res.json()) as GoogleCalendarEventRaw);
+}
+
+export async function deleteEvent(accessToken: string, eventId: string): Promise<void> {
+  const res = await fetch(`${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  // Google returns 410 Gone for an event that's already deleted -- treat
+  // that the same as success rather than surfacing an error for an outcome
+  // the caller already wanted.
+  if (!res.ok && res.status !== 410) {
+    const body = await res.text();
+    console.error(`Google Calendar: gagal hapus event (status ${res.status}): ${body}`);
+    throw new Error(extractGoogleErrorMessage(body));
+  }
+}

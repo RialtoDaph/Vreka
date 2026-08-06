@@ -31,6 +31,8 @@ const TOOL_LABEL: Record<string, string> = {
   draft_email_reply: "Bikin draft balesan email",
   check_calendar: "Cek kalender",
   add_calendar_event: "Bikin event kalender",
+  update_calendar_event: "Update event kalender",
+  delete_calendar_event: "Hapus event kalender",
   add_journal_entry: "Nambah catatan jurnal",
   search_records: "Cari data",
   add_debt: "Catat utang/piutang",
