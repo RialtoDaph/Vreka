@@ -3,7 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
 import { getGmailAccessToken, getCalendarAccessToken } from "@/lib/google/credentials";
 import { listMessages, getMessage, createDraftReply, type ParsedEmail } from "@/lib/google/gmail";
-import { listUpcomingEvents, createEvent } from "@/lib/google/calendar";
+import { listUpcomingEvents, createEvent, updateEvent, deleteEvent } from "@/lib/google/calendar";
 import { formatDateTime } from "@/lib/format";
 import { searchAll } from "@/lib/search";
 import { checkBudgetAlertAndNotify } from "@/lib/budgetAlerts";
@@ -295,6 +295,34 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "update_calendar_event",
+    description:
+      "Reschedule atau ubah event Google Calendar yang udah ada (waktu/judul/catatan). Cari event-nya pake title_query -- nyari di antara event 90 hari ke depan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string", description: "Kata kunci buat nyari judul event-nya." },
+        new_summary: { type: "string" },
+        new_start: { type: "string", description: "Waktu mulai baru, ISO 8601 datetime." },
+        new_end: { type: "string", description: "Waktu selesai baru, ISO 8601 datetime." },
+        new_description: { type: "string" },
+      },
+      required: ["title_query"],
+    },
+  },
+  {
+    name: "delete_calendar_event",
+    description:
+      "Batalin/hapus event Google Calendar. Cari event-nya pake title_query -- nyari di antara event 90 hari ke depan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title_query: { type: "string", description: "Kata kunci buat nyari judul event-nya." },
+      },
+      required: ["title_query"],
+    },
+  },
+  {
     name: "add_journal_entry",
     description:
       "Tambah catatan ke jurnal harian user. Kalau udah ada catatan hari ini, ini nambahin ke catatan yang ada (bukan nimpa).",
@@ -556,6 +584,32 @@ async function findOneEmail(
       .map((d) => `"${d.subject}" dari ${d.from}`)
       .join("; ")}. Sebutin lebih spesifik.`,
   };
+}
+
+type CalendarEventFindResult = { error?: string; id?: string; summary?: string; accessToken?: string };
+
+async function findOneCalendarEvent(
+  supabase: SupabaseClient,
+  userId: string,
+  query: string
+): Promise<CalendarEventFindResult> {
+  const cred = await getCalendarAccessToken(supabase, userId);
+  if ("error" in cred) return { error: cred.error };
+  const q = String(query ?? "").trim().toLowerCase();
+  if (!q) return { error: "Query pencarian kosong." };
+  const timeMax = new Date();
+  timeMax.setDate(timeMax.getDate() + 90);
+  const events = await listUpcomingEvents(cred.accessToken, { maxResults: 50, timeMax });
+  const matches = events.filter((e) => e.summary.toLowerCase().includes(q));
+  if (matches.length === 0) return { error: `Nggak nemu event yang cocok sama "${q}" dalam 90 hari ke depan.` };
+  if (matches.length > 1) {
+    return {
+      error: `Ada ${matches.length} event yang cocok: ${matches
+        .map((e) => `"${e.summary}" (${formatDateTime(e.start)})`)
+        .join("; ")}. Sebutin lebih spesifik.`,
+    };
+  }
+  return { id: matches[0].id, summary: matches[0].summary, accessToken: cred.accessToken };
 }
 
 export async function executeAssistantTool(
@@ -907,6 +961,34 @@ export async function executeAssistantTool(
         return { ok: true, result: `Event "${summary}" ditambahin ke Google Calendar.` };
       } catch (err) {
         return { ok: false, result: err instanceof Error ? err.message : "Gagal bikin event." };
+      }
+    }
+
+    case "update_calendar_event": {
+      const found = await findOneCalendarEvent(supabase, userId, String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      const patch: { summary?: string; startIso?: string; endIso?: string; description?: string } = {};
+      if (typeof input.new_summary === "string" && input.new_summary.trim()) patch.summary = input.new_summary.trim();
+      if (typeof input.new_start === "string" && input.new_start) patch.startIso = input.new_start;
+      if (typeof input.new_end === "string" && input.new_end) patch.endIso = input.new_end;
+      if (typeof input.new_description === "string") patch.description = input.new_description;
+      if (Object.keys(patch).length === 0) return { ok: false, result: "Nggak ada perubahan yang disebutin." };
+      try {
+        await updateEvent(found.accessToken!, found.id!, patch);
+        return { ok: true, result: `Event "${found.summary}" diupdate.` };
+      } catch (err) {
+        return { ok: false, result: err instanceof Error ? err.message : "Gagal update event." };
+      }
+    }
+
+    case "delete_calendar_event": {
+      const found = await findOneCalendarEvent(supabase, userId, String(input.title_query ?? ""));
+      if (found.error) return { ok: false, result: found.error };
+      try {
+        await deleteEvent(found.accessToken!, found.id!);
+        return { ok: true, result: `Event "${found.summary}" dihapus dari Google Calendar.` };
+      } catch (err) {
+        return { ok: false, result: err instanceof Error ? err.message : "Gagal hapus event." };
       }
     }
 

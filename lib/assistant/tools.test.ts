@@ -759,10 +759,14 @@ describe("executeAssistantTool: Google Calendar", () => {
     cred = { accessToken: "token-1" } as { accessToken: string } | { error: string },
     events = [],
     createEventImpl,
+    updateEventImpl,
+    deleteEventImpl,
   }: {
     cred?: { accessToken: string } | { error: string };
-    events?: { summary: string; start: string; location: string | null }[];
+    events?: { id: string; summary: string; start: string; location: string | null }[];
     createEventImpl?: ReturnType<typeof vi.fn>;
+    updateEventImpl?: ReturnType<typeof vi.fn>;
+    deleteEventImpl?: ReturnType<typeof vi.fn>;
   } = {}) {
     vi.doMock("@/lib/google/credentials", () => ({
       getGmailAccessToken: vi.fn(),
@@ -771,6 +775,8 @@ describe("executeAssistantTool: Google Calendar", () => {
     vi.doMock("@/lib/google/calendar", () => ({
       listUpcomingEvents: vi.fn().mockResolvedValue(events),
       createEvent: createEventImpl ?? vi.fn().mockResolvedValue({}),
+      updateEvent: updateEventImpl ?? vi.fn().mockResolvedValue({}),
+      deleteEvent: deleteEventImpl ?? vi.fn().mockResolvedValue(undefined),
     }));
   }
 
@@ -782,7 +788,7 @@ describe("executeAssistantTool: Google Calendar", () => {
   });
 
   it("check_calendar lists upcoming events", async () => {
-    mockCalendar({ events: [{ summary: "Standup", start: "2026-08-05T09:00:00Z", location: null }] });
+    mockCalendar({ events: [{ id: "e1", summary: "Standup", start: "2026-08-05T09:00:00Z", location: null }] });
     const { executeAssistantTool } = await import("./tools");
     const res = await executeAssistantTool({} as never, "user-1", "check_calendar", { days_ahead: 3 });
     expect(res.ok).toBe(true);
@@ -819,5 +825,69 @@ describe("executeAssistantTool: Google Calendar", () => {
       "token-1",
       expect.objectContaining({ summary: "Meeting" })
     );
+  });
+
+  it("update_calendar_event finds the event by title and reschedules it", async () => {
+    const updateEventImpl = vi.fn().mockResolvedValue({});
+    mockCalendar({
+      events: [{ id: "e1", summary: "Standup", start: "2026-08-05T09:00:00Z", location: null }],
+      updateEventImpl,
+    });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "update_calendar_event", {
+      title_query: "standup",
+      new_start: "2026-08-05T10:00:00Z",
+    });
+    expect(res.ok).toBe(true);
+    expect(updateEventImpl).toHaveBeenCalledWith("token-1", "e1", { startIso: "2026-08-05T10:00:00Z" });
+  });
+
+  it("update_calendar_event rejects when no change was given", async () => {
+    mockCalendar({ events: [{ id: "e1", summary: "Standup", start: "2026-08-05T09:00:00Z", location: null }] });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "update_calendar_event", {
+      title_query: "standup",
+    });
+    expect(res).toEqual({ ok: false, result: "Nggak ada perubahan yang disebutin." });
+  });
+
+  it("update_calendar_event asks for clarification when several events match", async () => {
+    mockCalendar({
+      events: [
+        { id: "e1", summary: "Standup harian", start: "2026-08-05T09:00:00Z", location: null },
+        { id: "e2", summary: "Standup mingguan", start: "2026-08-06T09:00:00Z", location: null },
+      ],
+    });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "update_calendar_event", {
+      title_query: "standup",
+      new_summary: "x",
+    });
+    expect(res.ok).toBe(false);
+    expect(res.result).toContain("Ada 2 event");
+  });
+
+  it("delete_calendar_event finds the event by title and cancels it", async () => {
+    const deleteEventImpl = vi.fn().mockResolvedValue(undefined);
+    mockCalendar({
+      events: [{ id: "e1", summary: "Standup", start: "2026-08-05T09:00:00Z", location: null }],
+      deleteEventImpl,
+    });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "delete_calendar_event", {
+      title_query: "standup",
+    });
+    expect(res.ok).toBe(true);
+    expect(deleteEventImpl).toHaveBeenCalledWith("token-1", "e1");
+  });
+
+  it("delete_calendar_event reports when nothing matches", async () => {
+    mockCalendar({ events: [] });
+    const { executeAssistantTool } = await import("./tools");
+    const res = await executeAssistantTool({} as never, "user-1", "delete_calendar_event", {
+      title_query: "nggak ada",
+    });
+    expect(res.ok).toBe(false);
+    expect(res.result).toContain("Nggak nemu event");
   });
 });
