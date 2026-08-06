@@ -8,6 +8,7 @@ import { useVoiceAssistant } from "@/lib/assistant/useVoiceAssistant";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
+import GmailDrafts from "@/components/asisten/GmailDrafts";
 import PushNotifications from "@/components/asisten/PushNotifications";
 import StatusAslan from "@/components/asisten/StatusAslan";
 import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
@@ -661,6 +662,12 @@ export default function AsistenPage() {
                 }
               />
             </div>
+
+            {gmailEmail && (
+              <div className="border border-line rounded-sm p-3 mb-5">
+                <GmailDrafts />
+              </div>
+            )}
 
             <div className="divide-y divide-line/60">
               <div className="py-3 first:pt-0">

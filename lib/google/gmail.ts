@@ -207,3 +207,70 @@ export async function createDraftReply(
     throw new Error(`Gagal bikin draft: ${body}`);
   }
 }
+
+export type DraftSummary = { id: string; to: string; subject: string; snippet: string };
+
+// Aslan can only ever create a draft (draftEmailReply above) -- sending is a
+// separate, explicit action the user takes in Vreka's own UI
+// (components/asisten/GmailDrafts.tsx), never something a tool call does on
+// its own. This lists what's waiting for that review.
+export async function listDrafts(accessToken: string, maxResults = 10): Promise<DraftSummary[]> {
+  const res = await fetch(`${GMAIL_API}/drafts?maxResults=${maxResults}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Google: gagal list draft (status ${res.status}): ${body}`);
+    throw new Error(`Gagal list draft: ${body}`);
+  }
+  const data = await res.json();
+  const drafts: Array<{ id: string; message: { id: string } }> = data.drafts ?? [];
+
+  return Promise.all(
+    drafts.map(async (d) => {
+      const detailRes = await fetch(
+        `${GMAIL_API}/drafts/${d.id}?format=metadata&metadataHeaders=To&metadataHeaders=Subject`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!detailRes.ok) {
+        return { id: d.id, to: "(nggak kebaca)", subject: "(nggak kebaca)", snippet: "" };
+      }
+      const detail = await detailRes.json();
+      const headers: GmailHeader[] = detail.message?.payload?.headers ?? [];
+      return {
+        id: d.id,
+        to: findHeader(headers, "To"),
+        subject: findHeader(headers, "Subject"),
+        snippet: detail.message?.snippet ?? "",
+      };
+    })
+  );
+}
+
+export async function sendDraft(accessToken: string, draftId: string): Promise<void> {
+  const res = await fetch(`${GMAIL_API}/drafts/send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id: draftId }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Google: gagal kirim draft ${draftId} (status ${res.status}): ${body}`);
+    throw new Error(`Gagal kirim draft: ${body}`);
+  }
+}
+
+export async function deleteDraft(accessToken: string, draftId: string): Promise<void> {
+  const res = await fetch(`${GMAIL_API}/drafts/${draftId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    const body = await res.text();
+    console.error(`Google: gagal hapus draft ${draftId} (status ${res.status}): ${body}`);
+    throw new Error(`Gagal hapus draft: ${body}`);
+  }
+}
