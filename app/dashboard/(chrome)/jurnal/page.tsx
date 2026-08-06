@@ -64,11 +64,22 @@ export default function JurnalPage() {
     if (!content.trim()) return;
     setSaving(true);
     setError(null);
-    const {
+    let {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      setError("Sesi login habis. Refresh halaman terus coba lagi.");
+      // The access token can go stale without logging the user out -- e.g. the
+      // tab was backgrounded on mobile (screen lock, app switch) and the SDK's
+      // background refresh timer got suspended by the OS. Try one explicit
+      // refresh before treating this as a real logout, so a stale token
+      // doesn't cost the user their unsaved draft.
+      await supabase.auth.refreshSession();
+      ({
+        data: { user },
+      } = await supabase.auth.getUser());
+    }
+    if (!user) {
+      setError("Sesi login habis. Login ulang, catatan yang udah ditulis nggak akan hilang.");
       setSaving(false);
       return;
     }
