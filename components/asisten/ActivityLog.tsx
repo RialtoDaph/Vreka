@@ -38,6 +38,7 @@ const TOOL_LABEL: Record<string, string> = {
   add_debt: "Catat utang/piutang",
   update_debt: "Update utang/piutang",
   delete_debt: "Hapus utang/piutang",
+  pay_debt: "Catat cicilan utang/piutang",
   add_savings_goal: "Bikin target tabungan",
   update_savings_goal: "Update target tabungan",
   delete_savings_goal: "Hapus target tabungan",

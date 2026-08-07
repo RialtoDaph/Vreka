@@ -3,6 +3,7 @@ export const INCOME_CATEGORIES = [
   "Bonus",
   "Freelance",
   "Investasi",
+  "Piutang Diterima",
   "Lainnya",
 ];
 

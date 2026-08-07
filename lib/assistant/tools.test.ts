@@ -27,11 +27,23 @@ function makeSupabase(tables: Record<string, Row[]>) {
       select: () => obj,
       insert: (payload: Row) => {
         const rows = Array.isArray(payload) ? payload : [payload];
+        const insertedRows: Row[] = [];
         for (const row of rows) {
+          const newRow = { id: `new-${(tables[table]?.length ?? 0) + 1}`, ...row };
           inserted.push({ table, payload: row });
-          tables[table] = [...(tables[table] ?? []), { id: `new-${(tables[table]?.length ?? 0) + 1}`, ...row }];
+          tables[table] = [...(tables[table] ?? []), newRow];
+          insertedRows.push(newRow);
         }
-        return Promise.resolve({ error: null });
+        // Supports both `await ...insert(payload)` (plain thenable) and
+        // `...insert(payload).select("id").single()` (chained, for callers
+        // that need the inserted row's generated id back).
+        return {
+          error: null,
+          select: () => ({
+            single: () => Promise.resolve({ data: insertedRows[0] ?? null, error: null }),
+          }),
+          then: (resolve: (v: { error: null }) => unknown) => Promise.resolve({ error: null }).then(resolve),
+        };
       },
       upsert: (payload: Row, opts?: { onConflict?: string }) => {
         upserted.push({ table, payload });
@@ -181,6 +193,75 @@ describe("executeAssistantTool: debts", () => {
     });
     expect(res.ok).toBe(true);
     expect(supabase.deleted).toEqual([{ table: "debts", id: "d1" }]);
+  });
+
+  it("records a partial payment as a transaction and shrinks the remaining balance", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      debts: [
+        { id: "d1", user_id: "user-1", party_name: "Bank", direction: "i_owe", amount: 4000, status: "unpaid" },
+      ],
+      debt_payments: [],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "pay_debt", {
+      party_query: "bank",
+      amount: 500,
+    });
+    expect(res).toEqual({ ok: true, result: 'Pembayaran 500 buat "Bank" dicatat. Sisa: 3500.' });
+    expect(supabase.inserted).toContainEqual(
+      expect.objectContaining({
+        table: "transactions",
+        payload: expect.objectContaining({ type: "expense", category: "Cicilan/Utang", amount: 500 }),
+      })
+    );
+    expect(supabase.inserted).toContainEqual(
+      expect.objectContaining({
+        table: "debt_payments",
+        payload: expect.objectContaining({ debt_id: "d1", amount: 500 }),
+      })
+    );
+    expect(supabase.updated).toEqual([]);
+  });
+
+  it("auto-marks a debt paid once payments cover the full amount", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      debts: [
+        { id: "d1", user_id: "user-1", party_name: "Bank", direction: "i_owe", amount: 1000, status: "unpaid" },
+      ],
+      debt_payments: [{ id: "p1", debt_id: "d1", amount: 700 }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "pay_debt", {
+      party_query: "bank",
+      amount: 300,
+    });
+    expect(res).toEqual({ ok: true, result: 'Pembayaran 300 buat "Bank" dicatat. Sekarang LUNAS.' });
+    expect(supabase.updated[0]).toMatchObject({ table: "debts", payload: { status: "paid" } });
+  });
+
+  it("rejects paying a debt that's already marked paid", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      debts: [{ id: "d1", user_id: "user-1", party_name: "Bank", direction: "i_owe", amount: 1000, status: "paid" }],
+      debt_payments: [],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "pay_debt", {
+      party_query: "bank",
+      amount: 100,
+    });
+    expect(res).toEqual({ ok: false, result: '"Bank" udah lunas.' });
+  });
+
+  it("rejects a non-positive payment amount", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      debts: [{ id: "d1", user_id: "user-1", party_name: "Bank", direction: "i_owe", amount: 1000, status: "unpaid" }],
+    });
+    const res = await executeAssistantTool(supabase as never, "user-1", "pay_debt", {
+      party_query: "bank",
+      amount: 0,
+    });
+    expect(res).toEqual({ ok: false, result: "amount harus > 0." });
   });
 });
 

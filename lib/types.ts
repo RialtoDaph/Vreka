@@ -50,12 +50,14 @@ export type Debt = {
   recurrence_day: number | null;
 };
 
-export type DebtPaymentCheck = {
+export type DebtPayment = {
   id: string;
   user_id: string;
   debt_id: string;
-  period: string;
-  paid_at: string;
+  amount: number;
+  transaction_id: string | null;
+  period: string | null;
+  paid_on: string;
   created_at: string;
 };
 
