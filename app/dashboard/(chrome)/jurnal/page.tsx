@@ -64,48 +64,55 @@ export default function JurnalPage() {
     if (!content.trim()) return;
     setSaving(true);
     setError(null);
-    let {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      // The access token can go stale without logging the user out -- e.g. the
-      // tab was backgrounded on mobile (screen lock, app switch) and the SDK's
-      // background refresh timer got suspended by the OS. Try one explicit
-      // refresh before treating this as a real logout, so a stale token
-      // doesn't cost the user their unsaved draft.
-      await supabase.auth.refreshSession();
-      ({
+    try {
+      let {
         data: { user },
-      } = await supabase.auth.getUser());
-    }
-    if (!user) {
-      setError("Sesi login habis. Login ulang, catatan yang udah ditulis nggak akan hilang.");
+      } = await supabase.auth.getUser();
+      if (!user) {
+        // The access token can go stale without logging the user out -- e.g. the
+        // tab was backgrounded on mobile (screen lock, app switch) and the SDK's
+        // background refresh timer got suspended by the OS. Try one explicit
+        // refresh before treating this as a real logout, so a stale token
+        // doesn't cost the user their unsaved draft.
+        await supabase.auth.refreshSession();
+        ({
+          data: { user },
+        } = await supabase.auth.getUser());
+      }
+      if (!user) {
+        setError("Sesi login habis. Login ulang, catatan yang udah ditulis nggak akan hilang.");
+        return;
+      }
+      const { data, error: saveError } = await supabase
+        .from("journal_entries")
+        .upsert(
+          {
+            user_id: user.id,
+            entry_date: selectedDate,
+            content: content.trim(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,entry_date" }
+        )
+        .select("*")
+        .single();
+      if (saveError || !data) {
+        setError("Gagal simpan catatan. Coba lagi.");
+        return;
+      }
+      setEntries((prev) => {
+        const withoutDate = prev.filter((e) => e.entry_date !== selectedDate);
+        return [data, ...withoutDate].sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1));
+      });
+    } catch {
+      // A dropped/flaky connection can reject these calls outright instead of
+      // resolving with a clean error -- without this, saving would get stuck
+      // forever with no feedback, which looks exactly like "can't save" even
+      // when the write may have actually gone through server-side.
+      setError("Koneksi terputus pas nyimpen. Coba lagi.");
+    } finally {
       setSaving(false);
-      return;
     }
-    const { data, error: saveError } = await supabase
-      .from("journal_entries")
-      .upsert(
-        {
-          user_id: user.id,
-          entry_date: selectedDate,
-          content: content.trim(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,entry_date" }
-      )
-      .select("*")
-      .single();
-    if (saveError || !data) {
-      setError("Gagal simpan catatan. Coba lagi.");
-      setSaving(false);
-      return;
-    }
-    setEntries((prev) => {
-      const withoutDate = prev.filter((e) => e.entry_date !== selectedDate);
-      return [data, ...withoutDate].sort((a, b) => (a.entry_date < b.entry_date ? 1 : -1));
-    });
-    setSaving(false);
   }
 
   async function handleDelete(id: string) {
@@ -113,10 +120,16 @@ export default function JurnalPage() {
     setError(null);
     const previous = entries;
     setEntries((prev) => prev.filter((e) => e.id !== id));
-    const { error: deleteError } = await supabase.from("journal_entries").delete().eq("id", id);
-    if (deleteError) {
+    try {
+      const { error: deleteError } = await supabase.from("journal_entries").delete().eq("id", id);
+      if (deleteError) {
+        setEntries(previous);
+        setError("Gagal hapus catatan. Coba lagi.");
+        return;
+      }
+    } catch {
       setEntries(previous);
-      setError("Gagal hapus catatan. Coba lagi.");
+      setError("Koneksi terputus pas hapus. Coba lagi.");
       return;
     }
     if (id === selectedEntry?.id) setContent("");
