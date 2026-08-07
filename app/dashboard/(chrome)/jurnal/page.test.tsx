@@ -192,4 +192,26 @@ describe("JurnalPage", () => {
     // reload the page, since that would actually lose this content.
     expect(textarea.value).toBe("Catatan penting");
   });
+
+  it("recovers from a dropped connection instead of getting stuck on 'Menyimpan...'", async () => {
+    vi.doMock("@/lib/supabase/client", () => ({
+      createClient: () => ({
+        auth: { getUser: vi.fn().mockRejectedValue(new Error("network error")) },
+        from: () => ({
+          select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }),
+        }),
+      }),
+    }));
+    const { default: JurnalPage } = await import("./page");
+    render(<JurnalPage />);
+
+    const textarea = (await screen.findByPlaceholderText("Tulis apa aja...")) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "Catatan penting" } });
+    fireEvent.click(screen.getByText("Simpan Catatan"));
+
+    expect(await screen.findByText(/Koneksi terputus/)).toBeInTheDocument();
+    // The save button re-enables instead of being stuck on "Menyimpan..." forever.
+    expect(await screen.findByText("Simpan Catatan")).not.toBeDisabled();
+    expect(textarea.value).toBe("Catatan penting");
+  });
 });
