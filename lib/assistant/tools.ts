@@ -391,6 +391,19 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "pay_debt",
+    description:
+      "Catat cicilan/pembayaran sebagian atau penuh buat utang/piutang yang udah ada. Bikin transaksi keuangan otomatis dan ngurangin sisa utangnya -- kalau lunas, statusnya otomatis ke-update. Cari pake party_query (nama pihak terkait).",
+    input_schema: {
+      type: "object",
+      properties: {
+        party_query: { type: "string", description: "Kata kunci buat nyari nama pihak terkait." },
+        amount: { type: "number", description: "Jumlah yang dibayar sekarang dalam Euro (EUR), harus > 0." },
+      },
+      required: ["party_query", "amount"],
+    },
+  },
+  {
     name: "add_savings_goal",
     description: "Bikin target tabungan baru di modul Keuangan.",
     input_schema: {
@@ -1077,6 +1090,86 @@ export async function executeAssistantTool(
       const { error } = await supabase.from("debts").delete().eq("id", found.id).eq("user_id", userId);
       if (error) return { ok: false, result: error.message };
       return { ok: true, result: `Utang/piutang "${found.label}" dihapus.` };
+    }
+
+    case "pay_debt": {
+      const q = String(input.party_query ?? "").trim();
+      if (!q) return { ok: false, result: "party_query kosong." };
+      const amount = Number(input.amount);
+      if (!amount || amount <= 0) return { ok: false, result: "amount harus > 0." };
+
+      const { data: rows, error: findError } = await supabase
+        .from("debts")
+        .select("*")
+        .eq("user_id", userId)
+        .ilike("party_name", `%${q}%`)
+        .limit(10);
+      if (findError) return { ok: false, result: findError.message };
+      const debts = (rows ?? []) as Array<{
+        id: string;
+        party_name: string;
+        direction: "i_owe" | "owed_to_me";
+        amount: number;
+        status: "unpaid" | "paid";
+        is_recurring: boolean;
+      }>;
+      if (debts.length === 0) return { ok: false, result: `Nggak nemu utang/piutang yang namanya kayak "${q}".` };
+      if (debts.length > 1) {
+        return {
+          ok: false,
+          result: `Ada ${debts.length} yang cocok: ${debts.map((d) => d.party_name).join(", ")}. Sebutin lebih spesifik.`,
+        };
+      }
+      const debt = debts[0];
+      if (debt.status === "paid") return { ok: false, result: `"${debt.party_name}" udah lunas.` };
+
+      const { data: existingPayments, error: paymentsError } = await supabase
+        .from("debt_payments")
+        .select("amount")
+        .eq("debt_id", debt.id);
+      if (paymentsError) return { ok: false, result: paymentsError.message };
+      const paidSoFar = (existingPayments ?? []).reduce(
+        (sum: number, p: { amount: number }) => sum + Number(p.amount),
+        0
+      );
+
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: tx, error: txError } = await supabase
+        .from("transactions")
+        .insert({
+          user_id: userId,
+          type: debt.direction === "i_owe" ? "expense" : "income",
+          category: debt.direction === "i_owe" ? "Cicilan/Utang" : "Piutang Diterima",
+          amount,
+          description:
+            debt.direction === "i_owe" ? `Cicilan ${debt.party_name}` : `Pembayaran dari ${debt.party_name}`,
+          occurred_on: today,
+        })
+        .select("id")
+        .single();
+      if (txError || !tx) return { ok: false, result: txError?.message ?? "Gagal catat transaksi." };
+
+      const { error: paymentError } = await supabase.from("debt_payments").insert({
+        user_id: userId,
+        debt_id: debt.id,
+        amount,
+        transaction_id: tx.id,
+        period: debt.is_recurring ? today.slice(0, 7) : null,
+        paid_on: today,
+      });
+      if (paymentError) {
+        return {
+          ok: false,
+          result: `Transaksi kesimpen, tapi catatan pembayarannya gagal: ${paymentError.message}`,
+        };
+      }
+
+      const remaining = Math.max(0, Number(debt.amount) - (paidSoFar + amount));
+      if (remaining <= 0) {
+        await supabase.from("debts").update({ status: "paid" }).eq("id", debt.id).eq("user_id", userId);
+        return { ok: true, result: `Pembayaran ${amount} buat "${debt.party_name}" dicatat. Sekarang LUNAS.` };
+      }
+      return { ok: true, result: `Pembayaran ${amount} buat "${debt.party_name}" dicatat. Sisa: ${remaining}.` };
     }
 
     case "add_savings_goal": {

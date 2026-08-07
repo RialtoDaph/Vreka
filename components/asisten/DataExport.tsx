@@ -12,7 +12,7 @@ const EXPORTABLE_TABLES = [
   "recurring_items",
   "recurring_item_checks",
   "debts",
-  "debt_payment_checks",
+  "debt_payments",
   "savings_goals",
   "budgets",
   "tasks",

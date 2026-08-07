@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Debt, DebtDirection, DebtPaymentCheck } from "@/lib/types";
+import { Debt, DebtDirection, DebtPayment } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
-import { currentMonthKey } from "@/lib/date";
+import { currentMonthKey, todayKey } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
 import {
   inputClass,
@@ -26,12 +26,15 @@ const DIRECTION_FILTERS: { key: DirectionFilter; label: string }[] = [
 export default function DebtsTab() {
   const supabase = createClient();
   const [items, setItems] = useState<Debt[]>([]);
-  const [checks, setChecks] = useState<DebtPaymentCheck[]>([]);
+  const [payments, setPayments] = useState<DebtPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payBusyId, setPayBusyId] = useState<string | null>(null);
+  const [undoingId, setUndoingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("semua");
 
@@ -75,16 +78,18 @@ export default function DebtsTab() {
 
   async function load() {
     setLoading(true);
-    const [{ data: debtRows }, { data: checkRows }] = await Promise.all([
+    // Payments aren't scoped to the current period -- the running balance
+    // needs every payment ever made against a debt, not just this month's.
+    const [{ data: debtRows }, { data: paymentRows }] = await Promise.all([
       supabase
         .from("debts")
         .select("*")
         .order("status", { ascending: true })
         .order("due_date", { ascending: true, nullsFirst: false }),
-      supabase.from("debt_payment_checks").select("*").eq("period", period),
+      supabase.from("debt_payments").select("*"),
     ]);
     setItems(debtRows ?? []);
-    setChecks(checkRows ?? []);
+    setPayments(paymentRows ?? []);
     setLoading(false);
   }
 
@@ -157,73 +162,185 @@ export default function DebtsTab() {
     load();
   }
 
-  // Marks/unmarks *this cycle* paid for a recurring debt -- separate from
-  // toggleStatus, which closes out the debt entirely. A recurring debt
-  // stays "unpaid" (still an ongoing obligation) across many paid cycles.
-  async function toggleCheck(debt: Debt) {
-    if (togglingId) return;
-    setTogglingId(debt.id);
+  function startPay(debt: Debt) {
     setError(null);
-    const existing = checks.find((c) => c.debt_id === debt.id);
+    setPayingId(debt.id);
+    setPayAmount(String(remaining(debt)).replace(".", ","));
+  }
 
-    if (existing) {
-      const { error: deleteError } = await supabase
-        .from("debt_payment_checks")
-        .delete()
-        .eq("id", existing.id);
-      if (deleteError) {
-        setError("Gagal batal-centang. Coba lagi.");
-      } else {
-        setChecks((prev) => prev.filter((c) => c.id !== existing.id));
-      }
-    } else {
+  function cancelPay() {
+    setPayingId(null);
+    setPayAmount("");
+  }
+
+  // Records a real installment: a transaction (so it shows up in the rest
+  // of the app's cash flow -- budgets, analytics, exports) plus a
+  // debt_payments row (so the debt's remaining balance actually shrinks).
+  // A recurring debt's payment is tagged with the current period so it
+  // can't be double-booked for the same month; a one-off debt just gets an
+  // untagged installment, as many as it takes.
+  async function handlePay(debt: Debt) {
+    const parsed = parseAmount(payAmount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setError("Nominal pembayaran nggak valid.");
+      return;
+    }
+    setPayBusyId(debt.id);
+    setError(null);
+    try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
         setError("Sesi login habis. Refresh halaman terus coba lagi.");
-        setTogglingId(null);
         return;
       }
-      const { data: check, error: insertError } = await supabase
-        .from("debt_payment_checks")
-        .insert({ user_id: user.id, debt_id: debt.id, period })
+
+      const { data: tx, error: txError } = await supabase
+        .from("transactions")
+        .insert({
+          user_id: user.id,
+          type: debt.direction === "i_owe" ? "expense" : "income",
+          category: debt.direction === "i_owe" ? "Cicilan/Utang" : "Piutang Diterima",
+          amount: parsed,
+          description:
+            debt.direction === "i_owe" ? `Cicilan ${debt.party_name}` : `Pembayaran dari ${debt.party_name}`,
+          occurred_on: todayKey(),
+        })
+        .select("id")
+        .single();
+      if (txError || !tx) {
+        setError("Gagal catat transaksi pembayaran. Coba lagi.");
+        return;
+      }
+
+      const { data: payment, error: paymentError } = await supabase
+        .from("debt_payments")
+        .insert({
+          user_id: user.id,
+          debt_id: debt.id,
+          amount: parsed,
+          transaction_id: tx.id,
+          period: debt.is_recurring ? period : null,
+          paid_on: todayKey(),
+        })
         .select("*")
         .single();
-      if (insertError || !check) {
-        setError("Gagal catat pembayaran. Coba lagi.");
-      } else {
-        setChecks((prev) => [...prev, check]);
+      if (paymentError || !payment) {
+        // The transaction's already in, so don't let the balance silently
+        // look wrong -- tell the user to check instead of retrying blind
+        // (a retry here would double-book the payment).
+        setError(
+          "Transaksi kesimpen, tapi catatan pembayarannya gagal ke-update. Refresh halaman buat lihat status terbaru."
+        );
+        return;
       }
+
+      const nextPayments = [...payments, payment as DebtPayment];
+      setPayments(nextPayments);
+      const paidSoFar = nextPayments
+        .filter((p) => p.debt_id === debt.id)
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+      if (Number(debt.amount) - paidSoFar <= 0 && debt.status !== "paid") {
+        const { error: closeError } = await supabase
+          .from("debts")
+          .update({ status: "paid" })
+          .eq("id", debt.id);
+        if (!closeError) {
+          setItems((prev) => prev.map((d) => (d.id === debt.id ? { ...d, status: "paid" } : d)));
+        }
+      }
+      setPayingId(null);
+      setPayAmount("");
+    } catch {
+      setError("Koneksi terputus pas nyimpen pembayaran. Coba lagi.");
+    } finally {
+      setPayBusyId(null);
     }
-    setTogglingId(null);
+  }
+
+  // Deleting the transaction cascades to the debt_payments row (same
+  // pattern as RecurringTab's undo), so the balance and the rest of the
+  // app's cash flow stay in sync automatically.
+  async function handleUndoPayment(payment: DebtPayment) {
+    if (undoingId) return;
+    if (!window.confirm("Batalkan pembayaran ini? Transaksinya ikut kehapus.")) return;
+    setUndoingId(payment.id);
+    setError(null);
+    const previousPayments = payments;
+    const previousItems = items;
+    setPayments((prev) => prev.filter((p) => p.id !== payment.id));
+    try {
+      const { error: deleteError } = payment.transaction_id
+        ? await supabase.from("transactions").delete().eq("id", payment.transaction_id)
+        : await supabase.from("debt_payments").delete().eq("id", payment.id);
+      if (deleteError) {
+        setPayments(previousPayments);
+        setError("Gagal batalkan pembayaran. Coba lagi.");
+        return;
+      }
+      const debt = items.find((d) => d.id === payment.debt_id);
+      if (debt && debt.status === "paid") {
+        const { error: reopenError } = await supabase
+          .from("debts")
+          .update({ status: "unpaid" })
+          .eq("id", debt.id);
+        if (!reopenError) {
+          setItems((prev) => prev.map((d) => (d.id === debt.id ? { ...d, status: "unpaid" } : d)));
+        }
+      }
+    } catch {
+      setPayments(previousPayments);
+      setItems(previousItems);
+      setError("Koneksi terputus pas batalin. Coba lagi.");
+    } finally {
+      setUndoingId(null);
+    }
   }
 
   async function handleDelete(id: string) {
     if (!window.confirm("Yakin mau hapus catatan utang/piutang ini? Riwayat pembayarannya ikut hilang.")) return;
     setError(null);
     const previousItems = items;
-    const previousChecks = checks;
+    const previousPayments = payments;
     setItems((prev) => prev.filter((i) => i.id !== id));
-    setChecks((prev) => prev.filter((c) => c.debt_id !== id));
+    setPayments((prev) => prev.filter((p) => p.debt_id !== id));
     const { error: deleteError } = await supabase.from("debts").delete().eq("id", id);
     if (deleteError) {
       setItems(previousItems);
-      setChecks(previousChecks);
+      setPayments(previousPayments);
       setError("Gagal hapus. Coba lagi.");
     }
   }
 
-  // Totals reflect only what's still owed -- a paid-off debt shouldn't
-  // keep inflating "total utang/piutang", it just stays in the list below
+  const paidByDebt = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of payments) {
+      map[p.debt_id] = (map[p.debt_id] ?? 0) + Number(p.amount);
+    }
+    return map;
+  }, [payments]);
+
+  function remaining(debt: Debt): number {
+    return Math.max(0, Number(debt.amount) - (paidByDebt[debt.id] ?? 0));
+  }
+
+  function currentCyclePayment(debt: Debt): DebtPayment | undefined {
+    if (!debt.is_recurring) return undefined;
+    return payments.find((p) => p.debt_id === debt.id && p.period === period);
+  }
+
+  // Totals reflect only what's actually still owed -- a paid-off debt (or
+  // one whose payments have brought its balance to zero) shouldn't keep
+  // inflating "total utang/piutang"; it just stays in the list below
   // (struck through, tagged LUNAS) for the record.
-  const unpaid = items.filter((d) => d.status === "unpaid");
+  const unpaid = items.filter((d) => d.status === "unpaid" && remaining(d) > 0);
   const totalUtang = unpaid
     .filter((d) => d.direction === "i_owe")
-    .reduce((sum, d) => sum + Number(d.amount), 0);
+    .reduce((sum, d) => sum + remaining(d), 0);
   const totalPiutang = unpaid
     .filter((d) => d.direction === "owed_to_me")
-    .reduce((sum, d) => sum + Number(d.amount), 0);
+    .reduce((sum, d) => sum + remaining(d), 0);
   const filteredItems = items.filter(
     (d) => directionFilter === "semua" || d.direction === directionFilter
   );
@@ -391,65 +508,109 @@ export default function DebtsTab() {
         ) : (
           <ul className="divide-y divide-line/60">
             {filteredItems.map((debt) => {
-              const isChecked = checks.some((c) => c.debt_id === debt.id);
-              const isBusy = togglingId === debt.id;
-              const showCycleCheck = debt.is_recurring && debt.status === "unpaid";
+              const paid = paidByDebt[debt.id] ?? 0;
+              const left = remaining(debt);
+              const pct = Math.min(100, Math.round((paid / Number(debt.amount)) * 100));
+              const cyclePayment = currentCyclePayment(debt);
+              const isPaying = payingId === debt.id;
+              const isPayBusy = payBusyId === debt.id;
               return (
               <li
                 key={debt.id}
                 className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5"
               >
-                <div className="min-w-0 flex items-center gap-3">
-                  {showCycleCheck && (
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={isBusy}
-                      onChange={() => toggleCheck(debt)}
-                      aria-label={`Sudah bayar ${debt.party_name} bulan ini`}
-                      className="h-4 w-4 shrink-0 cursor-pointer disabled:opacity-50 accent-cyan-glow"
-                    />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-200 truncate">
+                    {debt.party_name}
+                    {debt.status === "paid" && (
+                      <span className="ml-2 text-[10px] font-mono text-mint-glow border border-mint-glow/30 rounded-sm px-1.5 py-0.5">
+                        LUNAS
+                      </span>
+                    )}
+                    {cyclePayment && (
+                      <span className="ml-2 text-[10px] font-mono text-cyan-glow border border-cyan-glow/30 rounded-sm px-1.5 py-0.5">
+                        BULAN INI LUNAS
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[11px] font-mono text-slate-600">
+                    {debt.is_recurring
+                      ? `Berulang · tiap tanggal ${debt.recurrence_day}`
+                      : debt.due_date
+                        ? `Jatuh tempo ${formatDate(debt.due_date)}`
+                        : "Tanpa jatuh tempo"}
+                  </p>
+                  {debt.status !== "paid" && paid > 0 && (
+                    <div className="mt-1.5 max-w-xs">
+                      <div className="h-1.5 bg-panel2 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-cyan-glow rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] font-mono text-slate-600 mt-0.5">
+                        Udah dibayar {formatCurrency(paid)} dari {formatCurrency(Number(debt.amount))}
+                      </p>
+                    </div>
                   )}
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-200 truncate">
-                      {debt.party_name}
-                      {debt.status === "paid" && (
-                        <span className="ml-2 text-[10px] font-mono text-mint-glow border border-mint-glow/30 rounded-sm px-1.5 py-0.5">
-                          LUNAS
-                        </span>
-                      )}
-                      {debt.is_recurring && isChecked && (
-                        <span className="ml-2 text-[10px] font-mono text-cyan-glow border border-cyan-glow/30 rounded-sm px-1.5 py-0.5">
-                          BULAN INI LUNAS
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-[11px] font-mono text-slate-600">
-                      {debt.is_recurring
-                        ? `Berulang · tiap tanggal ${debt.recurrence_day}`
-                        : debt.due_date
-                          ? `Jatuh tempo ${formatDate(debt.due_date)}`
-                          : "Tanpa jatuh tempo"}
-                    </p>
-                  </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span
-                    className={`font-mono text-sm ${
-                      debt.direction === "i_owe" ? "text-rose-glow" : "text-mint-glow"
-                    } ${debt.status === "paid" ? "opacity-40 line-through" : ""}`}
-                  >
-                    {formatCurrency(Number(debt.amount))}
-                  </span>
+                  <div className="text-right">
+                    <span
+                      className={`font-mono text-sm block ${
+                        debt.direction === "i_owe" ? "text-rose-glow" : "text-mint-glow"
+                      } ${debt.status === "paid" ? "opacity-40 line-through" : ""}`}
+                    >
+                      {formatCurrency(debt.status === "paid" ? Number(debt.amount) : left)}
+                    </span>
+                    {debt.status !== "paid" && paid > 0 && (
+                      <span className="text-[10px] font-mono text-slate-600">sisa</span>
+                    )}
+                  </div>
+
+                  {debt.status !== "paid" &&
+                    (isPaying ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          autoFocus
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                          className={`${inputClass} w-28`}
+                          placeholder="Nominal"
+                          aria-label={`Nominal pembayaran ${debt.party_name}`}
+                        />
+                        <button
+                          onClick={() => handlePay(debt)}
+                          disabled={isPayBusy}
+                          className={primaryBtnClass}
+                        >
+                          {isPayBusy ? "..." : "OK"}
+                        </button>
+                        <button onClick={cancelPay} className={ghostBtnClass}>
+                          Batal
+                        </button>
+                      </div>
+                    ) : cyclePayment ? (
+                      <button
+                        onClick={() => handleUndoPayment(cyclePayment)}
+                        disabled={undoingId === cyclePayment.id}
+                        className={ghostBtnClass}
+                      >
+                        {undoingId === cyclePayment.id ? "..." : "Batalkan"}
+                      </button>
+                    ) : (
+                      <button onClick={() => startPay(debt)} className={ghostBtnClass}>
+                        + Bayar
+                      </button>
+                    ))}
+
                   <button
                     onClick={() => toggleStatus(debt)}
                     className="text-xs font-mono text-cyan-glow/80 hover:text-cyan-glow"
                   >
-                    {debt.status === "paid"
-                      ? "Buka lagi"
-                      : debt.is_recurring
-                        ? "Tutup utang"
-                        : "Tandai lunas"}
+                    {debt.status === "paid" ? "Buka lagi" : "Tandai lunas"}
                   </button>
                   <button onClick={() => startEdit(debt)} className={ghostBtnClass}>
                     Edit
