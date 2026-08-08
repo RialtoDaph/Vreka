@@ -7,58 +7,11 @@ import { AssistantAuditLog, AssistantMemory } from "@/lib/types";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { buildDailyActivity, buildToolBreakdown, type DailyActivityPoint, type ToolBreakdownEntry } from "@/lib/assistantActivity";
 import { CHART_AXIS, CHART_GRID, CHART_INCOME } from "@/lib/chartColors";
+import { TOOL_LABEL, describeToolInput } from "@/lib/assistant/toolLabels";
 import HudPanel from "@/components/HudPanel";
 import { dangerBtnClass } from "@/lib/ui";
 
-const TOOL_LABEL: Record<string, string> = {
-  remember: "Nyimpen memory",
-  forget: "Hapus memory",
-  add_transaction: "Nyatetin transaksi",
-  delete_transaction: "Hapus transaksi",
-  add_task: "Nambah to-do",
-  update_task: "Update to-do",
-  delete_task: "Hapus to-do",
-  add_subtask: "Nambah sub-task",
-  toggle_subtask: "Update sub-task",
-  add_study_note: "Nambah catatan belajar",
-  update_study_note: "Update catatan belajar",
-  delete_study_note: "Hapus catatan belajar",
-  set_budget: "Set anggaran",
-  delete_budget: "Hapus anggaran",
-  toggle_habit: "Centang kebiasaan",
-  search_email: "Cari email",
-  read_email: "Baca email",
-  draft_email_reply: "Bikin draft balesan email",
-  check_calendar: "Cek kalender",
-  add_calendar_event: "Bikin event kalender",
-  update_calendar_event: "Update event kalender",
-  delete_calendar_event: "Hapus event kalender",
-  add_journal_entry: "Nambah catatan jurnal",
-  search_records: "Cari data",
-  add_debt: "Catat utang/piutang",
-  update_debt: "Update utang/piutang",
-  delete_debt: "Hapus utang/piutang",
-  pay_debt: "Catat cicilan utang/piutang",
-  add_savings_goal: "Bikin target tabungan",
-  update_savings_goal: "Update target tabungan",
-  delete_savings_goal: "Hapus target tabungan",
-  add_recurring_item: "Tambah item rutin",
-  delete_recurring_item: "Hapus item rutin",
-  add_milestone: "Tambah milestone",
-  update_milestone: "Update milestone",
-  delete_milestone: "Hapus milestone",
-};
-
 const ACTIVITY_DAYS = 14;
-
-function describeInput(toolName: string, input: Record<string, unknown>): string {
-  const candidates = ["title", "title_query", "category", "content", "query", "summary"];
-  for (const key of candidates) {
-    const v = input[key];
-    if (typeof v === "string" && v.trim()) return v;
-  }
-  return "";
-}
 
 function CountTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
   if (!active || !payload || payload.length === 0) return null;
@@ -245,7 +198,7 @@ export default function ActivityLog() {
             ) : (
               <ul className="divide-y divide-line/60">
                 {items.map((log) => {
-                  const detail = describeInput(log.tool_name, log.input);
+                  const detail = describeToolInput(log.input);
                   return (
                     <li key={log.id} className="py-2 first:pt-0 last:pb-0 flex items-start justify-between gap-3">
                       <div className="min-w-0">
