@@ -21,12 +21,39 @@ const BARGE_IN_CONFIRM_MS = 300;
 // reply isn't ready in time (see FILLER_GRACE_MS below), so a fast answer
 // never gets a bolted-on "uhh" and it doesn't feel like the same canned
 // line every turn.
-const FILLER_PHRASES = ["Hmm, bentar ya...", "Oke, aku cek dulu...", "Sebentar ya..."];
+const FILLER_PHRASES_QUICK = [
+  "Siap bos, bentar ya aku cariin dulu.",
+  "Im on it bos! Ditunggu sebentar ya.",
+  "Hmm.. wait bosku, aku lagi cari nih.",
+  "Otw jawab bos, dikit lagi.",
+  "Sat set dulu ya bos.",
+  "Oke bos, otw cek datanya.",
+  "Bentar bos, aku liatin dulu.",
+];
 // If Aslan's first spoken sentence isn't ready within this window --
 // typically a tool-calling turn waiting on a DB write or a Gmail/Calendar
 // round trip -- a filler clip plays first so the wait doesn't read as dead
 // air. Skipped entirely for turns that answer fast enough on their own.
 const FILLER_GRACE_MS = 600;
+
+// A second, longer wait (a multi-tool-call chain, a slow Gmail/Calendar
+// round trip) used to go dead-silent again once the first filler clip
+// finished playing -- this second tier covers that gap with a clip that
+// acknowledges the wait is real, instead of repeating the same "hang on".
+const FILLER_PHRASES_LONG = [
+  "Masih diproses bos, bentar lagi kelar.",
+  "Sori bos, ini agak muter dikit datanya.",
+  "Dikit lagi bos, lagi aku beresin.",
+  "Sabar bos, hampir jadi.",
+];
+const FILLER_GRACE_MS_LONG = 2800;
+
+// Excludes the just-used phrase (when the pool has an alternative) so two
+// consecutive turns don't play the identical clip back to back.
+export function pickFiller(pool: string[], avoid: string | null): string {
+  const options = avoid && pool.length > 1 ? pool.filter((p) => p !== avoid) : pool;
+  return options[Math.floor(Math.random() * options.length)];
+}
 
 type AudioQueueItem = Promise<Blob | null>;
 
@@ -157,6 +184,9 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
   const stoppedRef = useRef(true);
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Persists across turns (not reset per streamReplyIntoQueue call) so the
+  // no-immediate-repeat rule in pickFiller() actually spans the conversation.
+  const lastFillerRef = useRef<string | null>(null);
   const modelRef = useRef<AssistantModelId>(DEFAULT_ASSISTANT_MODEL);
   // Mirrors modelRef for display purposes — components render off state (not
   // a ref) so they actually re-render when the picked model changes.
@@ -496,24 +526,43 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
   // still being generated, instead of waiting for the whole reply. If
   // nothing is ready within FILLER_GRACE_MS (typically a tool-calling turn
   // waiting on a DB write or a Gmail/Calendar round trip), a short filler
-  // clip is queued first so the wait doesn't read as dead air.
+  // clip is queued first so the wait doesn't read as dead air. A longer
+  // wait still (a multi-tool-call chain) gets a second, different filler at
+  // FILLER_GRACE_MS_LONG instead of going quiet again once the first one
+  // finishes playing.
   async function streamReplyIntoQueue(
     text: string,
     image: string | undefined,
     queue: AudioQueue,
     signal: AbortSignal
   ) {
-    const fillerPhrase = FILLER_PHRASES[Math.floor(Math.random() * FILLER_PHRASES.length)];
-    const fillerPromise = ttsBlob(fillerPhrase, signal);
     let firstSentenceArrived = false;
-    const fillerTimer = setTimeout(() => {
-      if (!firstSentenceArrived) queue.push(fillerPromise);
+    // Picks a phrase and remembers it (so the *next* turn's pick avoids an
+    // immediate repeat), regardless of whether this pick ends up spoken.
+    function pickAndRememberFiller(pool: string[]): string {
+      const phrase = pickFiller(pool, lastFillerRef.current);
+      lastFillerRef.current = phrase;
+      return phrase;
+    }
+    // Fetched immediately so it's already in hand by the time the grace
+    // period elapses. The long-tier filler is deliberately *not* prefetched
+    // here -- most turns never run long enough to need it, so there's no
+    // reason to pay for a second TTS call on every single turn.
+    const quickFillerPromise = ttsBlob(pickAndRememberFiller(FILLER_PHRASES_QUICK), signal);
+    const quickFillerTimer = setTimeout(() => {
+      if (!firstSentenceArrived) queue.push(quickFillerPromise);
     }, FILLER_GRACE_MS);
+    const longFillerTimer = setTimeout(() => {
+      if (!firstSentenceArrived) {
+        queue.push(ttsBlob(pickAndRememberFiller(FILLER_PHRASES_LONG), signal));
+      }
+    }, FILLER_GRACE_MS_LONG);
 
     function queueSentence(sentence: string) {
       if (!firstSentenceArrived) {
         firstSentenceArrived = true;
-        clearTimeout(fillerTimer);
+        clearTimeout(quickFillerTimer);
+        clearTimeout(longFillerTimer);
       }
       queue.push(ttsBlob(sentence, signal));
     }
@@ -560,7 +609,8 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         setLastReply(fallback);
       }
     } finally {
-      clearTimeout(fillerTimer);
+      clearTimeout(quickFillerTimer);
+      clearTimeout(longFillerTimer);
       queue.close();
     }
   }
