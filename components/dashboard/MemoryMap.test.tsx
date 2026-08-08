@@ -22,6 +22,10 @@ afterEach(() => {
 });
 
 vi.mock("@/components/SignOutButton", () => ({ default: () => <div>SignOutButton</div> }));
+// AslanInbox is its own component with its own test file -- mocked here so
+// this file doesn't also need a real Supabase client for its audit-log
+// fetch, which is unrelated to what's under test in this file (the toolbar).
+vi.mock("@/components/dashboard/AslanInbox", () => ({ default: () => null }));
 
 type VoiceMock = {
   supported?: boolean;
@@ -30,6 +34,7 @@ type VoiceMock = {
   handsFreeSupported?: boolean;
   handsFreeMode?: boolean;
   toggleHandsFree?: () => void;
+  lastReply?: string | null;
 };
 
 function mockVoice({
@@ -39,6 +44,7 @@ function mockVoice({
   handsFreeSupported = true,
   handsFreeMode = false,
   toggleHandsFree = vi.fn(),
+  lastReply = null,
 }: VoiceMock = {}) {
   vi.doMock("@/lib/assistant/useVoiceAssistant", () => ({
     useVoiceAssistant: () => ({
@@ -50,7 +56,7 @@ function mockVoice({
       audioRef: { current: null },
       mode: "intel",
       setMode: vi.fn(),
-      lastReply: null,
+      lastReply,
       handsFreeSupported,
       handsFreeMode,
       toggleHandsFree,
@@ -204,4 +210,17 @@ describe("MemoryMap toolbar (relocated from Aslan page)", () => {
 
     expect(await screen.findByText("Gagal mulai GPT real-time.")).toBeInTheDocument();
   });
+
+  it("shows Aslan's last voice reply above the ask bar", async () => {
+    mockVoice({ lastReply: "Tiga jadwal besok, sir." });
+    mockGptRealtime();
+    const { default: MemoryMap } = await import("./MemoryMap");
+    render(<MemoryMap data={DATA} vitals={VITALS} />);
+
+    expect(await screen.findByText("Tiga jadwal besok, sir.")).toBeInTheDocument();
+  });
+
+  // The top toolbar (Focus Mode + memory-type filter toggles) only renders
+  // once the WebGL scene mounts successfully, which jsdom can't do -- same
+  // reason no test here ever covered the old filter dropdown either.
 });

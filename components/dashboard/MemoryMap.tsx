@@ -9,6 +9,7 @@ import { useGptRealtime } from "@/lib/assistant/useGptRealtime";
 import { THEME } from "@/lib/theme";
 import SignOutButton from "@/components/SignOutButton";
 import ToolbarIconButton from "@/components/asisten/ToolbarIconButton";
+import AslanInbox from "@/components/dashboard/AslanInbox";
 
 export type MemoryMapVitals = {
   memoryCount: number;
@@ -79,7 +80,6 @@ export default function MemoryMap({ data, vitals }: Props) {
     () => typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
   const [navOpen, setNavOpen] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [webglError, setWebglError] = useState(false);
   const [lastModuleHref, setLastModuleHref] = useState<string | null>(null);
   useEffect(() => {
@@ -887,60 +887,41 @@ export default function MemoryMap({ data, vitals }: Props) {
         </div>
       )}
 
-      {/* Both live in one top-right row (not a screen-centered toolbar) so
-          they never drift over the top-left nav/search panel on narrow
-          screens -- a centered toolbar's left edge sits well inside that
-          panel's width on any phone-sized viewport. */}
+      {/* Centered from `sm:` up, per the layout the user asked for. Stays
+          right-aligned below that breakpoint -- a horizontally centered
+          toolbar's left edge sits well inside the top-left nav/search
+          panel's width on any phone-sized viewport, and the filter row
+          (7 type toggles) makes this one wider than before. */}
       {!webglError && (
-        <div className="absolute top-5 right-5 z-[2] flex items-start gap-1.5">
+        <div className="absolute top-5 right-5 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[2] flex items-start gap-1.5">
           {!focusMode && (
-            <div className="relative">
+            <div className="flex items-center gap-1 bg-panel/85 border border-line rounded-lg p-1 backdrop-blur-sm">
               <button
-                onClick={() => setFilterOpen((o) => !o)}
-                aria-expanded={filterOpen}
-                aria-label="Filter tipe memori"
-                title="Filter"
-                className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
-                  filterOpen || activeTypes.size !== ALL_TYPES.length
-                    ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-                    : "bg-panel/85 border-line text-slate-400"
-                }`}
+                onClick={() => setActiveTypes(new Set(ALL_TYPES))}
+                title="Semua"
+                className="px-1.5 h-7 rounded-[5px] font-mono text-[9px] uppercase tracking-wider whitespace-nowrap"
+                style={{ color: activeTypes.size === ALL_TYPES.length ? THEME.cyanGlow : THEME.neutral400 }}
               >
-                ▾
+                Semua
               </button>
-              {filterOpen && (
-                <div className="absolute top-9 right-0 z-[2] min-w-[140px] bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm">
-                  <p className="font-mono text-[9px] tracking-[0.15em] uppercase text-slate-400 mb-2 text-right">
-                    Filter
-                  </p>
-                  <div className="flex flex-col gap-1.5 items-end">
-                    <button
-                      onClick={() => setActiveTypes(new Set(ALL_TYPES))}
-                      className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs"
-                      style={{ color: activeTypes.size === ALL_TYPES.length ? THEME.cyanGlow : THEME.neutral400 }}
-                    >
-                      Semua
-                    </button>
-                    {FILTERS.map((f) => {
-                      const active = activeTypes.has(f.id);
-                      return (
-                        <button
-                          key={f.id}
-                          onClick={() => toggleType(f.id)}
-                          className="flex items-center gap-1.5 bg-transparent border-none py-0.5 font-mono text-xs whitespace-nowrap"
-                          style={{ color: active ? THEME.cyanGlow : THEME.neutral400 }}
-                        >
-                          {f.label}
-                          <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: f.dot, opacity: active ? 1 : 0.35 }}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {FILTERS.map((f) => {
+                const active = activeTypes.has(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => toggleType(f.id)}
+                    aria-pressed={active}
+                    aria-label={f.label}
+                    title={f.label}
+                    className="flex items-center justify-center w-7 h-7 rounded-[5px]"
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: f.dot, opacity: active ? 1 : 0.35 }}
+                    />
+                  </button>
+                );
+              })}
             </div>
           )}
           <div className="flex gap-1 bg-panel/85 border border-line rounded-lg p-1 backdrop-blur-sm">
@@ -978,6 +959,13 @@ export default function MemoryMap({ data, vitals }: Props) {
           </div>
         </div>
       )}
+
+      {/* top-16 on mobile clears the toolbar row above (which stays
+          right-aligned below `sm:`); once that toolbar centers itself at
+          `sm:`, the corner's free and this can sit at the same top-5. */}
+      <div className="absolute top-16 right-5 sm:top-5 z-[2]">
+        <AslanInbox />
+      </div>
 
       {selectedNode && (
         <div className="absolute top-0 right-0 bottom-0 w-full sm:w-[300px] bg-panel/90 border-l border-line backdrop-blur-[10px] p-5 z-[3] overflow-y-auto">
@@ -1094,14 +1082,6 @@ export default function MemoryMap({ data, vitals }: Props) {
           <span className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ backgroundColor: voiceStyle.color }} />
           {voiceStyle.label}
         </p>
-        {lastReply && (
-          <div className="w-[min(240px,calc(100vw-2.5rem))] bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm shadow-glow">
-            <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow mb-1.5">
-              🗨 Aslan bilang
-            </p>
-            <p className="text-[12px] leading-relaxed text-slate-300 m-0">{lastReply}</p>
-          </div>
-        )}
       </div>
 
       {!focusMode && (
@@ -1168,6 +1148,19 @@ export default function MemoryMap({ data, vitals }: Props) {
               title={NAV.find((n) => n.href === navOverlay)?.label ?? "Preview"}
               className="flex-1 w-full border-none"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Sits right above the Ask bar regardless of focus mode -- the
+          avatar/mic button that starts a voice turn stays visible in focus
+          mode too, so a reply from it shouldn't disappear along with the
+          icon row below. */}
+      {lastReply && (
+        <div className="absolute z-[2] bottom-24 left-1/2 -translate-x-1/2 w-[min(480px,92vw)]">
+          <div className="bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm shadow-glow">
+            <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow mb-1.5">🗨 Aslan bilang</p>
+            <p className="text-[12px] leading-relaxed text-slate-300 m-0">{lastReply}</p>
           </div>
         </div>
       )}
