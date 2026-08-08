@@ -1,5 +1,26 @@
-import { describe, expect, it } from "vitest";
-import { createAudioQueue, extractSentences } from "@/lib/assistant/useVoiceAssistant";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAudioQueue, extractSentences, pickFiller } from "@/lib/assistant/useVoiceAssistant";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("pickFiller", () => {
+  it("never repeats the just-used phrase when the pool has an alternative", () => {
+    const pool = ["a", "b", "c"];
+    vi.spyOn(Math, "random").mockReturnValue(0); // would pick index 0 ("a") if not excluded
+    expect(pickFiller(pool, "a")).not.toBe("a");
+  });
+
+  it("falls back to the full pool when there's nothing else to pick", () => {
+    expect(pickFiller(["only"], "only")).toBe("only");
+  });
+
+  it("picks freely from the whole pool when there's no prior phrase to avoid", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    expect(pickFiller(["a", "b", "c"], null)).toBe("a");
+  });
+});
 
 describe("extractSentences", () => {
   it("extracts nothing from an empty or still-incomplete buffer", () => {
