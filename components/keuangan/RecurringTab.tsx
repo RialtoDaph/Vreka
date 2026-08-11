@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { RecurringItem, RecurringItemCheck, TransactionType } from "@/lib/types";
 import { formatCurrency, parseAmount } from "@/lib/format";
 import { currentMonthKey, todayKey } from "@/lib/date";
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
+import CategorySelect from "@/components/CategorySelect";
 import HudPanel from "@/components/HudPanel";
 import {
   inputClass,
@@ -216,7 +217,7 @@ export default function RecurringTab() {
     setTogglingId(null);
   }
 
-  const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const categoryGroups = type === "income" ? INCOME_CATEGORY_GROUPS : EXPENSE_CATEGORY_GROUPS;
   const incomeItems = useMemo(() => items.filter((i) => i.type === "income"), [items]);
   const expenseItems = useMemo(() => items.filter((i) => i.type === "expense"), [items]);
 
@@ -269,21 +270,15 @@ export default function RecurringTab() {
               </div>
               <div>
                 <label htmlFor="recurring-category" className={labelClass}>Kategori</label>
-                <select
+                <CategorySelect
                   id="recurring-category"
                   value={category}
-                  onChange={(e) => {
-                    setCategory(e.target.value);
+                  onChange={(c) => {
+                    setCategory(c);
                     setCategoryTouched(true);
                   }}
-                  className={inputClass}
-                >
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                  groups={categoryGroups}
+                />
               </div>
               <div>
                 <label htmlFor="recurring-amount" className={labelClass}>Nominal (€)</label>
