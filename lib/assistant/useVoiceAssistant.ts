@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DEFAULT_ASSISTANT_MODEL, isValidAssistantModel, type AssistantModelId } from "@/lib/assistant/models";
+import { readTextStream } from "@/lib/assistant/streamText";
 
 const MODEL_STORAGE_KEY = "vreka-assistant-model";
 const SILENCE_THRESHOLD = 0.02;
@@ -101,11 +102,20 @@ type AudioQueue = ReturnType<typeof createAudioQueue>;
 // reply. A "sentence" ends in ./!/? followed by actual whitespace (so a
 // grouped number like "50.000" doesn't get split mid-digit), or a newline
 // on its own (which is already the boundary -- text on the very next
-// character, with no gap, still counts). Not linguistically perfect (an
-// abbreviation like "Rp." can stall a split) but it fails safe: anything
-// that never confidently splits just stays buffered and gets flushed as
-// one chunk once the stream ends, same as before this existed.
-const SENTENCE_BOUNDARY = /^[^.!?\n]*(?:[.!?]+(?:["')\]]*)\s+|\n+)/;
+// character, with no gap, still counts).
+//
+// A short acknowledgement like "Oke." or "Sip." is a complete, ordinary
+// sentence on its own -- Aslan's system prompt mandates brief/casual
+// replies, so these are common and must extract immediately, not stall
+// behind some blanket minimum-length rule. The one thing genuinely worth
+// stalling on is a bare numbered-list marker ("1.", "2)") being mistaken
+// for a sentence end, so that's what's actually checked. Not linguistically
+// perfect either way -- an abbreviation like "dst." will still get spoken
+// as its own short clip rather than folded into the sentence around it --
+// but nothing is ever dropped: anything that never confidently splits just
+// stays buffered and gets flushed as one chunk once the stream ends.
+const SENTENCE_BOUNDARY = /^([^.!?\n]*)(?:[.!?]+(?:["')\]]*)\s+|\n+)/;
+const BARE_LIST_MARKER = /^\d+$/;
 export function extractSentences(buffer: string): { sentences: string[]; remainder: string } {
   const sentences: string[] = [];
   let rest = buffer;
@@ -113,7 +123,8 @@ export function extractSentences(buffer: string): { sentences: string[]; remaind
     const match = SENTENCE_BOUNDARY.exec(rest);
     if (!match) break;
     const piece = match[0];
-    if (piece.trim().length < 6) break; // too short to confidently be a real sentence yet
+    const body = (match[1] ?? "").trim();
+    if (body && BARE_LIST_MARKER.test(body)) break; // "1." etc -- a list marker, not a sentence yet
     sentences.push(piece.trim());
     rest = rest.slice(piece.length);
   }
@@ -394,17 +405,21 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     });
   }
 
-  // Watches the mic while Aslan's reply is playing. Resolves "interrupted" the
-  // moment the user starts talking (and stops playback right there), or
-  // "finished" once the audio ends naturally.
-  async function watchForBargeIn(audio: HTMLAudioElement): Promise<"interrupted" | "finished"> {
+  // Sets up ONE mic stream + analyser for the whole turn, shared across
+  // every queued clip -- reacquiring the mic per clip used to leave a gap
+  // in barge-in coverage at each clip boundary (and made the browser's
+  // mic-in-use indicator flicker on/off mid-reply). Returns null if mic
+  // access isn't available, so the caller can fall back to just watching
+  // for the clip to end naturally.
+  async function createBargeInWatcher(): Promise<{
+    watch: (audio: HTMLAudioElement) => Promise<"interrupted" | "finished">;
+    close: () => void;
+  } | null> {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS });
     } catch {
-      return new Promise((resolve) => {
-        audio.onended = () => resolve("finished");
-      });
+      return null;
     }
     const AudioContextCtor = getAudioContextCtor();
     const audioCtx = new AudioContextCtor();
@@ -414,50 +429,56 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     source.connect(analyser);
     const data = new Uint8Array(analyser.frequencyBinCount);
 
-    const cleanup = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      audioCtx.close().catch(() => {});
-    };
+    // Watches the mic while one clip plays. Resolves "interrupted" the
+    // moment the user starts talking (and pauses that clip right there), or
+    // "finished" once it ends naturally.
+    function watch(audio: HTMLAudioElement): Promise<"interrupted" | "finished"> {
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (result: "interrupted" | "finished") => {
+          if (settled) return;
+          settled = true;
+          resolve(result);
+        };
 
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (result: "interrupted" | "finished") => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(result);
-      };
+        audio.onended = () => finish("finished");
 
-      audio.onended = () => finish("finished");
-
-      let voiceStart: number | null = null;
-      function tick() {
-        if (settled || stoppedRef.current) {
-          finish("finished");
-          return;
-        }
-        analyser.getByteTimeDomainData(data);
-        let sumSquares = 0;
-        for (let i = 0; i < data.length; i++) {
-          const norm = (data[i] - 128) / 128;
-          sumSquares += norm * norm;
-        }
-        const rms = Math.sqrt(sumSquares / data.length);
-
-        if (rms > SILENCE_THRESHOLD) {
-          if (voiceStart === null) voiceStart = Date.now();
-          else if (Date.now() - voiceStart > BARGE_IN_CONFIRM_MS) {
-            audio.pause();
-            finish("interrupted");
+        let voiceStart: number | null = null;
+        function tick() {
+          if (settled || stoppedRef.current) {
+            finish("finished");
             return;
           }
-        } else {
-          voiceStart = null;
+          analyser.getByteTimeDomainData(data);
+          let sumSquares = 0;
+          for (let i = 0; i < data.length; i++) {
+            const norm = (data[i] - 128) / 128;
+            sumSquares += norm * norm;
+          }
+          const rms = Math.sqrt(sumSquares / data.length);
+
+          if (rms > SILENCE_THRESHOLD) {
+            if (voiceStart === null) voiceStart = Date.now();
+            else if (Date.now() - voiceStart > BARGE_IN_CONFIRM_MS) {
+              audio.pause();
+              finish("interrupted");
+              return;
+            }
+          } else {
+            voiceStart = null;
+          }
+          requestAnimationFrame(tick);
         }
         requestAnimationFrame(tick);
-      }
-      requestAnimationFrame(tick);
-    });
+      });
+    }
+
+    function close() {
+      stream.getTracks().forEach((t) => t.stop());
+      audioCtx.close().catch(() => {});
+    }
+
+    return { watch, close };
   }
 
   // Plays each queued reply chunk (maybe a filler, then sentence-by-sentence
@@ -473,6 +494,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     const audio = audioRef.current;
     if (!audio) return null;
     let spokenAny = false;
+    const bargeIn = await createBargeInWatcher();
     try {
       for await (const blob of queue.consume()) {
         if (stoppedRef.current) return null;
@@ -496,7 +518,11 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
             "Balasan Aslan gagal diputer (browser nolak audio-nya). Coba klik lagi tombol mic-nya."
           );
         }
-        const result = await watchForBargeIn(audio);
+        const result = bargeIn
+          ? await bargeIn.watch(audio)
+          : await new Promise<"interrupted" | "finished">((resolve) => {
+              audio.onended = () => resolve("finished");
+            });
         URL.revokeObjectURL(url);
 
         if (result === "interrupted") {
@@ -516,6 +542,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       // No-op if the queue already finished on its own -- only matters for
       // the early returns above (interrupted / stopped mid-loop).
       turnAbort.abort();
+      bargeIn?.close();
     }
     return null;
   }
@@ -544,13 +571,15 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       lastFillerRef.current = phrase;
       return phrase;
     }
-    // Fetched immediately so it's already in hand by the time the grace
-    // period elapses. The long-tier filler is deliberately *not* prefetched
-    // here -- most turns never run long enough to need it, so there's no
-    // reason to pay for a second TTS call on every single turn.
-    const quickFillerPromise = ttsBlob(pickAndRememberFiller(FILLER_PHRASES_QUICK), signal);
+    // Both tiers are only actually fetched (a paid ElevenLabs call) if their
+    // grace period elapses with nothing real to say yet -- starting the
+    // request here instead of upfront means every fast, common-case turn
+    // skips both calls entirely, rather than paying for a filler clip it
+    // then throws away.
     const quickFillerTimer = setTimeout(() => {
-      if (!firstSentenceArrived) queue.push(quickFillerPromise);
+      if (!firstSentenceArrived) {
+        queue.push(ttsBlob(pickAndRememberFiller(FILLER_PHRASES_QUICK), signal));
+      }
     }, FILLER_GRACE_MS);
     const longFillerTimer = setTimeout(() => {
       if (!firstSentenceArrived) {
@@ -583,13 +612,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        if (!chunk) continue;
+      await readTextStream(res, (chunk) => {
         reply += chunk;
         buffer += chunk;
         setLastReply(reply);
@@ -597,16 +620,26 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
         const { sentences, remainder } = extractSentences(buffer);
         buffer = remainder;
         for (const sentence of sentences) queueSentence(sentence);
-      }
+      });
 
       const last = buffer.trim();
       if (last) queueSentence(last);
     } catch (err) {
       const aborted = err instanceof DOMException && err.name === "AbortError";
-      if (!aborted && !reply) {
-        const fallback = "Maaf, ada masalah pas mikir.";
-        queueSentence(fallback);
-        setLastReply(fallback);
+      if (!aborted) {
+        // The stream can die mid-flight (network drop, server hiccup) after
+        // some text already arrived -- whatever's still sitting in `buffer`
+        // hasn't hit a sentence boundary yet, so the normal end-of-stream
+        // flush below never runs for it. Flush it here too, or that trailing
+        // fragment (already visible via setLastReply) would just go silently
+        // unspoken with no error shown.
+        const last = buffer.trim();
+        if (last) queueSentence(last);
+        if (!reply) {
+          const fallback = "Maaf, ada masalah pas mikir.";
+          queueSentence(fallback);
+          setLastReply(fallback);
+        }
       }
     } finally {
       clearTimeout(quickFillerTimer);

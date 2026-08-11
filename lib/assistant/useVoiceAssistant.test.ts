@@ -54,13 +54,22 @@ describe("extractSentences", () => {
     expect(remainder).toBe("Total belanja 50.000 rupiah hari ini");
   });
 
-  it("holds off on a too-short fragment (e.g. a numbered-list marker) instead of speaking it alone", () => {
+  it("holds off on a bare numbered-list marker instead of speaking it alone", () => {
     // "1." alone isn't a real sentence -- extractSentences waits rather than
     // emitting a two-character clip; the caller flushes it as one chunk
     // once the stream ends, same as any other never-confidently-split text.
     const { sentences, remainder } = extractSentences("1. Item pertama\n2. Item kedua\n");
     expect(sentences).toEqual([]);
     expect(remainder).toBe("1. Item pertama\n2. Item kedua\n");
+  });
+
+  it("extracts a short acknowledgement sentence immediately instead of stalling on it", () => {
+    // Aslan's system prompt mandates brief/casual replies -- "Oke." on its
+    // own is a complete, ordinary sentence (unlike "1."), and needs to
+    // stream right away rather than blocking every sentence behind it.
+    const { sentences, remainder } = extractSentences("Oke. Nanti aku ingetin jam 5 sore ya.");
+    expect(sentences).toEqual(["Oke."]);
+    expect(remainder).toBe("Nanti aku ingetin jam 5 sore ya.");
   });
 });
 
