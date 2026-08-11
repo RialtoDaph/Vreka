@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AssistantMessage } from "@/lib/types";
 import { ASSISTANT_MODELS } from "@/lib/assistant/models";
 import { useVoiceAssistant } from "@/lib/assistant/useVoiceAssistant";
+import { readTextStream } from "@/lib/assistant/streamText";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
@@ -371,15 +372,7 @@ export default function AsistenPage() {
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("Response tanpa body.");
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        if (!chunk) continue;
+      await readTextStream(res, (chunk) => {
         assistantText += chunk;
         if (!started) {
           started = true;
@@ -399,7 +392,7 @@ export default function AsistenPage() {
             prev.map((m) => (m.id === assistantId ? { ...m, content: assistantText } : m))
           );
         }
-      }
+      });
     } catch (err) {
       // A user-triggered stop throws an AbortError -- that's not a failure,
       // just keep whatever partial reply had already streamed in.
