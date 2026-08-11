@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Transaction, TransactionType } from "@/lib/types";
+import { Account, Transaction, TransactionType } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
 import { downloadCsv } from "@/lib/csv";
@@ -31,6 +31,8 @@ export default function TransactionsTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [exportMonth, setExportMonth] = useState(new Date().toISOString().slice(0, 7));
   const [exporting, setExporting] = useState(false);
+  const [viewMonth, setViewMonth] = useState("");
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   const [type, setType] = useState<TransactionType>("expense");
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
@@ -41,6 +43,7 @@ export default function TransactionsTab() {
   const [occurredOn, setOccurredOn] = useState(
     new Date().toISOString().slice(0, 10)
   );
+  const [accountId, setAccountId] = useState("");
 
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export default function TransactionsTab() {
     setAmount("");
     setDescription("");
     setOccurredOn(new Date().toISOString().slice(0, 10));
+    setAccountId("");
     setReceiptFile(null);
     setReceiptPreview(null);
     setExistingReceiptPath(null);
@@ -99,6 +103,7 @@ export default function TransactionsTab() {
     setAmount(String(tx.amount).replace(".", ","));
     setDescription(tx.description ?? "");
     setOccurredOn(tx.occurred_on);
+    setAccountId(tx.account_id ?? "");
     setReceiptFile(null);
     setReceiptPreview(null);
     setExistingReceiptPath(tx.receipt_path);
@@ -148,14 +153,31 @@ export default function TransactionsTab() {
     setViewingReceiptId(null);
   }
 
-  async function load() {
-    setLoading(true);
-    const { data } = await supabase
+  // viewMonth "" means "semua bulan" (the original unfiltered, paginated
+  // view) -- set, it scopes both load() and loadMore() to that month's
+  // occurred_on range so browsing a past month doesn't need paging through
+  // everything newer than it first.
+  function monthRange(month: string): { firstDay: string; lastDay: string } {
+    const [y, m] = month.split("-").map(Number);
+    return { firstDay: `${month}-01`, lastDay: new Date(y, m, 0).toISOString().slice(0, 10) };
+  }
+
+  function baseQuery() {
+    let query = supabase
       .from("transactions")
       .select("*")
       .order("occurred_on", { ascending: false })
-      .order("created_at", { ascending: false })
-      .range(0, PAGE_SIZE - 1);
+      .order("created_at", { ascending: false });
+    if (viewMonth) {
+      const { firstDay, lastDay } = monthRange(viewMonth);
+      query = query.gte("occurred_on", firstDay).lte("occurred_on", lastDay);
+    }
+    return query;
+  }
+
+  async function load() {
+    setLoading(true);
+    const { data } = await baseQuery().range(0, PAGE_SIZE - 1);
     const rows = data ?? [];
     setItems(rows);
     // A full page back means there's likely more beyond it -- not a real
@@ -168,12 +190,7 @@ export default function TransactionsTab() {
   async function loadMore() {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
-    const { data } = await supabase
-      .from("transactions")
-      .select("*")
-      .order("occurred_on", { ascending: false })
-      .order("created_at", { ascending: false })
-      .range(items.length, items.length + PAGE_SIZE - 1);
+    const { data } = await baseQuery().range(items.length, items.length + PAGE_SIZE - 1);
     const rows = data ?? [];
     setItems((prev) => [...prev, ...rows]);
     setHasMore(rows.length === PAGE_SIZE);
@@ -183,7 +200,29 @@ export default function TransactionsTab() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMonth]);
+
+  useEffect(() => {
+    async function loadAccounts() {
+      const { data } = await supabase.from("accounts").select("*").order("created_at", { ascending: true });
+      setAccounts(data ?? []);
+    }
+    loadAccounts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const accountLabel = new Map(accounts.map((a) => [a.id, a.name]));
+
+  const monthSummary =
+    viewMonth &&
+    items.reduce(
+      (acc, t) => {
+        if (t.type === "income") acc.income += Number(t.amount);
+        else acc.expense += Number(t.amount);
+        return acc;
+      },
+      { income: 0, expense: 0 }
+    );
 
   function switchType(t: TransactionType) {
     setType(t);
@@ -232,6 +271,7 @@ export default function TransactionsTab() {
       description: description || null,
       occurred_on: occurredOn,
       receipt_path: receiptPath,
+      account_id: accountId || null,
     };
 
     const { error: saveError } = editingId
@@ -319,20 +359,48 @@ export default function TransactionsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end items-center gap-2 flex-wrap">
-        <input
-          type="month"
-          value={exportMonth}
-          onChange={(e) => setExportMonth(e.target.value)}
-          className={`${inputClass} w-auto`}
-        />
-        <button onClick={handleExport} disabled={exporting} className={ghostBtnClass}>
-          {exporting ? "Export..." : "Export CSV"}
-        </button>
-        <button onClick={toggleForm} className={primaryBtnClass}>
-          {showForm ? "Batal" : "+ Catat Transaksi"}
-        </button>
+      <div className="flex justify-between items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <label htmlFor="tx-view-month" className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+            Lihat bulan
+          </label>
+          <input
+            id="tx-view-month"
+            type="month"
+            value={viewMonth}
+            onChange={(e) => setViewMonth(e.target.value)}
+            className={`${inputClass} w-auto`}
+          />
+          {viewMonth && (
+            <button onClick={() => setViewMonth("")} className={ghostBtnClass}>
+              Semua Bulan
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="month"
+            value={exportMonth}
+            onChange={(e) => setExportMonth(e.target.value)}
+            className={`${inputClass} w-auto`}
+          />
+          <button onClick={handleExport} disabled={exporting} className={ghostBtnClass}>
+            {exporting ? "Export..." : "Export CSV"}
+          </button>
+          <button onClick={toggleForm} className={primaryBtnClass}>
+            {showForm ? "Batal" : "+ Catat Transaksi"}
+          </button>
+        </div>
       </div>
+
+      {monthSummary && (
+        <p className="font-mono text-xs text-slate-400 flex items-center gap-3 flex-wrap">
+          <span>Pemasukan: <span className="text-mint-glow">{formatCurrency(monthSummary.income)}</span></span>
+          <span>Pengeluaran: <span className="text-rose-glow">{formatCurrency(monthSummary.expense)}</span></span>
+          <span>Saldo: {formatCurrency(monthSummary.income - monthSummary.expense)}</span>
+          {hasMore && <span className="text-slate-600">(masih ada data lebih lanjut, muat lebih dulu buat total akurat)</span>}
+        </p>
+      )}
 
       {error && <p className={errorBannerClass}>{error}</p>}
 
@@ -403,6 +471,22 @@ export default function TransactionsTab() {
                 />
               </div>
               <div>
+                <label htmlFor="tx-account" className={labelClass}>Rekening (opsional)</label>
+                <select
+                  id="tx-account"
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Belum ditandain</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label htmlFor="tx-description" className={labelClass}>Catatan (opsional)</label>
                 <input
                   id="tx-description"
@@ -461,7 +545,7 @@ export default function TransactionsTab() {
           <p className="text-sm text-slate-500">Memuat...</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-slate-500">
-            Belum ada transaksi. Mulai catat di atas.
+            {viewMonth ? "Nggak ada transaksi di bulan ini." : "Belum ada transaksi. Mulai catat di atas."}
           </p>
         ) : (
           <ul className="divide-y divide-line/60">
@@ -478,7 +562,7 @@ export default function TransactionsTab() {
                     ) : null}
                   </p>
                   <p className="text-[11px] font-mono text-slate-400">
-                    {formatDate(tx.occurred_on)}
+                    {formatDate(tx.occurred_on)} · {accountLabel.get(tx.account_id ?? "") ?? "Belum ditandain"}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
