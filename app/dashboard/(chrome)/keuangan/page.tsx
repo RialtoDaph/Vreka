@@ -4,18 +4,22 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { localMonthKey } from "@/lib/date";
 import { buildKeuanganStats, type KeuanganStats } from "@/lib/keuanganStats";
+import { buildAccountBalances } from "@/lib/accountBalances";
+import type { Account } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
 import TransactionsTab from "@/components/keuangan/TransactionsTab";
 import RecurringTab from "@/components/keuangan/RecurringTab";
 import DebtsTab from "@/components/keuangan/DebtsTab";
 import SavingsTab from "@/components/keuangan/SavingsTab";
+import AccountsTab from "@/components/keuangan/AccountsTab";
 import AnalyticsTab from "@/components/keuangan/AnalyticsTab";
 import BudgetsTab from "@/components/keuangan/BudgetsTab";
 import { ghostBtnClass } from "@/lib/ui";
 
 const TABS = [
   { key: "transaksi", label: "Transaksi" },
+  { key: "rekening", label: "Rekening" },
   { key: "pos-tetap", label: "Pos Tetap" },
   { key: "utang", label: "Utang / Piutang" },
   { key: "tabungan", label: "Tabungan" },
@@ -29,6 +33,8 @@ export default function KeuanganPage() {
   const supabase = createClient();
   const [tab, setTab] = useState<TabKey>("transaksi");
   const [stats, setStats] = useState<KeuanganStats | null>(null);
+  const [kekayaanTotal, setKekayaanTotal] = useState<number | null>(null);
+  const [accountCount, setAccountCount] = useState(0);
 
   const [research, setResearch] = useState<{ text: string; sources: { label: string; url: string }[] } | null>(
     null
@@ -80,6 +86,25 @@ export default function KeuanganPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    // Kekayaan Total needs every transaction ever recorded (not just the
+    // trailing few months loadStats() pulls), since it's starting_balance +
+    // the full lifetime net per account -- kept as its own query instead of
+    // folded into loadStats() so that heavier all-time read stays isolated.
+    async function loadKekayaan() {
+      const [{ data: accountRows }, { data: txRows }] = await Promise.all([
+        supabase.from("accounts").select("*"),
+        supabase.from("transactions").select("account_id, type, amount"),
+      ]);
+      const accounts = (accountRows ?? []) as Account[];
+      setAccountCount(accounts.length);
+      const { total } = buildAccountBalances(accounts, txRows ?? []);
+      setKekayaanTotal(total);
+    }
+    loadKekayaan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function askResearch() {
     setResearchLoading(true);
     setResearchError(null);
@@ -110,7 +135,18 @@ export default function KeuanganPage() {
       </header>
 
       {stats && (
-        <div className="grid sm:grid-cols-3 gap-3.5">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <HudPanel>
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-500 mb-2">
+              Kekayaan Total
+            </p>
+            <p className="font-mono text-xl font-bold text-mint-glow">
+              {kekayaanTotal !== null ? formatCurrency(kekayaanTotal) : "…"}
+            </p>
+            <p className="text-[11.5px] text-slate-500 mt-1.5">
+              {accountCount > 0 ? `Dari ${accountCount} rekening` : "Belum ada rekening — cek tab Rekening"}
+            </p>
+          </HudPanel>
           <HudPanel>
             <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-500 mb-2">
               Saldo Bulan Ini
@@ -206,6 +242,7 @@ export default function KeuanganPage() {
       </div>
 
       {tab === "transaksi" && <TransactionsTab />}
+      {tab === "rekening" && <AccountsTab />}
       {tab === "pos-tetap" && <RecurringTab />}
       {tab === "utang" && <DebtsTab />}
       {tab === "tabungan" && <SavingsTab />}

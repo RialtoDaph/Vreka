@@ -104,6 +104,39 @@ function makeSupabase(tables: Record<string, Row[]>) {
   return { inserted, updated, deleted, upserted, tables, from: (table: string) => builder(table) };
 }
 
+describe("executeAssistantTool: add_transaction", () => {
+  it("defaults account_id to the user's primary account", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ accounts: [{ id: "acc-1", user_id: "user-1", is_primary: true }] });
+    const res = await executeAssistantTool(supabase as never, "user-1", "add_transaction", {
+      type: "expense",
+      category: "Makanan",
+      amount: 50,
+    });
+
+    expect(res).toEqual({ ok: true, result: "Transaksi dicatat." });
+    expect(supabase.inserted[0]).toMatchObject({
+      table: "transactions",
+      payload: { account_id: "acc-1" },
+    });
+  });
+
+  it("leaves account_id null when the user has no primary account set", async () => {
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({ accounts: [] });
+    await executeAssistantTool(supabase as never, "user-1", "add_transaction", {
+      type: "income",
+      category: "Gaji",
+      amount: 1000,
+    });
+
+    expect(supabase.inserted[0]).toMatchObject({
+      table: "transactions",
+      payload: { account_id: null },
+    });
+  });
+});
+
 describe("executeAssistantTool: search_records", () => {
   it("rejects an empty query", async () => {
     vi.doMock("@/lib/search", () => ({ searchAll: vi.fn() }));

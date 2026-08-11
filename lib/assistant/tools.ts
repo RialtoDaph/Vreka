@@ -647,6 +647,16 @@ export async function executeAssistantTool(
       const amount = Number(input.amount);
       if (!amount || amount <= 0) return { ok: false, result: "amount harus > 0." };
       const category = String(input.category ?? "Lainnya");
+      // Defaults to the user's primary rekening (set in the Rekening tab) so
+      // transactions Aslan logs still count toward that account's balance
+      // instead of always landing "Belum Ditandain" -- null (no primary set)
+      // is a normal, expected case, not an error.
+      const { data: primaryAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("is_primary", true)
+        .maybeSingle();
       const { error } = await supabase.from("transactions").insert({
         user_id: userId,
         type,
@@ -657,6 +667,7 @@ export async function executeAssistantTool(
           typeof input.occurred_on === "string" && input.occurred_on
             ? input.occurred_on
             : new Date().toISOString().slice(0, 10),
+        account_id: primaryAccount?.id ?? null,
       });
       if (error) return { ok: false, result: error.message };
       if (type === "expense") {
