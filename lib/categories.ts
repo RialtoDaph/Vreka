@@ -4,6 +4,7 @@ export const INCOME_CATEGORIES = [
   "Freelance",
   "Investasi",
   "Piutang Diterima",
+  "Tips",
   "Lainnya",
 ];
 
@@ -17,6 +18,7 @@ export const EXPENSE_CATEGORIES = [
   "Kirim Istri/Keluarga",
   "Cicilan/Utang",
   "Hiburan",
+  "Liburan",
   "Kesehatan",
   "Pendidikan",
   "Lainnya",
