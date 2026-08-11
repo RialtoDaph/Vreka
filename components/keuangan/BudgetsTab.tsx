@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { Budget } from "@/lib/types";
 import { formatCurrency, parseAmount } from "@/lib/format";
 import { localDateKey } from "@/lib/date";
-import { EXPENSE_CATEGORIES } from "@/lib/categories";
+import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
+import CategorySelect from "@/components/CategorySelect";
 import {
   inputClass,
   labelClass,
@@ -132,6 +133,11 @@ export default function BudgetsTab() {
   const availableCategories = editingId
     ? EXPENSE_CATEGORIES
     : EXPENSE_CATEGORIES.filter((c) => !budgetedCategories.has(c));
+  const availableCategoryGroups = editingId
+    ? EXPENSE_CATEGORY_GROUPS
+    : EXPENSE_CATEGORY_GROUPS.map((g) => ({ group: g.group, items: g.items.filter((c) => !budgetedCategories.has(c)) })).filter(
+        (g) => g.items.length > 0
+      );
 
   return (
     <div className="space-y-4">
@@ -153,19 +159,13 @@ export default function BudgetsTab() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="budget-category" className={labelClass}>Kategori</label>
-                <select
+                <CategorySelect
                   id="budget-category"
                   value={category}
                   disabled={!!editingId}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className={inputClass}
-                >
-                  {availableCategories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setCategory}
+                  groups={availableCategoryGroups}
+                />
               </div>
               <div>
                 <label htmlFor="budget-limit" className={labelClass}>Batas Bulanan (€)</label>

@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Transaction, TransactionType } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/categories";
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
 import { downloadCsv } from "@/lib/csv";
 import HudPanel from "@/components/HudPanel";
+import CategorySelect from "@/components/CategorySelect";
 import {
   inputClass,
   labelClass,
@@ -314,7 +315,7 @@ export default function TransactionsTab() {
     setExporting(false);
   }
 
-  const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const categoryGroups = type === "income" ? INCOME_CATEGORY_GROUPS : EXPENSE_CATEGORY_GROUPS;
 
   return (
     <div className="space-y-4">
@@ -381,21 +382,15 @@ export default function TransactionsTab() {
                 <label htmlFor="tx-category" className={labelClass}>
                   Kategori {categorizing && <span className="text-cyan-glow normal-case">(nebak...)</span>}
                 </label>
-                <select
+                <CategorySelect
                   id="tx-category"
                   value={category}
-                  onChange={(e) => {
-                    setCategory(e.target.value);
+                  onChange={(c) => {
+                    setCategory(c);
                     setCategoryTouched(true);
                   }}
-                  className={inputClass}
-                >
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                  groups={categoryGroups}
+                />
               </div>
               <div>
                 <label htmlFor="tx-date" className={labelClass}>Tanggal</label>
