@@ -10,6 +10,16 @@ export type Transaction = {
   occurred_on: string;
   created_at: string;
   receipt_path: string | null;
+  account_id: string | null;
+};
+
+export type Account = {
+  id: string;
+  user_id: string;
+  name: string;
+  starting_balance: number;
+  is_primary: boolean;
+  created_at: string;
 };
 
 export type RecurringItem = {
