@@ -3,6 +3,8 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { computeStreak } from "@/lib/habits";
 import { getCalendarAccessToken } from "@/lib/google/credentials";
 import { listUpcomingEvents } from "@/lib/google/calendar";
+import { buildAccountBalances } from "@/lib/accountBalances";
+import type { Account } from "@/lib/types";
 
 export async function buildAssistantSystemPrompt(
   supabase: SupabaseClient,
@@ -24,6 +26,8 @@ export async function buildAssistantSystemPrompt(
     { data: habitChecks },
     { data: memories },
     { data: googleCred },
+    { data: accounts },
+    { data: allTx },
   ] = await Promise.all([
     // Covers both the income/expense totals and the per-category expense
     // breakdown below — one round trip instead of two near-identical ones.
@@ -65,6 +69,10 @@ export async function buildAssistantSystemPrompt(
       .select("email_address, scope")
       .eq("user_id", userId)
       .maybeSingle(),
+    supabase.from("accounts").select("*").eq("user_id", userId),
+    // Rekening balances need every transaction ever recorded, not just this
+    // month's -- separate from the txMonth query above on purpose.
+    supabase.from("transactions").select("account_id, type, amount").eq("user_id", userId),
   ]);
 
   const income = (txMonth ?? [])
@@ -143,6 +151,15 @@ export async function buildAssistantSystemPrompt(
   const memoryLines =
     (memories ?? []).map((m) => `- ${m.content}`).join("\n") || "(belum ada memory tersimpan)";
 
+  const { perAccount, unassigned, total: kekayaanTotal } = buildAccountBalances(
+    (accounts ?? []) as Account[],
+    allTx ?? []
+  );
+  const accountLines =
+    perAccount
+      .map((a) => `- ${a.account.name}${a.account.is_primary ? " (utama)" : ""}: ${formatCurrency(a.balance)}`)
+      .join("\n") || "(belum ada rekening)";
+
   const gmailStatus = googleCred?.email_address
     ? `Terhubung (${googleCred.email_address})`
     : "Belum terhubung";
@@ -182,6 +199,10 @@ Pengeluaran: ${formatCurrency(expense)}
 Saldo: ${formatCurrency(income - expense)}
 Utang aktif: ${formatCurrency(iOwe)}
 Piutang aktif: ${formatCurrency(owedToMe)}
+
+Rekening (kekayaan total, dari saldo awal + semua transaksi sepanjang waktu -- terpisah dari "Saldo" bulan ini di atas):
+${accountLines}
+${unassigned !== 0 ? `Belum ditandain ke rekening manapun: ${formatCurrency(unassigned)}\n` : ""}Kekayaan Total: ${formatCurrency(kekayaanTotal)}
 
 Detail utang/piutang:
 ${debtLines}
