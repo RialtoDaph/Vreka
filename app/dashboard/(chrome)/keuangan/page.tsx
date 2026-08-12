@@ -83,8 +83,12 @@ export default function KeuanganPage() {
       );
     }
     loadStats();
+    // Re-runs on every tab switch, same as the tab bodies below (each is
+    // conditionally rendered, so mounting one already re-fetches its own
+    // data fresh) -- without this, adding/editing a transaction elsewhere
+    // left this header card showing stale numbers until a full page reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tab]);
 
   useEffect(() => {
     // Kekayaan Total needs every transaction ever recorded (not just the
@@ -102,8 +106,10 @@ export default function KeuanganPage() {
       setKekayaanTotal(total);
     }
     loadKekayaan();
+    // Same reasoning as loadStats() above -- re-run on tab switch so this
+    // doesn't go stale after a transaction/account change on another tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tab]);
 
   async function askResearch() {
     setResearchLoading(true);
