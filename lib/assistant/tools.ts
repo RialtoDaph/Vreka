@@ -1145,12 +1145,13 @@ export async function executeAssistantTool(
       );
 
       const today = new Date().toISOString().slice(0, 10);
+      const category = debt.direction === "i_owe" ? "Cicilan/Utang" : "Piutang Diterima";
       const { data: tx, error: txError } = await supabase
         .from("transactions")
         .insert({
           user_id: userId,
           type: debt.direction === "i_owe" ? "expense" : "income",
-          category: debt.direction === "i_owe" ? "Cicilan/Utang" : "Piutang Diterima",
+          category,
           amount,
           description:
             debt.direction === "i_owe" ? `Cicilan ${debt.party_name}` : `Pembayaran dari ${debt.party_name}`,
@@ -1159,6 +1160,11 @@ export async function executeAssistantTool(
         .select("id")
         .single();
       if (txError || !tx) return { ok: false, result: txError?.message ?? "Gagal catat transaksi." };
+      if (debt.direction === "i_owe") {
+        // Fire-and-forget -- a budget-threshold push shouldn't block or
+        // fail the tool call itself.
+        checkBudgetAlertAndNotify(supabase, userId, category).catch(() => {});
+      }
 
       const { error: paymentError } = await supabase.from("debt_payments").insert({
         user_id: userId,

@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { buildMemoryMapData } from "./memoryMap";
-import { formatDate } from "./format";
-import type { LifeMilestone } from "./types";
+import { formatCurrency, formatDate } from "./format";
+import type { Debt, LifeMilestone } from "./types";
 
 function baseInput() {
   return {
     tasks: [],
     goals: [],
     debts: [],
+    debtPayments: [],
     notes: [],
     budgets: [],
     transactionsThisMonth: [],
@@ -88,5 +89,29 @@ describe("buildMemoryMapData", () => {
     );
     const { nodes } = buildMemoryMapData({ ...baseInput(), milestones });
     expect(nodes.filter((n) => n.type === "milestone")).toHaveLength(8);
+  });
+
+  it("shows a debt's remaining balance after partial payments, not the original amount", () => {
+    const debt: Debt = {
+      id: "d1",
+      user_id: "u1",
+      party_name: "Bank",
+      direction: "i_owe",
+      amount: 1000,
+      status: "unpaid",
+      due_date: null,
+      notes: null,
+      created_at: "2026-01-01T00:00:00Z",
+      is_recurring: false,
+      recurrence_day: null,
+    };
+    const { nodes } = buildMemoryMapData({
+      ...baseInput(),
+      debts: [debt],
+      debtPayments: [{ debt_id: "d1", amount: 400 }],
+    });
+
+    const leaf = nodes.find((n) => n.id === "d-d1")!;
+    expect(leaf.fields).toContainEqual({ k: "Sisa", v: formatCurrency(600) });
   });
 });

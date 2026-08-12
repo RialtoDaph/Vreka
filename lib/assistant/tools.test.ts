@@ -285,6 +285,34 @@ describe("executeAssistantTool: debts", () => {
     expect(res).toEqual({ ok: false, result: '"Bank" udah lunas.' });
   });
 
+  it("checks the budget threshold after paying a debt owed by the user, but not one owed to them", async () => {
+    const checkBudgetAlertAndNotify = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@/lib/budgetAlerts", () => ({ checkBudgetAlertAndNotify }));
+    const { executeAssistantTool } = await import("./tools");
+    const supabase = makeSupabase({
+      debts: [
+        { id: "d1", user_id: "user-1", party_name: "Bank", direction: "i_owe", amount: 1000, status: "unpaid" },
+      ],
+      debt_payments: [],
+    });
+
+    await executeAssistantTool(supabase as never, "user-1", "pay_debt", { party_query: "bank", amount: 100 });
+    expect(checkBudgetAlertAndNotify).toHaveBeenCalledWith(supabase, "user-1", "Cicilan/Utang");
+
+    checkBudgetAlertAndNotify.mockClear();
+    const supabaseOwedToMe = makeSupabase({
+      debts: [
+        { id: "d2", user_id: "user-1", party_name: "Sarah", direction: "owed_to_me", amount: 1000, status: "unpaid" },
+      ],
+      debt_payments: [],
+    });
+    await executeAssistantTool(supabaseOwedToMe as never, "user-1", "pay_debt", {
+      party_query: "sarah",
+      amount: 100,
+    });
+    expect(checkBudgetAlertAndNotify).not.toHaveBeenCalled();
+  });
+
   it("rejects a non-positive payment amount", async () => {
     const { executeAssistantTool } = await import("./tools");
     const supabase = makeSupabase({

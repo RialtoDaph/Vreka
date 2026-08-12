@@ -24,6 +24,7 @@ export default async function OverviewPage() {
     { data: tasks },
     { data: goals },
     { data: debts },
+    { data: debtPayments },
     { data: notes },
     { data: budgets },
     { data: txMonth },
@@ -46,6 +47,10 @@ export default async function OverviewPage() {
       .order("deadline", { ascending: true, nullsFirst: false }),
     supabase.from("savings_goals").select("*").order("created_at", { ascending: false }),
     supabase.from("debts").select("*").eq("status", "unpaid"),
+    // A debt can be partially paid off (via debt_payments) while still
+    // status='unpaid' -- the finance node's "Sisa" field needs this to
+    // show what's actually still owed, not the original amount.
+    supabase.from("debt_payments").select("debt_id, amount"),
     supabase.from("study_notes").select("*").order("updated_at", { ascending: false }),
     supabase.from("budgets").select("*"),
     supabase
@@ -90,6 +95,7 @@ export default async function OverviewPage() {
     tasks: (tasks ?? []) as Task[],
     goals: (goals ?? []) as SavingsGoal[],
     debts: (debts ?? []) as Debt[],
+    debtPayments: debtPayments ?? [],
     notes: (notes ?? []) as StudyNote[],
     budgets: (budgets ?? []) as Budget[],
     transactionsThisMonth: txMonth ?? [],
