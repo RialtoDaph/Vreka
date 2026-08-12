@@ -192,6 +192,18 @@ export default function RecurringTab() {
       if (txError || !tx) {
         setError("Gagal catat transaksi. Coba lagi.");
       } else {
+        // Fire-and-forget, same as TransactionsTab's manual form -- checking
+        // off a Pos Tetap creates a real expense transaction too, so it
+        // needs to trip a budget threshold just as reliably as one entered
+        // by hand.
+        if (item.type === "expense") {
+          fetch("/api/keuangan/budget-alert-check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: item.category }),
+          }).catch(() => {});
+        }
+
         const { data: check, error: checkError } = await supabase
           .from("recurring_item_checks")
           .insert({

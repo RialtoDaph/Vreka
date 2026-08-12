@@ -7,6 +7,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.resetModules();
+  vi.unstubAllGlobals();
 });
 
 const DEBTS = [
@@ -209,6 +210,40 @@ describe("DebtsTab", () => {
     // The big amount now shows what's left, not the original total -- it
     // also matches the totals card above, since that's the only debt.
     expect(screen.getAllByText("300,00 €")).toHaveLength(2);
+  });
+
+  it("checks the budget threshold after paying a debt the user owes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    mockSupabase({ debts: [DEBTS[0]] });
+    const { default: DebtsTab } = await import("./DebtsTab");
+    render(<DebtsTab />);
+
+    fireEvent.click(await screen.findByText("+ Bayar"));
+    fireEvent.change(screen.getByLabelText("Nominal pembayaran Budi"), { target: { value: "150" } });
+    fireEvent.click(screen.getByText("OK"));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/keuangan/budget-alert-check",
+        expect.objectContaining({ body: JSON.stringify({ category: "Cicilan/Utang" }) })
+      )
+    );
+  });
+
+  it("skips the budget-threshold check for a debt owed to the user (that's income, not expense)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    mockSupabase({ debts: [DEBTS[2]] }); // Sarah, owed_to_me
+    const { default: DebtsTab } = await import("./DebtsTab");
+    render(<DebtsTab />);
+
+    fireEvent.click(await screen.findByText("+ Bayar"));
+    fireEvent.change(screen.getByLabelText("Nominal pembayaran Sarah"), { target: { value: "50" } });
+    fireEvent.click(screen.getByText("OK"));
+
+    await waitFor(() => expect(screen.getByText(/Udah dibayar/)).toBeInTheDocument());
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/keuangan/budget-alert-check", expect.anything());
   });
 
   it("auto-marks a debt as paid once payments cover the full amount", async () => {

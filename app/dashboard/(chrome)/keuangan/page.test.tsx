@@ -103,6 +103,64 @@ describe("KeuanganPage stat cards", () => {
     expect(await screen.findByText("AccountsTab")).toBeInTheDocument();
   });
 
+  it("refreshes Kekayaan Total when switching tabs, not just once on mount", async () => {
+    // Every child tab is conditionally rendered, so mounting one already
+    // re-fetches its own data fresh -- this asserts the header card follows
+    // the same "tab switch = fresh data" rule instead of staying frozen at
+    // whatever it computed on the very first render.
+    let kekayaanCallCount = 0;
+    vi.doMock("@/lib/supabase/client", () => ({
+      createClient: () => ({
+        from: (table: string) => {
+          if (table === "transactions") {
+            return {
+              select: () => {
+                const obj: Record<string, unknown> = {
+                  gte: () => Promise.resolve({ data: [], error: null }),
+                  then: (resolve: (v: unknown) => unknown) => {
+                    kekayaanCallCount++;
+                    const data =
+                      kekayaanCallCount === 1 ? [] : [{ account_id: "acc-1", type: "income", amount: 500 }];
+                    return Promise.resolve({ data, error: null }).then(resolve);
+                  },
+                };
+                return obj;
+              },
+            };
+          }
+          if (table === "savings_goals") return { select: () => Promise.resolve({ data: [], error: null }) };
+          if (table === "accounts") {
+            return {
+              select: () =>
+                Promise.resolve({
+                  data: [
+                    {
+                      id: "acc-1",
+                      user_id: "u1",
+                      name: "BCA",
+                      starting_balance: 1000,
+                      is_primary: true,
+                      created_at: "2026-01-01",
+                    },
+                  ],
+                  error: null,
+                }),
+            };
+          }
+          throw new Error(`unexpected table: ${table}`);
+        },
+      }),
+    }));
+
+    const { default: KeuanganPage } = await import("./page");
+    render(<KeuanganPage />);
+
+    expect(await screen.findByText("1.000,00 €")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Rekening"));
+    expect(await screen.findByText("1.500,00 €")).toBeInTheDocument();
+  });
+
   it("lets the user ask Aslan for market research", async () => {
     mockSupabase([], []);
     vi.stubGlobal(

@@ -5,6 +5,7 @@ import { getCalendarAccessToken } from "@/lib/google/credentials";
 import { listUpcomingEvents } from "@/lib/google/calendar";
 import { buildAccountBalances } from "@/lib/accountBalances";
 import type { Account } from "@/lib/types";
+import { sumPaidByDebt, remainingDebtAmount } from "@/lib/debts";
 
 export async function buildAssistantSystemPrompt(
   supabase: SupabaseClient,
@@ -19,6 +20,7 @@ export async function buildAssistantSystemPrompt(
     { data: txMonth },
     { data: budgets },
     { data: unpaidDebts },
+    { data: debtPayments },
     { data: goals },
     { data: upcomingTasks },
     { data: notes },
@@ -38,6 +40,10 @@ export async function buildAssistantSystemPrompt(
       .gte("occurred_on", firstDayOfMonth),
     supabase.from("budgets").select("*").eq("user_id", userId),
     supabase.from("debts").select("*").eq("user_id", userId).eq("status", "unpaid"),
+    // A debt can be partially paid off (via debt_payments) while still
+    // status='unpaid' -- without this, the totals/lines below would report
+    // the original amount instead of what's actually still owed.
+    supabase.from("debt_payments").select("debt_id, amount").eq("user_id", userId),
     supabase
       .from("savings_goals")
       .select("*")
@@ -82,12 +88,13 @@ export async function buildAssistantSystemPrompt(
     .filter((t) => t.type === "expense")
     .reduce((sum, t) => sum + Number(t.amount), 0);
 
+  const paidByDebt = sumPaidByDebt(debtPayments ?? []);
   const iOwe = (unpaidDebts ?? [])
     .filter((d) => d.direction === "i_owe")
-    .reduce((sum, d) => sum + Number(d.amount), 0);
+    .reduce((sum, d) => sum + remainingDebtAmount(d.id, Number(d.amount), paidByDebt), 0);
   const owedToMe = (unpaidDebts ?? [])
     .filter((d) => d.direction === "owed_to_me")
-    .reduce((sum, d) => sum + Number(d.amount), 0);
+    .reduce((sum, d) => sum + remainingDebtAmount(d.id, Number(d.amount), paidByDebt), 0);
 
   const spentByCategory = new Map<string, number>();
   for (const t of txMonth ?? []) {
@@ -113,10 +120,10 @@ export async function buildAssistantSystemPrompt(
 
   const debtLines =
     (unpaidDebts ?? [])
-      .map(
-        (d) =>
-          `- ${d.direction === "i_owe" ? "Saya utang ke" : "Piutang dari"} ${d.party_name}: ${formatCurrency(Number(d.amount))}${d.due_date ? ` (jatuh tempo ${formatDate(d.due_date)})` : ""}`
-      )
+      .map((d) => {
+        const remaining = remainingDebtAmount(d.id, Number(d.amount), paidByDebt);
+        return `- ${d.direction === "i_owe" ? "Saya utang ke" : "Piutang dari"} ${d.party_name}: ${formatCurrency(remaining)}${d.due_date ? ` (jatuh tempo ${formatDate(d.due_date)})` : ""}`;
+      })
       .join("\n") || "(nggak ada utang/piutang aktif)";
 
   const taskLines =

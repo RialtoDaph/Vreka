@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Debt, DebtDirection, DebtPayment } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { currentMonthKey, todayKey } from "@/lib/date";
+import { sumPaidByDebt, remainingDebtAmount } from "@/lib/debts";
 import HudPanel from "@/components/HudPanel";
 import {
   inputClass,
@@ -196,12 +197,13 @@ export default function DebtsTab() {
         return;
       }
 
+      const category = debt.direction === "i_owe" ? "Cicilan/Utang" : "Piutang Diterima";
       const { data: tx, error: txError } = await supabase
         .from("transactions")
         .insert({
           user_id: user.id,
           type: debt.direction === "i_owe" ? "expense" : "income",
-          category: debt.direction === "i_owe" ? "Cicilan/Utang" : "Piutang Diterima",
+          category,
           amount: parsed,
           description:
             debt.direction === "i_owe" ? `Cicilan ${debt.party_name}` : `Pembayaran dari ${debt.party_name}`,
@@ -212,6 +214,18 @@ export default function DebtsTab() {
       if (txError || !tx) {
         setError("Gagal catat transaksi pembayaran. Coba lagi.");
         return;
+      }
+
+      // Fire-and-forget, same as TransactionsTab's manual form -- this path
+      // creates a real expense transaction too, so it needs to trip a
+      // budget threshold ("Cicilan/Utang" is a real budget category) just
+      // as reliably as one entered by hand.
+      if (debt.direction === "i_owe") {
+        fetch("/api/keuangan/budget-alert-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category }),
+        }).catch(() => {});
       }
 
       const { data: payment, error: paymentError } = await supabase
@@ -313,16 +327,10 @@ export default function DebtsTab() {
     }
   }
 
-  const paidByDebt = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const p of payments) {
-      map[p.debt_id] = (map[p.debt_id] ?? 0) + Number(p.amount);
-    }
-    return map;
-  }, [payments]);
+  const paidByDebt = useMemo(() => sumPaidByDebt(payments), [payments]);
 
   function remaining(debt: Debt): number {
-    return Math.max(0, Number(debt.amount) - (paidByDebt[debt.id] ?? 0));
+    return remainingDebtAmount(debt.id, Number(debt.amount), paidByDebt);
   }
 
   function currentCyclePayment(debt: Debt): DebtPayment | undefined {

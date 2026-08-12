@@ -3,6 +3,7 @@ import type { CalendarEvent } from "@/lib/google/calendar";
 import { formatCurrency, formatDate, formatDateTime, daysUntil } from "@/lib/format";
 import { computeStreak } from "@/lib/habits";
 import { MILESTONE_CATEGORY_META } from "@/lib/lifeTimeline";
+import { sumPaidByDebt, remainingDebtAmount, type DebtPaymentRow } from "@/lib/debts";
 
 export type MemoryNodeType = "hub" | "task" | "finance" | "note" | "contact" | "event" | "journal" | "milestone";
 
@@ -105,6 +106,7 @@ type BuildInput = {
   tasks: Task[];
   goals: SavingsGoal[];
   debts: Debt[];
+  debtPayments: DebtPaymentRow[];
   notes: StudyNote[];
   budgets: Budget[];
   transactionsThisMonth: { type: string; category: string; amount: number }[];
@@ -122,6 +124,7 @@ export function buildMemoryMapData({
   tasks,
   goals,
   debts,
+  debtPayments,
   notes,
   budgets,
   transactionsThisMonth,
@@ -235,6 +238,7 @@ export function buildMemoryMapData({
   // --- Keuangan: savings goals + unpaid debts + budgets ---
   const activeGoals = goals.slice(0, 6);
   const unpaidDebts = debts.filter((d) => d.status === "unpaid").slice(0, 6);
+  const paidByDebt = sumPaidByDebt(debtPayments);
   const activeBudgets = budgets.slice(0, 6);
   const financeCount = activeGoals.length + unpaidDebts.length + activeBudgets.length;
 
@@ -268,7 +272,7 @@ export function buildMemoryMapData({
       "h-keuangan",
       3.0,
       [
-        { k: "Jumlah", v: formatCurrency(Number(d.amount)) },
+        { k: "Sisa", v: formatCurrency(remainingDebtAmount(d.id, Number(d.amount), paidByDebt)) },
         { k: "Jatuh tempo", v: dueLabel(d.due_date) },
       ],
       activeGoals.length + i,

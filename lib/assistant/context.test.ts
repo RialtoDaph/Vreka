@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { formatCurrency } from "@/lib/format";
 
 function chainable(data: unknown[] = []) {
   const obj: Record<string, unknown> = {
@@ -21,6 +22,8 @@ type TableData = {
   journal_entries?: unknown[];
   transactions?: unknown[];
   google_credentials?: unknown[];
+  debts?: unknown[];
+  debt_payments?: unknown[];
 };
 
 function fakeSupabase(tables: TableData) {
@@ -116,5 +119,31 @@ describe("buildRealtimeExtraContext", () => {
     const result = await buildRealtimeExtraContext(supabase, "user-1");
 
     expect(result).toContain("(gagal ambil jadwal Calendar)");
+  });
+});
+
+describe("buildAssistantSystemPrompt", () => {
+  it("reports a debt's remaining balance after partial payments, not the original amount", async () => {
+    const { buildAssistantSystemPrompt } = await import("./context");
+    const supabase = fakeSupabase({
+      debts: [
+        { id: "d1", party_name: "Bank", direction: "i_owe", amount: 1000, due_date: null, status: "unpaid" },
+      ],
+      debt_payments: [{ debt_id: "d1", amount: 400 }],
+    });
+
+    const result = await buildAssistantSystemPrompt(supabase, "user-1");
+
+    expect(result).toContain(`Saya utang ke Bank: ${formatCurrency(600)}`);
+    expect(result).not.toContain(formatCurrency(1000));
+  });
+
+  it("shows zero owed when there are no unpaid debts", async () => {
+    const { buildAssistantSystemPrompt } = await import("./context");
+    const supabase = fakeSupabase({});
+
+    const result = await buildAssistantSystemPrompt(supabase, "user-1");
+
+    expect(result).toContain("(nggak ada utang/piutang aktif)");
   });
 });
