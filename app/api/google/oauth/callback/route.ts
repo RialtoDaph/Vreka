@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const base = getBaseUrl(request);
   const fail = (message: string) =>
-    NextResponse.redirect(`${base}/dashboard/asisten?gmail_error=${encodeURIComponent(message)}`);
+    NextResponse.redirect(`${base}/dashboard/ai-core?gmail_error=${encodeURIComponent(message)}`);
 
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     );
     if (error) return fail(error.message);
 
-    const response = NextResponse.redirect(`${base}/dashboard/asisten?gmail=connected`);
+    const response = NextResponse.redirect(`${base}/dashboard/ai-core?gmail=connected`);
     response.cookies.set("google_oauth_state", "", { maxAge: 0, path: "/" });
     return response;
   } catch (err) {

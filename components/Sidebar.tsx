@@ -13,6 +13,7 @@ const NAV = [
   { href: "/dashboard/jurnal", label: "Jurnal", icon: "✎" },
   { href: "/dashboard/timeline", label: "Timeline", icon: "⧗" },
   { href: "/dashboard/asisten", label: "Aslan", icon: "✦" },
+  { href: "/dashboard/ai-core", label: "AI Core", icon: "◉" },
 ];
 
 export default function Sidebar() {
