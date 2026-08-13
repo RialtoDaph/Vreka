@@ -582,7 +582,7 @@ async function findOneEmail(
 ): Promise<EmailFindResult> {
   const accessToken = await getGmailAccessToken(supabase, userId);
   if (!accessToken) {
-    return { error: "Gmail belum di-connect. Suruh user klik \"Connect Gmail\" di halaman Aslan dulu." };
+    return { error: "Gmail belum di-connect. Suruh user klik \"Connect Gmail\" di halaman AI Core dulu." };
   }
   const q = String(query ?? "").trim();
   const matches = await listMessages(accessToken, q || "in:inbox", 5);
@@ -898,7 +898,7 @@ export async function executeAssistantTool(
       if (!accessToken) {
         return {
           ok: false,
-          result: "Gmail belum di-connect. Suruh user klik \"Connect Gmail\" di halaman Aslan dulu.",
+          result: "Gmail belum di-connect. Suruh user klik \"Connect Gmail\" di halaman AI Core dulu.",
         };
       }
       const q = String(input.query ?? "").trim() || "in:inbox";

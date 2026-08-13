@@ -16,14 +16,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// These each do their own Supabase/fetch calls on mount -- stubbed out so
-// this test only exercises the page's own chat + voice-mode wiring.
-vi.mock("@/components/asisten/ActivityLog", () => ({ default: () => <div>ActivityLog</div> }));
-vi.mock("@/components/asisten/DataExport", () => ({ default: () => <div>DataExport</div> }));
-vi.mock("@/components/asisten/PushNotifications", () => ({ default: () => <div>PushNotifications</div> }));
-vi.mock("@/components/asisten/StatusAslan", () => ({ default: () => <div>StatusAslan</div> }));
-vi.mock("@/components/asisten/TwoFactorAuth", () => ({ default: () => <div>TwoFactorAuth</div> }));
-
 function chainable(data: unknown[] = []) {
   const obj: Record<string, unknown> = {
     select: () => obj,
@@ -48,12 +40,24 @@ function mockSupabase(messages: unknown[] = []) {
         if (table === "assistant_messages") return chainable(messages);
         if (table === "google_credentials") return chainable([]);
         if (table === "telegram_links") return chainable([]);
+        // Only reached in tests that render the real StatusAslan (it does
+        // its own count queries against these) -- unused otherwise.
         if (table === "assistant_memories") return chainable([]);
         if (table === "assistant_audit_log") return chainable([]);
         throw new Error(`unexpected table: ${table}`);
       },
     }),
   }));
+}
+
+function mockStatusAslan() {
+  vi.doMock("@/components/asisten/StatusAslan", () => ({ default: () => <div>StatusAslan</div> }));
+}
+
+function mockRouter() {
+  const push = vi.fn();
+  vi.doMock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+  return { push };
 }
 
 type VoiceMock = {
@@ -107,12 +111,32 @@ function mockFetchRouter({
 }
 
 describe("AsistenPage", () => {
+  // Runs first and deliberately never calls mockStatusAslan() -- vi.doMock
+  // registrations outlive resetModules() within a file, so once any later
+  // test mocks StatusAslan it'd stay mocked for the rest of the run. Being
+  // first means this is the only test where the real component is ever
+  // resolved, proving the actual navigation wiring: AI Core split off into
+  // its own page/route, so "Kelola" now navigates instead of toggling a
+  // section on this same page.
+  it("navigates to the AI Core page when StatusAslan's manage button is clicked", async () => {
+    mockSupabase([]);
+    mockVoice();
+    const { push } = mockRouter();
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    fireEvent.click(await screen.findByText(/Kelola/));
+    expect(push).toHaveBeenCalledWith("/dashboard/ai-core");
+  });
+
   it("loads and shows past chat history", async () => {
     mockSupabase([
       { id: "1", user_id: "user-1", role: "user", content: "halo", created_at: new Date().toISOString() },
       { id: "2", user_id: "user-1", role: "assistant", content: "Halo balik!", created_at: new Date().toISOString() },
     ]);
     mockVoice();
+    mockStatusAslan();
+    mockRouter();
     const { default: AsistenPage } = await import("./page");
     render(<AsistenPage />);
 
@@ -122,6 +146,8 @@ describe("AsistenPage", () => {
   it("sends a typed message and streams the reply", async () => {
     mockSupabase([]);
     mockVoice();
+    mockStatusAslan();
+    mockRouter();
     vi.stubGlobal(
       "fetch",
       vi.fn(() =>
@@ -156,6 +182,8 @@ describe("AsistenPage", () => {
   it("shows the active model selected in the dropdown and calls setModel when a different one is picked", async () => {
     mockSupabase([]);
     const { setModel } = mockVoice({ model: "claude-sonnet-5" });
+    mockStatusAslan();
+    mockRouter();
     mockFetchRouter();
 
     const { default: AsistenPage } = await import("./page");
@@ -171,6 +199,8 @@ describe("AsistenPage", () => {
   it("sends the active model in the chat request body", async () => {
     mockSupabase([]);
     mockVoice({ model: "claude-haiku-4-5" });
+    mockStatusAslan();
+    mockRouter();
     const captured: Record<string, unknown>[] = [];
     mockFetchRouter({ captureChatBody: (body) => captured.push(body) });
 
@@ -190,6 +220,8 @@ describe("AsistenPage", () => {
       { id: "1", user_id: "user-1", role: "assistant", content: "Oke, siap!", created_at: new Date().toISOString() },
     ]);
     mockVoice();
+    mockStatusAslan();
+    mockRouter();
     const { default: AsistenPage } = await import("./page");
     render(<AsistenPage />);
 
@@ -212,6 +244,8 @@ describe("AsistenPage", () => {
       },
     ]);
     mockVoice();
+    mockStatusAslan();
+    mockRouter();
     const { default: AsistenPage } = await import("./page");
     render(<AsistenPage />);
 

@@ -346,8 +346,8 @@ export default function KalenderPage() {
         <p className="text-[11px] text-slate-600">
           Google Calendar belum di-connect — cuma nampilin kerjaan/keuangan/pelajaran, dan event baru
           belum bisa disimpan. Connect di bagian{" "}
-          <a href="/dashboard/asisten" className="text-cyan-glow/80 hover:text-cyan-glow hover:underline">
-            Pengaturan &amp; Integrasi di halaman Aslan
+          <a href="/dashboard/ai-core" className="text-cyan-glow/80 hover:text-cyan-glow hover:underline">
+            AI Core
           </a>
           .
         </p>

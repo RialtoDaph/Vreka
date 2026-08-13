@@ -29,7 +29,7 @@ export async function getCalendarAccessToken(
     .eq("user_id", userId)
     .maybeSingle();
   if (!data?.refresh_token) {
-    return { error: "Google belum di-connect. Suruh user klik \"Connect Gmail\" di halaman Aslan dulu." };
+    return { error: "Google belum di-connect. Suruh user klik \"Connect Gmail\" di halaman AI Core dulu." };
   }
   if (!data.scope || !data.scope.includes("calendar")) {
     return {
