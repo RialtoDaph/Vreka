@@ -79,6 +79,22 @@ describe("AccountsTab", () => {
     expect(screen.getByText("1.300,00 €")).toBeInTheDocument();
   });
 
+  it("moves a transfer's balance from the source account to the destination", async () => {
+    mockSupabase(
+      [
+        { id: "acc-1", user_id: "user-1", name: "BCA", starting_balance: 1000, is_primary: true, created_at: "2026-01-01" },
+        { id: "acc-2", user_id: "user-1", name: "Cash", starting_balance: 0, is_primary: false, created_at: "2026-01-01" },
+      ],
+      [{ account_id: "acc-1", to_account_id: "acc-2", type: "transfer", amount: 300 }]
+    );
+    const { default: AccountsTab } = await import("./AccountsTab");
+    render(<AccountsTab />);
+
+    expect(await screen.findByText("BCA")).toBeInTheDocument();
+    expect(screen.getByText("700,00 €")).toBeInTheDocument();
+    expect(screen.getByText("300,00 €")).toBeInTheDocument();
+  });
+
   it("shows the empty-state message when there are no accounts yet", async () => {
     mockSupabase([], []);
     const { default: AccountsTab } = await import("./AccountsTab");

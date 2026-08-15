@@ -17,7 +17,7 @@ import { formatCurrency } from "@/lib/format";
 import { CHART_AXIS, CHART_EXPENSE, CHART_GRID, CHART_INCOME } from "@/lib/chartColors";
 import HudPanel from "@/components/HudPanel";
 
-type TxRow = { type: "income" | "expense"; category: string; amount: number; occurred_on: string };
+type TxRow = { type: "income" | "expense" | "transfer"; category: string; amount: number; occurred_on: string };
 
 type MonthPoint = { key: string; label: string; income: number; expense: number };
 
@@ -95,7 +95,7 @@ export default function AnalyticsTab() {
       const m = byKey.get(key);
       if (!m) continue;
       if (r.type === "income") m.income += Number(r.amount);
-      else m.expense += Number(r.amount);
+      else if (r.type === "expense") m.expense += Number(r.amount);
     }
     return months;
   }, [rows]);

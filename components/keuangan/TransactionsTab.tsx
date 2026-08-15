@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Account, Transaction, TransactionType } from "@/lib/types";
+import { Account, Transaction, TransactionKind } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
 import { downloadCsv } from "@/lib/csv";
@@ -34,7 +34,7 @@ export default function TransactionsTab() {
   const [viewMonth, setViewMonth] = useState("");
   const [accounts, setAccounts] = useState<Account[]>([]);
 
-  const [type, setType] = useState<TransactionType>("expense");
+  const [type, setType] = useState<TransactionKind>("expense");
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
@@ -44,6 +44,7 @@ export default function TransactionsTab() {
     new Date().toISOString().slice(0, 10)
   );
   const [accountId, setAccountId] = useState("");
+  const [toAccountId, setToAccountId] = useState("");
 
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export default function TransactionsTab() {
     setDescription("");
     setOccurredOn(new Date().toISOString().slice(0, 10));
     setAccountId("");
+    setToAccountId("");
     setReceiptFile(null);
     setReceiptPreview(null);
     setExistingReceiptPath(null);
@@ -69,7 +71,7 @@ export default function TransactionsTab() {
   }
 
   async function handleDescriptionBlur() {
-    if (editingId || categoryTouched || !description.trim()) return;
+    if (editingId || categoryTouched || !description.trim() || type === "transfer") return;
     setCategorizing(true);
     try {
       const res = await fetch("/api/assistant/categorize", {
@@ -104,6 +106,7 @@ export default function TransactionsTab() {
     setDescription(tx.description ?? "");
     setOccurredOn(tx.occurred_on);
     setAccountId(tx.account_id ?? "");
+    setToAccountId(tx.to_account_id ?? "");
     setReceiptFile(null);
     setReceiptPreview(null);
     setExistingReceiptPath(tx.receipt_path);
@@ -218,15 +221,17 @@ export default function TransactionsTab() {
     items.reduce(
       (acc, t) => {
         if (t.type === "income") acc.income += Number(t.amount);
-        else acc.expense += Number(t.amount);
+        else if (t.type === "expense") acc.expense += Number(t.amount);
         return acc;
       },
       { income: 0, expense: 0 }
     );
 
-  function switchType(t: TransactionType) {
+  function switchType(t: TransactionKind) {
     setType(t);
-    setCategory(t === "income" ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]);
+    if (t === "income") setCategory(INCOME_CATEGORIES[0]);
+    else if (t === "expense") setCategory(EXPENSE_CATEGORIES[0]);
+    else setCategory("Transfer");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -234,6 +239,10 @@ export default function TransactionsTab() {
     const parsed = parseAmount(amount);
     if (!amount || !Number.isFinite(parsed) || parsed <= 0) {
       setError("Nominal nggak valid. Cek lagi formatnya (misal 50.000).");
+      return;
+    }
+    if (type === "transfer" && (!accountId || !toAccountId || accountId === toAccountId)) {
+      setError("Pilih rekening asal dan tujuan yang beda.");
       return;
     }
     setSaving(true);
@@ -272,6 +281,7 @@ export default function TransactionsTab() {
       occurred_on: occurredOn,
       receipt_path: receiptPath,
       account_id: accountId || null,
+      to_account_id: type === "transfer" ? toAccountId : null,
     };
 
     const { error: saveError } = editingId
@@ -346,7 +356,7 @@ export default function TransactionsTab() {
       ["Tanggal", "Tipe", "Kategori", "Catatan", "Jumlah"],
       ...rows.map((t) => [
         t.occurred_on,
-        t.type === "income" ? "Pemasukan" : "Pengeluaran",
+        t.type === "income" ? "Pemasukan" : t.type === "expense" ? "Pengeluaran" : "Transfer",
         t.category,
         t.description ?? "",
         round2(Number(t.amount)),
@@ -430,6 +440,17 @@ export default function TransactionsTab() {
               >
                 Masuk
               </button>
+              <button
+                type="button"
+                onClick={() => switchType("transfer")}
+                className={`px-4 py-2 uppercase tracking-wider transition-colors ${
+                  type === "transfer"
+                    ? "bg-cyan-glow/10 text-cyan-glow"
+                    : "text-slate-500"
+                }`}
+              >
+                Transfer
+              </button>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
@@ -446,20 +467,22 @@ export default function TransactionsTab() {
                   placeholder="50.000"
                 />
               </div>
-              <div>
-                <label htmlFor="tx-category" className={labelClass}>
-                  Kategori {categorizing && <span className="text-cyan-glow normal-case">(nebak...)</span>}
-                </label>
-                <CategorySelect
-                  id="tx-category"
-                  value={category}
-                  onChange={(c) => {
-                    setCategory(c);
-                    setCategoryTouched(true);
-                  }}
-                  groups={categoryGroups}
-                />
-              </div>
+              {type !== "transfer" && (
+                <div>
+                  <label htmlFor="tx-category" className={labelClass}>
+                    Kategori {categorizing && <span className="text-cyan-glow normal-case">(nebak...)</span>}
+                  </label>
+                  <CategorySelect
+                    id="tx-category"
+                    value={category}
+                    onChange={(c) => {
+                      setCategory(c);
+                      setCategoryTouched(true);
+                    }}
+                    groups={categoryGroups}
+                  />
+                </div>
+              )}
               <div>
                 <label htmlFor="tx-date" className={labelClass}>Tanggal</label>
                 <input
@@ -470,22 +493,61 @@ export default function TransactionsTab() {
                   className={inputClass}
                 />
               </div>
-              <div>
-                <label htmlFor="tx-account" className={labelClass}>Rekening (opsional)</label>
-                <select
-                  id="tx-account"
-                  value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">Belum ditandain</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {type === "transfer" ? (
+                <>
+                  <div>
+                    <label htmlFor="tx-account" className={labelClass}>Dari Rekening</label>
+                    <select
+                      id="tx-account"
+                      required
+                      value={accountId}
+                      onChange={(e) => setAccountId(e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">Pilih rekening</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="tx-to-account" className={labelClass}>Ke Rekening</label>
+                    <select
+                      id="tx-to-account"
+                      required
+                      value={toAccountId}
+                      onChange={(e) => setToAccountId(e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">Pilih rekening</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label htmlFor="tx-account" className={labelClass}>Rekening (opsional)</label>
+                  <select
+                    id="tx-account"
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">Belum ditandain</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label htmlFor="tx-description" className={labelClass}>Catatan (opsional)</label>
                 <input
@@ -556,22 +618,29 @@ export default function TransactionsTab() {
               >
                 <div className="min-w-0">
                   <p className="text-sm text-slate-200 truncate">
-                    {tx.category}
+                    {tx.type === "transfer"
+                      ? `Transfer: ${accountLabel.get(tx.account_id ?? "") ?? "?"} → ${accountLabel.get(tx.to_account_id ?? "") ?? "?"}`
+                      : tx.category}
                     {tx.description ? (
                       <span className="text-slate-500"> · {tx.description}</span>
                     ) : null}
                   </p>
                   <p className="text-[11px] font-mono text-slate-400">
-                    {formatDate(tx.occurred_on)} · {accountLabel.get(tx.account_id ?? "") ?? "Belum ditandain"}
+                    {formatDate(tx.occurred_on)}
+                    {tx.type !== "transfer" && ` · ${accountLabel.get(tx.account_id ?? "") ?? "Belum ditandain"}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span
                     className={`font-mono text-sm ${
-                      tx.type === "income" ? "text-mint-glow" : "text-rose-glow"
+                      tx.type === "income"
+                        ? "text-mint-glow"
+                        : tx.type === "expense"
+                          ? "text-rose-glow"
+                          : "text-cyan-glow"
                     }`}
                   >
-                    {tx.type === "income" ? "+" : "-"}
+                    {tx.type === "income" ? "+" : tx.type === "expense" ? "-" : "⇄ "}
                     {formatCurrency(Number(tx.amount))}
                   </span>
                   {tx.receipt_path && (

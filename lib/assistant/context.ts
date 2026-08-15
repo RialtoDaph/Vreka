@@ -78,7 +78,7 @@ export async function buildAssistantSystemPrompt(
     supabase.from("accounts").select("*").eq("user_id", userId),
     // Rekening balances need every transaction ever recorded, not just this
     // month's -- separate from the txMonth query above on purpose.
-    supabase.from("transactions").select("account_id, type, amount").eq("user_id", userId),
+    supabase.from("transactions").select("account_id, to_account_id, type, amount").eq("user_id", userId),
   ]);
 
   const income = (txMonth ?? [])
@@ -304,7 +304,7 @@ export async function buildRealtimeExtraContext(
     (recentTx ?? [])
       .map(
         (t) =>
-          `- ${formatDate(t.occurred_on)} [${t.type === "income" ? "masuk" : "keluar"}] ${t.category}: ${formatCurrency(Number(t.amount))}${t.description ? ` (${t.description})` : ""}`
+          `- ${formatDate(t.occurred_on)} [${t.type === "income" ? "masuk" : t.type === "expense" ? "keluar" : "transfer"}] ${t.category}: ${formatCurrency(Number(t.amount))}${t.description ? ` (${t.description})` : ""}`
       )
       .join("\n") || "(nggak ada transaksi dalam 3 bulan terakhir)";
 
