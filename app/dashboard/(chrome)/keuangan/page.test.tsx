@@ -80,6 +80,25 @@ describe("KeuanganPage stat cards", () => {
     expect(screen.getByText("50%")).toBeInTheDocument(); // savings progress
   });
 
+  it("excludes transfer transactions from this month's income when computing saldo", async () => {
+    const today = todayStr();
+    mockSupabase(
+      [
+        { type: "income", amount: 1000, occurred_on: today },
+        { type: "transfer", amount: 500, occurred_on: today },
+        { type: "expense", amount: 200, occurred_on: today },
+      ],
+      []
+    );
+
+    const { default: KeuanganPage } = await import("./page");
+    render(<KeuanganPage />);
+
+    // saldo = income - expense = 800 -- would be 1.300,00 € if the transfer
+    // leaked into incomeThisMonth via the old bare `else` branch.
+    expect(await screen.findByText("800,00 €")).toBeInTheDocument();
+  });
+
   it("still renders the tabs and switches between them", async () => {
     mockSupabase([], []);
     const { default: KeuanganPage } = await import("./page");

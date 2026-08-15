@@ -55,4 +55,29 @@ describe("buildAccountBalances", () => {
     expect(result.total).toBe(250);
     expect(result.unassigned).toBe(0);
   });
+
+  it("moves a transfer's amount from the source account to the destination, leaving the total unchanged", () => {
+    const result = buildAccountBalances(
+      [account({ id: "acc-1", starting_balance: 1000 }), account({ id: "acc-2", starting_balance: 500 })],
+      [{ account_id: "acc-1", to_account_id: "acc-2", type: "transfer", amount: 300 }]
+    );
+    expect(result.perAccount).toEqual([
+      { account: expect.objectContaining({ id: "acc-1" }), balance: 700 },
+      { account: expect.objectContaining({ id: "acc-2" }), balance: 800 },
+    ]);
+    expect(result.total).toBe(1500);
+  });
+
+  it("keeps a transfer separate from real income/expense on the same accounts", () => {
+    const result = buildAccountBalances(
+      [account({ id: "acc-1", starting_balance: 1000 }), account({ id: "acc-2", starting_balance: 0 })],
+      [
+        { account_id: "acc-1", type: "income", amount: 200 },
+        { account_id: "acc-1", to_account_id: "acc-2", type: "transfer", amount: 300 },
+      ]
+    );
+    expect(result.perAccount[0].balance).toBe(900); // 1000 + 200 income - 300 transferred out
+    expect(result.perAccount[1].balance).toBe(300); // 300 transferred in
+    expect(result.total).toBe(1200);
+  });
 });

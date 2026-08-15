@@ -15,7 +15,12 @@ import {
   errorBannerClass,
 } from "@/lib/ui";
 
-type BalanceTx = { account_id: string | null; type: "income" | "expense"; amount: number };
+type BalanceTx = {
+  account_id: string | null;
+  to_account_id: string | null;
+  type: "income" | "expense" | "transfer";
+  amount: number;
+};
 
 export default function AccountsTab() {
   const supabase = createClient();
@@ -55,7 +60,7 @@ export default function AccountsTab() {
     setLoading(true);
     const [{ data: accountRows }, { data: txRows }] = await Promise.all([
       supabase.from("accounts").select("*").order("created_at", { ascending: true }),
-      supabase.from("transactions").select("account_id, type, amount"),
+      supabase.from("transactions").select("account_id, to_account_id, type, amount"),
     ]);
     setItems(accountRows ?? []);
     setTxs((txRows ?? []) as BalanceTx[]);

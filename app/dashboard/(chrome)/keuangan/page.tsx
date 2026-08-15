@@ -64,7 +64,7 @@ export default function KeuanganPage() {
         const key = localMonthKey(new Date(t.occurred_on));
         if (t.type === "expense") {
           expenseByMonth.set(key, (expenseByMonth.get(key) ?? 0) + Number(t.amount));
-        } else if (key === currentMonth) {
+        } else if (t.type === "income" && key === currentMonth) {
           incomeThisMonth += Number(t.amount);
         }
       }
@@ -98,7 +98,7 @@ export default function KeuanganPage() {
     async function loadKekayaan() {
       const [{ data: accountRows }, { data: txRows }] = await Promise.all([
         supabase.from("accounts").select("*"),
-        supabase.from("transactions").select("account_id, type, amount"),
+        supabase.from("transactions").select("account_id, to_account_id, type, amount"),
       ]);
       const accounts = (accountRows ?? []) as Account[];
       setAccountCount(accounts.length);

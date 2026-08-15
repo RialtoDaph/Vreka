@@ -102,6 +102,117 @@ describe("TransactionsTab", () => {
     expect(inserted[0]).toMatchObject({ account_id: "acc-1" });
   });
 
+  it("saves a transfer with from/to accounts and no category picker", async () => {
+    const { inserted } = mockSupabase({
+      accountRows: [
+        { id: "acc-1", name: "BCA" },
+        { id: "acc-2", name: "Cash" },
+      ],
+    });
+    const { default: TransactionsTab } = await import("./TransactionsTab");
+    render(<TransactionsTab />);
+
+    await screen.findByText(/Belum ada transaksi/);
+    fireEvent.click(screen.getByText("+ Catat Transaksi"));
+    fireEvent.click(screen.getByText("Transfer"));
+
+    expect(screen.queryByLabelText(/Kategori/)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Jumlah (€)"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Dari Rekening"), { target: { value: "acc-1" } });
+    fireEvent.change(screen.getByLabelText("Ke Rekening"), { target: { value: "acc-2" } });
+    fireEvent.click(screen.getByText("Simpan Transaksi"));
+
+    await vi.waitFor(() => expect(inserted).toHaveLength(1));
+    expect(inserted[0]).toMatchObject({
+      type: "transfer",
+      account_id: "acc-1",
+      to_account_id: "acc-2",
+    });
+  });
+
+  it("blocks submitting a transfer with the same source and destination account", async () => {
+    const { inserted } = mockSupabase({ accountRows: [{ id: "acc-1", name: "BCA" }] });
+    const { default: TransactionsTab } = await import("./TransactionsTab");
+    render(<TransactionsTab />);
+
+    await screen.findByText(/Belum ada transaksi/);
+    fireEvent.click(screen.getByText("+ Catat Transaksi"));
+    fireEvent.click(screen.getByText("Transfer"));
+
+    fireEvent.change(screen.getByLabelText("Jumlah (€)"), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Dari Rekening"), { target: { value: "acc-1" } });
+    fireEvent.change(screen.getByLabelText("Ke Rekening"), { target: { value: "acc-1" } });
+    fireEvent.click(screen.getByText("Simpan Transaksi"));
+
+    expect(await screen.findByText("Pilih rekening asal dan tujuan yang beda.")).toBeInTheDocument();
+    expect(inserted).toHaveLength(0);
+  });
+
+  it("renders a transfer distinctly in the transaction list", async () => {
+    mockSupabase({
+      txRows: [
+        {
+          id: "tx-1",
+          category: "Transfer",
+          description: null,
+          amount: 100,
+          type: "transfer",
+          occurred_on: "2026-08-01",
+          receipt_path: null,
+          account_id: "acc-1",
+          to_account_id: "acc-2",
+        },
+      ],
+      accountRows: [
+        { id: "acc-1", name: "BCA" },
+        { id: "acc-2", name: "Cash" },
+      ],
+    });
+    const { default: TransactionsTab } = await import("./TransactionsTab");
+    render(<TransactionsTab />);
+
+    expect(await screen.findByText("Transfer: BCA → Cash")).toBeInTheDocument();
+  });
+
+  it("excludes a transfer from the month summary's income/expense totals", async () => {
+    mockSupabase({
+      txRows: [
+        {
+          id: "tx-1",
+          category: "Gaji",
+          description: null,
+          amount: 1000,
+          type: "income",
+          occurred_on: "2026-08-01",
+          receipt_path: null,
+          account_id: null,
+        },
+        {
+          id: "tx-2",
+          category: "Transfer",
+          description: null,
+          amount: 300,
+          type: "transfer",
+          occurred_on: "2026-08-01",
+          receipt_path: null,
+          account_id: "acc-1",
+          to_account_id: "acc-2",
+        },
+      ],
+    });
+    const { default: TransactionsTab } = await import("./TransactionsTab");
+    render(<TransactionsTab />);
+
+    await screen.findByText(/Gaji/);
+    fireEvent.change(screen.getByLabelText("Lihat bulan"), { target: { value: "2026-08" } });
+
+    // Saldo stays 1.000,00 -- would be 700,00 if the transfer leaked into
+    // expense via the old bare `else` branch.
+    const summary = await screen.findByText(/Pemasukan:/);
+    expect(summary.closest("p")?.textContent).toMatch(/Saldo: 1\.000,00.€/);
+  });
+
   it("shows a month summary and a reset button once a view month is picked", async () => {
     mockSupabase({
       txRows: [

@@ -1,9 +1,16 @@
 export type TransactionType = "income" | "expense";
 
+// A transfer isn't a real income/expense -- it's excluded from
+// TransactionType (and its narrower income/expense unions used everywhere
+// income/expense aggregates get computed) on purpose, so those call sites
+// keep filtering on exactly "income" | "expense" without needing to
+// remember to exclude transfers explicitly.
+export type TransactionKind = TransactionType | "transfer";
+
 export type Transaction = {
   id: string;
   user_id: string;
-  type: TransactionType;
+  type: TransactionKind;
   category: string;
   amount: number;
   description: string | null;
@@ -11,6 +18,8 @@ export type Transaction = {
   created_at: string;
   receipt_path: string | null;
   account_id: string | null;
+  /** Destination account for a transfer -- always null for income/expense. */
+  to_account_id: string | null;
 };
 
 export type Account = {
