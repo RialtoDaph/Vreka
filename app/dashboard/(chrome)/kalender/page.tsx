@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { buildMonthGrid, dateKey, isSameMonth } from "@/lib/calendarGrid";
+import { localDateTime, toIsoWithLocalOffset } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
 import { ghostBtnClass, primaryBtnClass, inputClass, errorBannerClass } from "@/lib/ui";
 
@@ -181,30 +182,6 @@ export default function KalenderPage() {
   function closeDay() {
     setSelectedDay(null);
     setShowAddEvent(false);
-  }
-
-  // Builds a Date from separate "YYYY-MM-DD" + "HH:mm" fields using the
-  // multi-arg Date constructor (interpreted in the browser's local
-  // timezone), instead of parsing a combined string -- parsing is what was
-  // silently producing UTC-ambiguous datetimes before.
-  function localDateTime(dateStr: string, timeStr: string): Date {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    const [hh, mm] = timeStr.split(":").map(Number);
-    return new Date(y, m - 1, d, hh, mm, 0, 0);
-  }
-
-  // Google Calendar wants an explicit UTC offset on the dateTime string;
-  // without one it's ambiguous which timezone the event is actually in.
-  function toIsoWithLocalOffset(d: Date): string {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const offsetMin = -d.getTimezoneOffset();
-    const sign = offsetMin >= 0 ? "+" : "-";
-    const offH = pad(Math.floor(Math.abs(offsetMin) / 60));
-    const offM = pad(Math.abs(offsetMin) % 60);
-    return (
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-      `T${pad(d.getHours())}:${pad(d.getMinutes())}:00${sign}${offH}:${offM}`
-    );
   }
 
   // An end clock-time at or before the start clock-time means the event

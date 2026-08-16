@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { currentMonthKey, localDateKey, localMonthKey, todayKey } from "./date";
+import {
+  currentMonthKey,
+  localDateKey,
+  localDateTime,
+  localDateTimeValue,
+  localMonthKey,
+  todayKey,
+  toIsoWithLocalOffset,
+} from "./date";
 
 const originalTZ = process.env.TZ;
 
@@ -45,5 +53,39 @@ describe("localMonthKey / currentMonthKey", () => {
 
   it("returns a well-formed YYYY-MM string", () => {
     expect(currentMonthKey()).toMatch(/^\d{4}-\d{2}$/);
+  });
+});
+
+describe("localDateTimeValue", () => {
+  it("formats a Date as YYYY-MM-DDTHH:mm using local components", () => {
+    process.env.TZ = "Asia/Jakarta"; // UTC+7
+    const d = new Date("2026-08-01T17:05:00Z"); // 00:05 WIB on Aug 2
+    expect(localDateTimeValue(d)).toBe("2026-08-02T00:05");
+  });
+});
+
+describe("localDateTime", () => {
+  it("combines a date and time string into a Date built from local components", () => {
+    process.env.TZ = "Asia/Jakarta";
+    const d = localDateTime("2026-08-02", "14:30");
+    expect(d.getFullYear()).toBe(2026);
+    expect(d.getMonth()).toBe(7); // 0-indexed
+    expect(d.getDate()).toBe(2);
+    expect(d.getHours()).toBe(14);
+    expect(d.getMinutes()).toBe(30);
+  });
+});
+
+describe("toIsoWithLocalOffset", () => {
+  it("appends the local UTC offset to a datetime string", () => {
+    process.env.TZ = "Asia/Jakarta"; // UTC+7, no DST
+    const d = localDateTime("2026-08-02", "14:30");
+    expect(toIsoWithLocalOffset(d)).toBe("2026-08-02T14:30:00+07:00");
+  });
+
+  it("uses a negative sign for negative offsets", () => {
+    process.env.TZ = "America/New_York"; // UTC-4 in August (EDT)
+    const d = localDateTime("2026-08-02", "14:30");
+    expect(toIsoWithLocalOffset(d)).toBe("2026-08-02T14:30:00-04:00");
   });
 });

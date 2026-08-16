@@ -8,6 +8,7 @@ import { localDateKey } from "@/lib/date";
 import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
 import HudPanel from "@/components/HudPanel";
 import CategorySelect from "@/components/CategorySelect";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -26,6 +27,7 @@ export default function BudgetsTab() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [monthlyLimit, setMonthlyLimit] = useState("");
@@ -118,7 +120,7 @@ export default function BudgetsTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus anggaran ini?")) return;
+    if (!(await confirm("Yakin mau hapus anggaran ini?"))) return;
     setError(null);
     const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -241,6 +243,8 @@ export default function BudgetsTab() {
           })}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 }

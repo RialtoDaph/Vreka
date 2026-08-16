@@ -38,7 +38,6 @@ describe("GmailDrafts", () => {
   });
 
   it("sends a draft after confirming, and removes it from the list", async () => {
-    vi.stubGlobal("confirm", () => true);
     stubFetch({
       "/drafts/send": { body: { ok: true } },
       "/drafts": { body: { connected: true, drafts: [DRAFT] } },
@@ -46,6 +45,7 @@ describe("GmailDrafts", () => {
     render(<GmailDrafts />);
 
     fireEvent.click(await screen.findByText("Kirim"));
+    fireEvent.click(await screen.findByText("Ya, lanjut"));
     await waitFor(() => expect(screen.queryByText("Halo")).not.toBeInTheDocument());
     expect(fetch).toHaveBeenCalledWith(
       "/api/google/gmail/drafts/send",
@@ -54,16 +54,15 @@ describe("GmailDrafts", () => {
   });
 
   it("does not send when the confirm dialog is declined", async () => {
-    vi.stubGlobal("confirm", () => false);
     stubFetch({ "/drafts": { body: { connected: true, drafts: [DRAFT] } } });
     render(<GmailDrafts />);
 
     fireEvent.click(await screen.findByText("Kirim"));
+    fireEvent.click(await screen.findByText("Batal"));
     expect(screen.getByText("Halo")).toBeInTheDocument();
   });
 
   it("discards a draft after confirming", async () => {
-    vi.stubGlobal("confirm", () => true);
     stubFetch({
       "/drafts/delete": { body: { ok: true } },
       "/drafts": { body: { connected: true, drafts: [DRAFT] } },
@@ -71,11 +70,11 @@ describe("GmailDrafts", () => {
     render(<GmailDrafts />);
 
     fireEvent.click(await screen.findByText("Buang draft"));
+    fireEvent.click(await screen.findByText("Buang"));
     await waitFor(() => expect(screen.queryByText("Halo")).not.toBeInTheDocument());
   });
 
   it("shows an error message when the send fails", async () => {
-    vi.stubGlobal("confirm", () => true);
     stubFetch({
       "/drafts/send": { ok: false, body: { error: "Token kadaluarsa." } },
       "/drafts": { body: { connected: true, drafts: [DRAFT] } },
@@ -83,6 +82,7 @@ describe("GmailDrafts", () => {
     render(<GmailDrafts />);
 
     fireEvent.click(await screen.findByText("Kirim"));
+    fireEvent.click(await screen.findByText("Ya, lanjut"));
     expect(await screen.findByText("Token kadaluarsa.")).toBeInTheDocument();
     // Still listed -- the send didn't actually succeed.
     expect(screen.getByText("Halo")).toBeInTheDocument();

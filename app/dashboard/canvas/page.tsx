@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { CanvasArrow, CanvasNode, CanvasNodeKind } from "@/lib/types";
 import { arrowEndpoints, clampZoom, toWorldPoint, zoomFromWheel, type Pan } from "@/lib/canvas";
 import { THEME } from "@/lib/theme";
+import { useConfirm } from "@/lib/useConfirm";
 
 const CARD_COLORS = [THEME.cyanGlow, THEME.amberGlow, THEME.roseGlow, THEME.mintGlow, THEME.violetGlow];
 
@@ -34,6 +35,7 @@ export default function CanvasKerjaPage() {
   const [panning, setPanning] = useState<PanState | null>(null);
   const [linkingFrom, setLinkingFrom] = useState<string | null>(null);
   const [linkCursor, setLinkCursor] = useState({ x: 0, y: 0 });
+  const { confirm, confirmDialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -181,7 +183,7 @@ export default function CanvasKerjaPage() {
   }
 
   async function deleteNode(id: string) {
-    if (!window.confirm("Yakin mau hapus kartu ini? Panah yang nyambung ke sini ikut kehapus.")) return;
+    if (!(await confirm("Yakin mau hapus kartu ini? Panah yang nyambung ke sini ikut kehapus."))) return;
     setNodes((prev) => prev.filter((n) => n.id !== id));
     setArrows((prev) => prev.filter((a) => a.from_node_id !== id && a.to_node_id !== id));
     await supabase.from("canvas_nodes").delete().eq("id", id);
@@ -503,6 +505,8 @@ export default function CanvasKerjaPage() {
         Drag kanvas kosong buat geser · klik titik cyan di pojok kartu lalu klik kartu lain buat sambung · klik titik
         warna buat ganti warna kartu · scroll atau cubit buat zoom
       </p>
+
+      {confirmDialog}
     </div>
   );
 }

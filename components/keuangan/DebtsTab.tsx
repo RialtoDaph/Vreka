@@ -7,6 +7,7 @@ import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { currentMonthKey, todayKey } from "@/lib/date";
 import { sumPaidByDebt, remainingDebtAmount } from "@/lib/debts";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -38,6 +39,7 @@ export default function DebtsTab() {
   const [undoingId, setUndoingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("semua");
+  const { confirm, confirmDialog } = useConfirm();
 
   const [partyName, setPartyName] = useState("");
   const [direction, setDirection] = useState<DebtDirection>("i_owe");
@@ -278,7 +280,7 @@ export default function DebtsTab() {
   // app's cash flow stay in sync automatically.
   async function handleUndoPayment(payment: DebtPayment) {
     if (undoingId) return;
-    if (!window.confirm("Batalkan pembayaran ini? Transaksinya ikut kehapus.")) return;
+    if (!(await confirm("Batalkan pembayaran ini? Transaksinya ikut kehapus."))) return;
     setUndoingId(payment.id);
     setError(null);
     const previousPayments = payments;
@@ -313,7 +315,7 @@ export default function DebtsTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus catatan utang/piutang ini? Riwayat pembayarannya ikut hilang.")) return;
+    if (!(await confirm("Yakin mau hapus catatan utang/piutang ini? Riwayat pembayarannya ikut hilang."))) return;
     setError(null);
     const previousItems = items;
     const previousPayments = payments;
@@ -633,6 +635,8 @@ export default function DebtsTab() {
           </ul>
         )}
       </HudPanel>
+
+      {confirmDialog}
     </div>
   );
 }

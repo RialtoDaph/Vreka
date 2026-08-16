@@ -8,6 +8,7 @@ import { currentMonthKey, todayKey } from "@/lib/date";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
 import CategorySelect from "@/components/CategorySelect";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -27,6 +28,7 @@ export default function RecurringTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [type, setType] = useState<TransactionType>("expense");
   const [name, setName] = useState("");
@@ -138,7 +140,7 @@ export default function RecurringTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus pos tetap ini? Riwayat centangnya ikut hilang.")) return;
+    if (!(await confirm("Yakin mau hapus pos tetap ini? Riwayat centangnya ikut hilang."))) return;
     setError(null);
     const previousItems = items;
     const previousChecks = checks;
@@ -367,6 +369,8 @@ export default function RecurringTab() {
           onDelete={handleDelete}
         />
       </div>
+
+      {confirmDialog}
     </div>
   );
 }

@@ -5,8 +5,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Task, TaskPriority, TaskStatus, TaskSubtask } from "@/lib/types";
 import { formatDateTime, daysUntil } from "@/lib/format";
+import { localDateTimeValue } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
 import HabitsPanel from "@/components/kerjaan/HabitsPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -53,10 +55,7 @@ const COLUMNS: { key: TaskStatus; label: string; tone: string }[] = [
 // save -- an <input type="datetime-local"> needs "YYYY-MM-DDTHH:mm" in the
 // browser's local time, not the raw stored ISO/UTC string.
 function toDatetimeLocalValue(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return iso ? localDateTimeValue(new Date(iso)) : "";
 }
 
 export default function KerjaanPage() {
@@ -72,6 +71,7 @@ export default function KerjaanPage() {
   const [subtaskEditValue, setSubtaskEditValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -191,7 +191,7 @@ export default function KerjaanPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus to-do ini? Sub-task-nya ikut kehapus.")) return;
+    if (!(await confirm("Yakin mau hapus to-do ini? Sub-task-nya ikut kehapus."))) return;
     setError(null);
     const previousItems = items;
     const previousSubtasks = subtasksByTask;
@@ -635,6 +635,8 @@ export default function KerjaanPage() {
       )}
 
       <HabitsPanel />
+
+      {confirmDialog}
     </div>
   );
 }

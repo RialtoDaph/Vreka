@@ -116,13 +116,13 @@ describe("CanvasKerjaPage", () => {
   });
 
   it("deletes a node after confirming", async () => {
-    vi.stubGlobal("confirm", () => true);
     mockSupabase({ nodes: [STICKY] });
     const { default: CanvasKerjaPage } = await import("./page");
     render(<CanvasKerjaPage />);
 
     await screen.findByDisplayValue("Catatan awal");
     fireEvent.click(screen.getByLabelText("Hapus kartu sticky"));
+    fireEvent.click(await screen.findByText("Ya, lanjut"));
 
     await waitFor(() => expect(screen.queryByDisplayValue("Catatan awal")).not.toBeInTheDocument());
     expect(
@@ -131,13 +131,13 @@ describe("CanvasKerjaPage", () => {
   });
 
   it("keeps the node when the delete confirmation is declined", async () => {
-    vi.stubGlobal("confirm", () => false);
     mockSupabase({ nodes: [STICKY] });
     const { default: CanvasKerjaPage } = await import("./page");
     render(<CanvasKerjaPage />);
 
     await screen.findByDisplayValue("Catatan awal");
     fireEvent.click(screen.getByLabelText("Hapus kartu sticky"));
+    fireEvent.click(await screen.findByText("Batal"));
 
     expect(screen.getByDisplayValue("Catatan awal")).toBeInTheDocument();
   });

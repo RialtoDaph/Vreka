@@ -6,6 +6,7 @@ import { Habit, HabitCheck } from "@/lib/types";
 import { buildHeatmapCells, computeStreak } from "@/lib/habits";
 import { todayKey } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import { inputClass, ghostBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 type HeatmapRange = 7 | 30;
@@ -21,6 +22,7 @@ export default function HabitsPanel() {
   const [heatmapRange, setHeatmapRange] = useState<HeatmapRange>(7);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const { confirm, confirmDialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -123,7 +125,7 @@ export default function HabitsPanel() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus kebiasaan ini? Riwayat streak-nya ikut hilang.")) return;
+    if (!(await confirm("Yakin mau hapus kebiasaan ini? Riwayat streak-nya ikut hilang."))) return;
     setError(null);
     const previous = habits;
     setHabits((prev) => prev.filter((h) => h.id !== id));
@@ -135,114 +137,118 @@ export default function HabitsPanel() {
   }
 
   return (
-    <HudPanel>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-display font-semibold text-white tracking-wide">Kebiasaan</h2>
-        {habits.length > 0 && (
-          <div className="flex gap-0.5 border border-line rounded-md p-0.5">
-            {([7, 30] as HeatmapRange[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => setHeatmapRange(r)}
-                className={`px-2.5 py-1 font-mono text-[10px] uppercase rounded-[3px] ${
-                  heatmapRange === r ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-500"
-                }`}
-              >
-                {r} hari
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {error && <p className={`${errorBannerClass} mb-3`}>{error}</p>}
-
-      <form onSubmit={handleAdd} className="flex gap-2 mb-4">
-        <input
-          type="text"
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          placeholder="Kebiasaan baru — misal Olahraga, Baca buku"
-          className={inputClass}
-        />
-        <button type="submit" disabled={adding} className={ghostBtnClass}>
-          + Tambah
-        </button>
-      </form>
-
-      {loading ? (
-        <p className="text-sm text-slate-500">Memuat...</p>
-      ) : habits.length === 0 ? (
-        <p className="text-sm text-slate-500">Belum ada kebiasaan yang dilacak.</p>
-      ) : (
-        <ul className="divide-y divide-line/60">
-          {habits.map((habit) => {
-            const periods = new Set((checksByHabit[habit.id] ?? []).map((c) => c.period));
-            const checkedToday = periods.has(todayKey());
-            const streak = computeStreak(periods);
-            const cells = buildHeatmapCells(periods, heatmapRange);
-            const cols = heatmapRange === 7 ? 7 : 15;
-            return (
-              <li key={habit.id} className="py-2.5 first:pt-0 last:pb-0">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={checkedToday}
-                    onChange={() => toggleToday(habit)}
-                    className="h-4 w-4 shrink-0 cursor-pointer accent-cyan-glow"
-                  />
-                  {editingId === habit.id ? (
-                    <input
-                      type="text"
-                      autoFocus
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onBlur={() => saveEdit(habit)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          saveEdit(habit);
-                        } else if (e.key === "Escape") {
-                          setEditingId(null);
-                        }
-                      }}
-                      className={`${inputClass} text-sm py-1 flex-1`}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => startEdit(habit)}
-                      title="Klik buat ganti nama"
-                      className="text-sm text-slate-200 flex-1 truncate text-left bg-transparent border-none p-0 cursor-text"
-                    >
-                      {habit.title}
-                    </button>
-                  )}
-                  {streak > 0 && (
-                    <span className="text-xs font-mono text-amber-glow shrink-0">🔥 {streak} hari</span>
-                  )}
-                  <button onClick={() => handleDelete(habit.id)} className={dangerBtnClass}>
-                    Hapus
-                  </button>
-                </div>
-                <div
-                  className="grid gap-[3px] mt-2 ml-7"
-                  style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, maxWidth: 220 }}
+    <>
+      <HudPanel>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display font-semibold text-white tracking-wide">Kebiasaan</h2>
+          {habits.length > 0 && (
+            <div className="flex gap-0.5 border border-line rounded-md p-0.5">
+              {([7, 30] as HeatmapRange[]).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setHeatmapRange(r)}
+                  className={`px-2.5 py-1 font-mono text-[10px] uppercase rounded-[3px] ${
+                    heatmapRange === r ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-500"
+                  }`}
                 >
-                  {cells.map((done, i) => (
-                    <span
-                      key={i}
-                      title={done ? "Selesai" : "Nggak dicentang"}
-                      className={`aspect-square rounded-[2px] ${done ? "bg-cyan-glow" : "bg-line"}`}
-                      style={{ opacity: done ? 1 : 0.6 }}
+                  {r} hari
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {error && <p className={`${errorBannerClass} mb-3`}>{error}</p>}
+
+        <form onSubmit={handleAdd} className="flex gap-2 mb-4">
+          <input
+            type="text"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="Kebiasaan baru — misal Olahraga, Baca buku"
+            className={inputClass}
+          />
+          <button type="submit" disabled={adding} className={ghostBtnClass}>
+            + Tambah
+          </button>
+        </form>
+
+        {loading ? (
+          <p className="text-sm text-slate-500">Memuat...</p>
+        ) : habits.length === 0 ? (
+          <p className="text-sm text-slate-500">Belum ada kebiasaan yang dilacak.</p>
+        ) : (
+          <ul className="divide-y divide-line/60">
+            {habits.map((habit) => {
+              const periods = new Set((checksByHabit[habit.id] ?? []).map((c) => c.period));
+              const checkedToday = periods.has(todayKey());
+              const streak = computeStreak(periods);
+              const cells = buildHeatmapCells(periods, heatmapRange);
+              const cols = heatmapRange === 7 ? 7 : 15;
+              return (
+                <li key={habit.id} className="py-2.5 first:pt-0 last:pb-0">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={checkedToday}
+                      onChange={() => toggleToday(habit)}
+                      className="h-4 w-4 shrink-0 cursor-pointer accent-cyan-glow"
                     />
-                  ))}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </HudPanel>
+                    {editingId === habit.id ? (
+                      <input
+                        type="text"
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveEdit(habit)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveEdit(habit);
+                          } else if (e.key === "Escape") {
+                            setEditingId(null);
+                          }
+                        }}
+                        className={`${inputClass} text-sm py-1 flex-1`}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(habit)}
+                        title="Klik buat ganti nama"
+                        className="text-sm text-slate-200 flex-1 truncate text-left bg-transparent border-none p-0 cursor-text"
+                      >
+                        {habit.title}
+                      </button>
+                    )}
+                    {streak > 0 && (
+                      <span className="text-xs font-mono text-amber-glow shrink-0">🔥 {streak} hari</span>
+                    )}
+                    <button onClick={() => handleDelete(habit.id)} className={dangerBtnClass}>
+                      Hapus
+                    </button>
+                  </div>
+                  <div
+                    className="grid gap-[3px] mt-2 ml-7"
+                    style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, maxWidth: 220 }}
+                  >
+                    {cells.map((done, i) => (
+                      <span
+                        key={i}
+                        title={done ? "Selesai" : "Nggak dicentang"}
+                        className={`aspect-square rounded-[2px] ${done ? "bg-cyan-glow" : "bg-line"}`}
+                        style={{ opacity: done ? 1 : 0.6 }}
+                      />
+                    ))}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </HudPanel>
+
+      {confirmDialog}
+    </>
   );
 }
