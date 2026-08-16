@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/lib/useConfirm";
 import { ghostBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 type Draft = { id: string; to: string; subject: string; snippet: string };
@@ -13,6 +14,7 @@ export default function GmailDrafts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -37,7 +39,11 @@ export default function GmailDrafts() {
   }, []);
 
   async function handleSend(draft: Draft) {
-    if (!window.confirm(`Kirim email ke ${draft.to || "(?)"} — "${draft.subject || "(tanpa subjek)"}"?`)) return;
+    const ok = await confirm(
+      `Kirim email ke ${draft.to || "(?)"} — "${draft.subject || "(tanpa subjek)"}"?`,
+      { tone: "default" }
+    );
+    if (!ok) return;
     setBusyId(draft.id);
     setError(null);
     try {
@@ -60,7 +66,7 @@ export default function GmailDrafts() {
   }
 
   async function handleDiscard(draft: Draft) {
-    if (!window.confirm("Buang draft ini? Nggak bakal kekirim.")) return;
+    if (!(await confirm("Buang draft ini? Nggak bakal kekirim.", { confirmLabel: "Buang" }))) return;
     setBusyId(draft.id);
     setError(null);
     try {
@@ -125,6 +131,8 @@ export default function GmailDrafts() {
       <button onClick={load} className={`${ghostBtnClass} mt-3`}>
         ↻ Refresh
       </button>
+
+      {confirmDialog}
     </div>
   );
 }

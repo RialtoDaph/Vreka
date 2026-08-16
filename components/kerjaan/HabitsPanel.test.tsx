@@ -70,13 +70,13 @@ describe("HabitsPanel", () => {
   });
 
   it("deletes a habit after confirming", async () => {
-    vi.stubGlobal("confirm", () => true);
     mockSupabase([{ id: "h1", title: "Baca buku", user_id: "u1", created_at: "2026-01-01" }], []);
     const { default: HabitsPanel } = await import("./HabitsPanel");
     render(<HabitsPanel />);
 
     await screen.findByText("Baca buku");
     fireEvent.click(screen.getByText("Hapus"));
+    fireEvent.click(await screen.findByText("Ya, lanjut"));
 
     await waitFor(() => expect(screen.queryByText("Baca buku")).not.toBeInTheDocument());
   });

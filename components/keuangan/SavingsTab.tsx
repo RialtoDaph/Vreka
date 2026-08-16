@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { SavingsGoal } from "@/lib/types";
 import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -24,6 +25,7 @@ export default function SavingsTab() {
   const [addFundId, setAddFundId] = useState<string | null>(null);
   const [addFundValue, setAddFundValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -130,7 +132,7 @@ export default function SavingsTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus target tabungan ini?")) return;
+    if (!(await confirm("Yakin mau hapus target tabungan ini?"))) return;
     setError(null);
     const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -283,6 +285,8 @@ export default function SavingsTab() {
           })}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 }

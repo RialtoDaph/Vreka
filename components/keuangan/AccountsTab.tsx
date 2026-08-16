@@ -6,6 +6,7 @@ import { Account } from "@/lib/types";
 import { buildAccountBalances } from "@/lib/accountBalances";
 import { formatCurrency, parseAmount } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -31,6 +32,7 @@ export default function AccountsTab() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [name, setName] = useState("");
   const [startingBalance, setStartingBalance] = useState("");
@@ -131,7 +133,12 @@ export default function AccountsTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus rekening ini? Transaksi yang udah ditandain ke sini nggak akan ikut kehapus, cuma nggak ditandain lagi.")) return;
+    if (
+      !(await confirm(
+        "Yakin mau hapus rekening ini? Transaksi yang udah ditandain ke sini nggak akan ikut kehapus, cuma nggak ditandain lagi."
+      ))
+    )
+      return;
     setError(null);
     const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -242,6 +249,8 @@ export default function AccountsTab() {
           Kekayaan Total, tandain di tab Transaksi kalau mau lebih rapi).
         </p>
       )}
+
+      {confirmDialog}
     </div>
   );
 }

@@ -299,7 +299,6 @@ describe("DebtsTab", () => {
   });
 
   it("undoing a payment deletes its transaction and removes the cycle tag", async () => {
-    vi.stubGlobal("confirm", () => true);
     const deletedTx: string[] = [];
     mockSupabase({
       debts: [
@@ -332,6 +331,7 @@ describe("DebtsTab", () => {
     render(<DebtsTab />);
 
     fireEvent.click(await screen.findByText("Batalkan"));
+    fireEvent.click(await screen.findByText("Ya, lanjut"));
     await waitFor(() => expect(screen.queryByText("BULAN INI LUNAS")).not.toBeInTheDocument());
     expect(deletedTx).toEqual(["tx-1"]);
     expect(screen.getByText("+ Bayar")).toBeInTheDocument();

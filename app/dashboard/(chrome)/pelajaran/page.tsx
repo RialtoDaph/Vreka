@@ -6,6 +6,7 @@ import { Flashcard, StudyNote, StudyResource } from "@/lib/types";
 import { nextReview, type ReviewRating } from "@/lib/spacedRepetition";
 import { computeStreak } from "@/lib/studyStreak";
 import { formatDate } from "@/lib/format";
+import { useConfirm } from "@/lib/useConfirm";
 import HudPanel from "@/components/HudPanel";
 import {
   inputClass,
@@ -181,6 +182,7 @@ export default function PelajaranPage() {
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -379,7 +381,7 @@ export default function PelajaranPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus topik ini? Catatan, resource, dan riwayat sesinya ikut hilang.")) return;
+    if (!(await confirm("Yakin mau hapus topik ini? Catatan, resource, dan riwayat sesinya ikut hilang."))) return;
     setError(null);
     const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -899,6 +901,8 @@ export default function PelajaranPage() {
           })}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 }

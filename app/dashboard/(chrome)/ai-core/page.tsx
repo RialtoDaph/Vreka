@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useVoiceAssistant } from "@/lib/assistant/useVoiceAssistant";
+import { useQueryParamNotice } from "@/lib/useQueryParamNotice";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
@@ -100,16 +101,12 @@ export default function AiCorePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+  useQueryParamNotice(["gmail_error", "gmail"], (params) => {
     const gmailError = params.get("gmail_error");
     const gmailConnected = params.get("gmail");
     if (gmailError) setGmailNotice(`Gagal connect Gmail: ${gmailError}`);
     else if (gmailConnected === "connected") setGmailNotice("Gmail berhasil terhubung.");
-    if (gmailError || gmailConnected) {
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, []);
+  });
 
   useEffect(() => {
     async function loadGmailStatus() {

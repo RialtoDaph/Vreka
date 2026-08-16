@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useQueryParamNotice } from "@/lib/useQueryParamNotice";
 import HudPanel from "@/components/HudPanel";
 
 export default function LoginPage() {
@@ -17,16 +18,13 @@ export default function LoginPage() {
 
   // /auth/callback bounces its failures back here as ?error=, and
   // /mfa's recovery-code flow bounces back here as ?notice= after
-  // disabling 2FA. Read them off window rather than useSearchParams so
-  // this page stays statically rendered.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+  // disabling 2FA.
+  useQueryParamNotice(["error", "notice"], (params) => {
     const reason = params.get("error");
     const note = params.get("notice");
     if (reason) setError(reason);
     if (note) setNotice(note);
-    if (reason || note) window.history.replaceState(null, "", window.location.pathname);
-  }, []);
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

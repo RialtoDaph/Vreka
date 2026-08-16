@@ -8,6 +8,7 @@ import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_
 import { downloadCsv } from "@/lib/csv";
 import HudPanel from "@/components/HudPanel";
 import CategorySelect from "@/components/CategorySelect";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -33,6 +34,7 @@ export default function TransactionsTab() {
   const [exporting, setExporting] = useState(false);
   const [viewMonth, setViewMonth] = useState("");
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [type, setType] = useState<TransactionKind>("expense");
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
@@ -312,7 +314,7 @@ export default function TransactionsTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus transaksi ini?")) return;
+    if (!(await confirm("Yakin mau hapus transaksi ini?"))) return;
     setError(null);
     const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -675,6 +677,8 @@ export default function TransactionsTab() {
           </div>
         )}
       </HudPanel>
+
+      {confirmDialog}
     </div>
   );
 }

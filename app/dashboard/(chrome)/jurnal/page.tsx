@@ -8,6 +8,7 @@ import { todayKey } from "@/lib/date";
 import { promptForDate } from "@/lib/journalPrompts";
 import { buildHeatmapCells, computeStreak } from "@/lib/habits";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import { inputClass, primaryBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 export default function JurnalPage() {
@@ -17,6 +18,7 @@ export default function JurnalPage() {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const today = todayKey();
   const [selectedDate, setSelectedDate] = useState(today);
@@ -116,7 +118,7 @@ export default function JurnalPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus catatan ini?")) return;
+    if (!(await confirm("Yakin mau hapus catatan ini?"))) return;
     setError(null);
     const previous = entries;
     setEntries((prev) => prev.filter((e) => e.id !== id));
@@ -236,6 +238,8 @@ export default function JurnalPage() {
           ))}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 }
