@@ -2,46 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Circle, type LucideIcon } from "lucide-react";
 import type { SearchResultItem } from "@/lib/search";
+import { NAV_MODULES } from "@/lib/navModules";
 
-type Command = { label: string; href: string; icon: string; keywords?: string };
-type PaletteItem = { key: string; label: string; sublabel?: string; icon: string; href: string };
+type PaletteItem = { key: string; label: string; sublabel?: string; icon: LucideIcon; href: string };
 
-const SOURCE_ICON: Record<SearchResultItem["source"], string> = {
-  transaction: "⌬",
-  task: "▤",
-  note: "◎",
-  journal: "✎",
-  memory: "✦",
+const SOURCE_ICON: Record<SearchResultItem["source"], LucideIcon> = {
+  transaction: NAV_MODULES.find((m) => m.href === "/dashboard/keuangan")!.icon,
+  task: NAV_MODULES.find((m) => m.href === "/dashboard/kerjaan")!.icon,
+  note: NAV_MODULES.find((m) => m.href === "/dashboard/pelajaran")!.icon,
+  journal: NAV_MODULES.find((m) => m.href === "/dashboard/jurnal")!.icon,
+  memory: NAV_MODULES.find((m) => m.href === "/dashboard/asisten")!.icon,
 };
-
-const COMMANDS: Command[] = [
-  { label: "Memory Map", href: "/dashboard", icon: "◈", keywords: "overview graph" },
-  {
-    label: "Ringkasan",
-    href: "/dashboard/ringkasan",
-    icon: "☀",
-    keywords: "ringkasan harian briefing pagi prioritas",
-  },
-  {
-    label: "Keuangan",
-    href: "/dashboard/keuangan",
-    icon: "⌬",
-    keywords: "transaksi anggaran analitik pos tetap utang piutang tabungan struk",
-  },
-  { label: "Kerjaan", href: "/dashboard/kerjaan", icon: "▤", keywords: "to-do kanban kebiasaan habit project" },
-  { label: "Canvas", href: "/dashboard/canvas", icon: "▧", keywords: "canvas papan sticky note whiteboard" },
-  { label: "Pelajaran", href: "/dashboard/pelajaran", icon: "◎", keywords: "kuis catatan belajar timer resource" },
-  { label: "Kalender", href: "/dashboard/kalender", icon: "▦", keywords: "jadwal deadline agenda" },
-  { label: "Jurnal", href: "/dashboard/jurnal", icon: "✎", keywords: "diary catatan harian refleksi" },
-  {
-    label: "Timeline",
-    href: "/dashboard/timeline",
-    icon: "⧗",
-    keywords: "timeline kehidupan milestone biografi riwayat hidup",
-  },
-  { label: "Aslan", href: "/dashboard/asisten", icon: "✦", keywords: "chat asisten ai gmail telegram export aktivitas" },
-];
 
 export default function CommandPalette() {
   const router = useRouter();
@@ -130,7 +103,7 @@ export default function CommandPalette() {
     }
   }
 
-  const filtered = COMMANDS.filter((c) => {
+  const filtered = NAV_MODULES.filter((c) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
     return c.label.toLowerCase().includes(q) || (c.keywords ?? "").includes(q);
@@ -142,7 +115,7 @@ export default function CommandPalette() {
       key: `${r.source}-${r.id}`,
       label: r.title,
       sublabel: r.snippet,
-      icon: SOURCE_ICON[r.source] ?? "•",
+      icon: SOURCE_ICON[r.source] ?? Circle,
       href: r.href,
     })),
   ];
@@ -205,7 +178,7 @@ export default function CommandPalette() {
                     i === activeIndex ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-300"
                   }`}
                 >
-                  <span aria-hidden="true">{item.icon}</span>
+                  <item.icon aria-hidden="true" className="w-4 h-4 shrink-0" strokeWidth={1.75} />
                   <span className="flex-1 min-w-0">
                     <span className="block truncate">{item.label}</span>
                     {item.sublabel ? (

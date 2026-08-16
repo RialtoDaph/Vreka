@@ -13,6 +13,7 @@ import {
 } from "@/lib/lifeTimeline";
 import { formatDate } from "@/lib/format";
 import { localDateKey } from "@/lib/date";
+import { Rocket } from "lucide-react";
 import HudPanel from "@/components/HudPanel";
 import { errorBannerClass, ghostBtnClass, inputClass, labelClass, primaryBtnClass } from "@/lib/ui";
 
@@ -313,8 +314,9 @@ export default function TimelineKehidupanPage() {
 
           <div className="flex items-center gap-3 my-6">
             <span className="flex-1 h-px bg-gradient-to-r from-transparent to-cyan-glow/40" />
-            <span className="font-mono text-[10.5px] uppercase tracking-wider text-cyan-glow whitespace-nowrap">
-              ✦ Mulai pakai Vreka{startDate ? ` · ${formatDate(startDate)}` : ""}
+            <span className="font-mono text-[10.5px] uppercase tracking-wider text-cyan-glow whitespace-nowrap flex items-center gap-1.5">
+              <Rocket aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
+              Mulai pakai Vreka{startDate ? ` · ${formatDate(startDate)}` : ""}
             </span>
             <span className="flex-1 h-px bg-gradient-to-l from-transparent to-cyan-glow/40" />
           </div>

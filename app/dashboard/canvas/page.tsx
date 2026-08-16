@@ -7,6 +7,7 @@ import type { CanvasArrow, CanvasNode, CanvasNodeKind } from "@/lib/types";
 import { arrowEndpoints, clampZoom, toWorldPoint, zoomFromWheel, type Pan } from "@/lib/canvas";
 import { THEME } from "@/lib/theme";
 import { useConfirm } from "@/lib/useConfirm";
+import { StickyNote, ListTodo } from "lucide-react";
 
 const CARD_COLORS = [THEME.cyanGlow, THEME.amberGlow, THEME.roseGlow, THEME.mintGlow, THEME.violetGlow];
 
@@ -370,7 +371,11 @@ export default function CanvasKerjaPage() {
                 }}
               >
                 <div className="flex items-center justify-between mb-1.5 text-xs" style={{ color: accent }}>
-                  <span aria-hidden="true">{isSticky ? "✎" : "▤"}</span>
+                  {isSticky ? (
+                    <StickyNote aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  ) : (
+                    <ListTodo aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  )}
                   <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
                     {CARD_COLORS.map((c) => (
                       <button

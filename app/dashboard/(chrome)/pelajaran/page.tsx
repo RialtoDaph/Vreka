@@ -7,6 +7,7 @@ import { nextReview, type ReviewRating } from "@/lib/spacedRepetition";
 import { computeStreak } from "@/lib/studyStreak";
 import { formatDate } from "@/lib/format";
 import { useConfirm } from "@/lib/useConfirm";
+import { Coffee, Timer, Flame, Brain, Layers, Link2, X, Sparkles, PartyPopper } from "lucide-react";
 import HudPanel from "@/components/HudPanel";
 import {
   inputClass,
@@ -148,8 +149,13 @@ function PomodoroTimer() {
   return (
     <HudPanel glow className="flex items-center justify-between gap-4 flex-wrap">
       <div>
-        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1">
-          {isBreak ? "⏸ Waktunya istirahat" : "🍅 Fokus Pomodoro"}
+        <p className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1">
+          {isBreak ? (
+            <Coffee aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
+          ) : (
+            <Timer aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
+          )}
+          {isBreak ? "Waktunya istirahat" : "Fokus Pomodoro"}
           {cycles > 0 ? ` · ${cycles} sesi selesai` : ""}
         </p>
         <p className={`font-mono text-3xl font-bold ${isBreak ? "text-mint-glow" : "text-cyan-glow"}`}>
@@ -605,7 +611,10 @@ export default function PelajaranPage() {
             Pelajaran
           </h1>
           {streak > 0 && (
-            <p className="font-mono text-xs text-amber-glow mt-1">🔥 {streak} hari beruntun belajar</p>
+            <p className="flex items-center gap-1.5 font-mono text-xs text-amber-glow mt-1">
+              <Flame aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
+              {streak} hari beruntun belajar
+            </p>
           )}
         </div>
         <button onClick={() => setShowForm((s) => !s)} className={primaryBtnClass}>
@@ -768,16 +777,18 @@ export default function PelajaranPage() {
                   {note.content && (
                     <button
                       onClick={() => startQuiz(note)}
-                      className="text-xs font-mono text-amber-glow/80 hover:text-amber-glow"
+                      className="flex items-center gap-1 text-xs font-mono text-amber-glow/80 hover:text-amber-glow"
                     >
-                      🧠 Mode Kuis
+                      <Brain aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      Mode Kuis
                     </button>
                   )}
                   <button
                     onClick={() => setFlashcardNoteId(flashcardNoteId === note.id ? null : note.id)}
-                    className="text-xs font-mono text-mint-glow/80 hover:text-mint-glow"
+                    className="flex items-center gap-1 text-xs font-mono text-mint-glow/80 hover:text-mint-glow"
                   >
-                    🗂️ Kartu
+                    <Layers aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    Kartu
                     {(() => {
                       const due = (flashcardsByNote[note.id] ?? []).filter(
                         (c) => new Date(c.due_at) <= new Date()
@@ -824,15 +835,17 @@ export default function PelajaranPage() {
                                 href={r.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-cyan-glow/80 hover:text-cyan-glow truncate flex-1"
+                                className="flex items-center gap-1 text-xs text-cyan-glow/80 hover:text-cyan-glow truncate flex-1"
                               >
-                                🔗 {r.label}
+                                <Link2 aria-hidden="true" className="w-3 h-3 shrink-0" strokeWidth={2} />
+                                <span className="truncate">{r.label}</span>
                               </a>
                               <button
                                 onClick={() => deleteResource(r)}
-                                className="text-[10px] text-rose-glow/70 hover:text-rose-glow font-mono shrink-0"
+                                aria-label={`Hapus resource ${r.label}`}
+                                className="text-rose-glow/70 hover:text-rose-glow shrink-0"
                               >
-                                ✕
+                                <X aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                               </button>
                             </li>
                           ))}
@@ -1137,8 +1150,19 @@ function FlashcardPanel({
 
           {note.content && (
             <div>
-              <button onClick={handleGenerate} disabled={generating} className={ghostBtnClass}>
-                {generating ? "Bikin kartu..." : "✨ Generate dari Catatan"}
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className={`${ghostBtnClass} inline-flex items-center gap-1.5`}
+              >
+                {generating ? (
+                  "Bikin kartu..."
+                ) : (
+                  <>
+                    <Sparkles aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    Generate dari Catatan
+                  </>
+                )}
               </button>
               {generateError && <p className="text-xs text-rose-glow mt-1.5">{generateError}</p>}
             </div>
@@ -1191,9 +1215,10 @@ function FlashcardPanel({
                   </span>
                   <button
                     onClick={() => onDelete(c)}
-                    className="text-[10px] text-rose-glow/70 hover:text-rose-glow font-mono shrink-0"
+                    aria-label={`Hapus kartu ${c.front}`}
+                    className="text-rose-glow/70 hover:text-rose-glow shrink-0"
                   >
-                    ✕
+                    <X aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                   </button>
                 </li>
               ))}
@@ -1206,7 +1231,10 @@ function FlashcardPanel({
         </>
       ) : reviewQueue.length === 0 ? (
         <div className="text-center space-y-2 py-2">
-          <p className="text-sm text-mint-glow">🎉 Review selesai! {reviewedCount} kartu direview.</p>
+          <p className="flex items-center justify-center gap-1.5 text-sm text-mint-glow">
+            <PartyPopper aria-hidden="true" className="w-4 h-4" strokeWidth={1.75} />
+            Review selesai! {reviewedCount} kartu direview.
+          </p>
           <button onClick={() => setMode("list")} className={ghostBtnClass}>
             Kembali
           </button>

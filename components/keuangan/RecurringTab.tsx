@@ -9,6 +9,7 @@ import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_
 import CategorySelect from "@/components/CategorySelect";
 import HudPanel from "@/components/HudPanel";
 import { useConfirm } from "@/lib/useConfirm";
+import { Zap } from "lucide-react";
 import {
   inputClass,
   labelClass,
@@ -450,7 +451,11 @@ function RecurringSection({
                   <p className="text-[11px] font-mono text-slate-600">
                     {item.category}
                     {item.auto_post && (
-                      <span className="text-cyan-glow"> · ⚡ auto tgl {item.day_of_month}</span>
+                      <span className="text-cyan-glow inline-flex items-center gap-1">
+                        {" · "}
+                        <Zap aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
+                        auto tgl {item.day_of_month}
+                      </span>
                     )}
                   </p>
                 </div>

@@ -122,7 +122,7 @@ describe("PelajaranPage (mode kuis)", () => {
     const { default: PelajaranPage } = await import("./page");
     render(<PelajaranPage />);
 
-    fireEvent.click(await screen.findByText("🧠 Mode Kuis"));
+    fireEvent.click(await screen.findByText("Mode Kuis"));
     expect(await screen.findByText(/Artikel netral\?/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("das"));
@@ -159,7 +159,7 @@ describe("PelajaranPage (mode kuis)", () => {
     const { default: PelajaranPage } = await import("./page");
     render(<PelajaranPage />);
 
-    fireEvent.click(await screen.findByText("🧠 Mode Kuis"));
+    fireEvent.click(await screen.findByText("Mode Kuis"));
     expect(await screen.findByText(/Artikel netral\?/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("der")); // wrong answer -> 0%
@@ -192,7 +192,7 @@ describe("PelajaranPage (mode kuis)", () => {
     const { default: PelajaranPage } = await import("./page");
     render(<PelajaranPage />);
 
-    fireEvent.click(await screen.findByText("🧠 Mode Kuis"));
+    fireEvent.click(await screen.findByText("Mode Kuis"));
     expect(
       await screen.findByText("Catatan ini belum ada isinya, nggak bisa dibikin kuis.")
     ).toBeInTheDocument();
@@ -389,7 +389,7 @@ describe("PelajaranPage (flashcards)", () => {
     const { default: PelajaranPage } = await import("./page");
     render(<PelajaranPage />);
 
-    fireEvent.click(await screen.findByText(/🗂️ Kartu/));
+    fireEvent.click(await screen.findByText(/Kartu/));
     fireEvent.change(screen.getByPlaceholderText("Depan (kata/istilah)"), { target: { value: "though" } });
     fireEvent.change(screen.getByPlaceholderText("Belakang (jawaban)"), { target: { value: "walaupun" } });
     fireEvent.click(screen.getByText("+"));
@@ -417,7 +417,7 @@ describe("PelajaranPage (flashcards)", () => {
     const { default: PelajaranPage } = await import("./page");
     render(<PelajaranPage />);
 
-    fireEvent.click(await screen.findByText(/🗂️ Kartu \(1 due\)/));
+    fireEvent.click(await screen.findByText(/Kartu \(1 due\)/));
     fireEvent.click(await screen.findByText("Mulai Review (1)"));
 
     expect(await screen.findByText("though")).toBeInTheDocument();
@@ -448,9 +448,9 @@ describe("PelajaranPage (flashcards)", () => {
     const { default: PelajaranPage } = await import("./page");
     render(<PelajaranPage />);
 
-    fireEvent.click(await screen.findByText(/🗂️ Kartu/));
+    fireEvent.click(await screen.findByText(/Kartu/));
     expect(await screen.findByText("though")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("✕"));
+    fireEvent.click(screen.getByLabelText("Hapus kartu though"));
 
     await waitFor(() => expect(screen.queryByText("though")).not.toBeInTheDocument());
   });
@@ -468,8 +468,8 @@ describe("PelajaranPage (flashcards)", () => {
     const { default: PelajaranPage } = await import("./page");
     render(<PelajaranPage />);
 
-    fireEvent.click(await screen.findByText(/🗂️ Kartu/));
-    fireEvent.click(screen.getByText("✨ Generate dari Catatan"));
+    fireEvent.click(await screen.findByText(/Kartu/));
+    fireEvent.click(screen.getByText("Generate dari Catatan"));
 
     expect(await screen.findByText("though")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Simpan Terpilih"));
