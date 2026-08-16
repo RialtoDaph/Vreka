@@ -2,11 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   LabelList,
   Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,14 +19,25 @@ import {
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/format";
-import { CHART_AXIS, CHART_EXPENSE, CHART_GRID, CHART_INCOME } from "@/lib/chartColors";
+import { CATEGORY_COLORS, CHART_AXIS, CHART_EXPENSE, CHART_GRID, CHART_INCOME, CHART_OTHER } from "@/lib/chartColors";
+import { buildAccountBalances } from "@/lib/accountBalances";
+import { THEME } from "@/lib/theme";
+import type { Account } from "@/lib/types";
 import HudPanel from "@/components/HudPanel";
 
-type TxRow = { type: "income" | "expense" | "transfer"; category: string; amount: number; occurred_on: string };
+type TxRow = {
+  type: "income" | "expense" | "transfer";
+  category: string;
+  amount: number;
+  occurred_on: string;
+  account_id: string | null;
+  to_account_id: string | null;
+};
 
 type MonthPoint = { key: string; label: string; income: number; expense: number };
 
 type CategoryPoint = { category: string; amount: number };
+type CategorySlice = CategoryPoint & { color: string };
 
 const MONTHS_BACK = 6;
 
@@ -68,19 +84,22 @@ function CurrencyTooltip({
 export default function AnalyticsTab() {
   const supabase = createClient();
   const [rows, setRows] = useState<TxRow[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const cutoff = new Date();
-      cutoff.setMonth(cutoff.getMonth() - (MONTHS_BACK - 1));
-      cutoff.setDate(1);
-      const { data } = await supabase
-        .from("transactions")
-        .select("type, category, amount, occurred_on")
-        .gte("occurred_on", cutoff.toISOString().slice(0, 10));
-      setRows((data ?? []) as TxRow[]);
+      // Full history (not windowed to MONTHS_BACK) -- the net-worth trend
+      // below needs every transaction back to each account's starting
+      // balance to reconstruct an accurate balance at each past month-end,
+      // not just what happened in the recent window.
+      const [{ data: txData }, { data: accountData }] = await Promise.all([
+        supabase.from("transactions").select("type, category, amount, occurred_on, account_id, to_account_id"),
+        supabase.from("accounts").select("*"),
+      ]);
+      setRows((txData ?? []) as TxRow[]);
+      setAccounts((accountData ?? []) as Account[]);
       setLoading(false);
     }
     load();
@@ -100,7 +119,25 @@ export default function AnalyticsTab() {
     return months;
   }, [rows]);
 
-  const categories = useMemo<CategoryPoint[]>(() => {
+  // Balance reconstructed as of the end of each of the last MONTHS_BACK
+  // months (capped at today for the current, still-in-progress month) --
+  // same accumulation buildAccountBalances already does for "right now",
+  // just re-run with the transaction set truncated at each month-end.
+  const netWorthTrend = useMemo(() => {
+    const months = buildEmptyMonths();
+    const today = new Date();
+    return months.map((m) => {
+      const [y, mo] = m.key.split("-").map(Number);
+      let monthEnd = new Date(y, mo, 0);
+      if (monthEnd > today) monthEnd = today;
+      const cutoff = monthEnd.toISOString().slice(0, 10);
+      const upToMonth = rows.filter((r) => r.occurred_on <= cutoff);
+      const { total } = buildAccountBalances(accounts, upToMonth);
+      return { key: m.key, label: m.label, total };
+    });
+  }, [rows, accounts]);
+
+  const categoryTotals = useMemo<CategoryPoint[]>(() => {
     const now = new Date();
     const currentKey = monthKey(now);
     const totals = new Map<string, number>();
@@ -111,9 +148,20 @@ export default function AnalyticsTab() {
     }
     return Array.from(totals.entries())
       .map(([category, amount]) => ({ category, amount }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 8);
+      .sort((a, b) => b.amount - a.amount);
   }, [rows]);
+
+  const categories = useMemo(() => categoryTotals.slice(0, 8), [categoryTotals]);
+
+  // Same category totals, capped to 5 named slices (the categorical palette
+  // is only validated that far -- see lib/chartColors.ts) with the rest
+  // folded into a single "Lainnya" bucket rather than extending the palette.
+  const categoryDonut = useMemo<CategorySlice[]>(() => {
+    const top = categoryTotals.slice(0, 5).map((c, i) => ({ ...c, color: CATEGORY_COLORS[i] }));
+    const restTotal = categoryTotals.slice(5).reduce((s, c) => s + c.amount, 0);
+    if (restTotal > 0) top.push({ category: "Lainnya", amount: restTotal, color: CHART_OTHER });
+    return top;
+  }, [categoryTotals]);
 
   const chartHeight = Math.max(160, categories.length * 40);
 
@@ -171,6 +219,76 @@ export default function AnalyticsTab() {
       </HudPanel>
 
       <HudPanel>
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+          <h2 className="font-display font-semibold text-white tracking-wide">Tren Kekayaan Bersih</h2>
+          {!loading && accounts.length > 0 && netWorthTrend.length > 0 && (
+            <div className="text-right">
+              <p className="font-mono text-lg text-white leading-tight">
+                {formatCurrency(netWorthTrend[netWorthTrend.length - 1].total)}
+              </p>
+              {netWorthTrend.length > 1 &&
+                (() => {
+                  const delta =
+                    netWorthTrend[netWorthTrend.length - 1].total - netWorthTrend[netWorthTrend.length - 2].total;
+                  const up = delta >= 0;
+                  return (
+                    <p className={`font-mono text-[11px] ${up ? "text-mint-glow" : "text-rose-glow"}`}>
+                      {up ? "▲" : "▼"} {formatCurrency(Math.abs(delta))} vs bulan lalu
+                    </p>
+                  );
+                })()}
+            </div>
+          )}
+        </div>
+        {loading ? (
+          <p className="text-sm text-slate-500">Memuat...</p>
+        ) : accounts.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            Belum ada rekening tercatat -- tambahin di tab Rekening biar tren kekayaan bersih bisa dihitung.
+          </p>
+        ) : (
+          <div style={{ width: "100%", height: 220 }}>
+            <ResponsiveContainer>
+              <AreaChart data={netWorthTrend}>
+                <defs>
+                  <linearGradient id="netWorthFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={CHART_INCOME} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={CHART_INCOME} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke={CHART_GRID} />
+                <XAxis
+                  dataKey="label"
+                  stroke={CHART_AXIS}
+                  tick={{ fill: CHART_AXIS, fontSize: 11, fontFamily: "var(--font-jetbrains)" }}
+                  axisLine={{ stroke: CHART_GRID }}
+                  tickLine={false}
+                />
+                <YAxis
+                  stroke={CHART_AXIS}
+                  tick={{ fill: CHART_AXIS, fontSize: 11, fontFamily: "var(--font-jetbrains)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={0}
+                />
+                <Tooltip content={<CurrencyTooltip />} cursor={{ stroke: CHART_GRID }} />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  name="Kekayaan Bersih"
+                  stroke={CHART_INCOME}
+                  strokeWidth={2}
+                  fill="url(#netWorthFill)"
+                  dot={{ r: 3, fill: CHART_INCOME, strokeWidth: 0 }}
+                  activeDot={{ r: 4 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </HudPanel>
+
+      <HudPanel>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display font-semibold text-white tracking-wide">
             Pengeluaran per Kategori (Bulan Ini)
@@ -208,6 +326,58 @@ export default function AnalyticsTab() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        )}
+      </HudPanel>
+
+      <HudPanel>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display font-semibold text-white tracking-wide">
+            Distribusi Pengeluaran (Bulan Ini)
+          </h2>
+        </div>
+        {loading ? (
+          <p className="text-sm text-slate-500">Memuat...</p>
+        ) : categoryDonut.length === 0 ? (
+          <p className="text-sm text-slate-500">Belum ada pengeluaran bulan ini.</p>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center gap-5">
+            <div style={{ width: 180, height: 180 }} className="shrink-0">
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie
+                    data={categoryDonut}
+                    dataKey="amount"
+                    nameKey="category"
+                    innerRadius={52}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    strokeWidth={2}
+                    stroke={THEME.panel}
+                  >
+                    {categoryDonut.map((slice) => (
+                      <Cell key={slice.category} fill={slice.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CurrencyTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <ul className="flex-1 w-full space-y-1.5">
+              {categoryDonut.map((slice) => (
+                <li key={slice.category} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ background: slice.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="text-slate-300 truncate">{slice.category}</span>
+                  </span>
+                  <span className="font-mono text-slate-400 shrink-0">{formatCurrency(slice.amount)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </HudPanel>
