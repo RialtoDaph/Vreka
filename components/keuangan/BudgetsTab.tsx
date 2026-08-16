@@ -177,7 +177,7 @@ export default function BudgetsTab() {
                   value={monthlyLimit}
                   onChange={(e) => setMonthlyLimit(e.target.value)}
                   className={inputClass}
-                  placeholder="500.000"
+                  placeholder="300,00"
                 />
               </div>
             </div>

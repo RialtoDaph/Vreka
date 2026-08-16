@@ -22,7 +22,10 @@ function mockSupabase({ auditRows = [], memories = [], totalMessages = 0, oldest
       from: (table: string) => {
         if (table === "assistant_audit_log") {
           return {
-            select: (cols: string) => {
+            select: (cols: string, opts?: { count?: string }) => {
+              if (opts?.count) {
+                return { gte: () => Promise.resolve({ count: auditRows.length, error: null }) };
+              }
               if (cols === "*") {
                 return { order: () => ({ limit: () => Promise.resolve({ data: auditRows, error: null }) }) };
               }
@@ -47,7 +50,10 @@ function mockSupabase({ auditRows = [], memories = [], totalMessages = 0, oldest
         }
         if (table === "assistant_memories") {
           return {
-            select: () => ({ order: () => ({ limit: () => Promise.resolve({ data: memories, error: null }) }) }),
+            select: (_cols?: string, opts?: { count?: string }) => {
+              if (opts?.count) return Promise.resolve({ count: memories.length, error: null });
+              return { order: () => ({ limit: () => Promise.resolve({ data: memories, error: null }) }) };
+            },
             delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
           };
         }
@@ -98,6 +104,23 @@ describe("ActivityLog", () => {
 
     await waitFor(() => expect(screen.queryByText("Suka kopi item")).not.toBeInTheDocument());
     expect(screen.getByText("Kerja remote dari Berlin")).toBeInTheDocument();
+  });
+
+  it("shows a summary strip before the panel is expanded, and hides it once open", async () => {
+    mockSupabase({
+      totalMessages: 42,
+      memories: [{ id: "m1", content: "Suka kopi item", created_at: "2026-07-01T00:00:00Z" }],
+      auditRows: [
+        { id: "1", tool_name: "add_transaction", input: {}, result_ok: true, created_at: "2026-08-01T00:00:00Z" },
+      ],
+    });
+    const { default: ActivityLog } = await import("./ActivityLog");
+    render(<ActivityLog />);
+
+    expect(await screen.findByText(/42 obrolan.*1 aksi.*1 memori/)).toBeInTheDocument();
+
+    await openPanel();
+    expect(screen.queryByText(/42 obrolan.*1 aksi.*1 memori/)).not.toBeInTheDocument();
   });
 
   it("shows empty-state messages when there's nothing recorded", async () => {

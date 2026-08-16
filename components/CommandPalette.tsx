@@ -30,6 +30,7 @@ const COMMANDS: Command[] = [
     keywords: "transaksi anggaran analitik pos tetap utang piutang tabungan struk",
   },
   { label: "Kerjaan", href: "/dashboard/kerjaan", icon: "▤", keywords: "to-do kanban kebiasaan habit project" },
+  { label: "Canvas", href: "/dashboard/canvas", icon: "▧", keywords: "canvas papan sticky note whiteboard" },
   { label: "Pelajaran", href: "/dashboard/pelajaran", icon: "◎", keywords: "kuis catatan belajar timer resource" },
   { label: "Kalender", href: "/dashboard/kalender", icon: "▦", keywords: "jadwal deadline agenda" },
   { label: "Jurnal", href: "/dashboard/jurnal", icon: "✎", keywords: "diary catatan harian refleksi" },

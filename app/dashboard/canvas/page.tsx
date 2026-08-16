@@ -181,6 +181,7 @@ export default function CanvasKerjaPage() {
   }
 
   async function deleteNode(id: string) {
+    if (!window.confirm("Yakin mau hapus kartu ini? Panah yang nyambung ke sini ikut kehapus.")) return;
     setNodes((prev) => prev.filter((n) => n.id !== id));
     setArrows((prev) => prev.filter((a) => a.from_node_id !== id && a.to_node_id !== id));
     await supabase.from("canvas_nodes").delete().eq("id", id);

@@ -23,9 +23,13 @@ function CountTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
+type Summary = { messages: number; recentActions: number; memories: number };
+
 export default function ActivityLog() {
   const supabase = createClient();
   const [open, setOpen] = useState(false);
+
+  const [summary, setSummary] = useState<Summary | null>(null);
 
   const [items, setItems] = useState<AssistantAuditLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +42,28 @@ export default function ActivityLog() {
 
   const [memories, setMemories] = useState<AssistantMemory[]>([]);
   const [memoriesLoading, setMemoriesLoading] = useState(true);
+
+  // Runs unconditionally (not gated on `open`) so there's something to show
+  // in the collapsed strip before the user ever clicks to expand -- cheap
+  // count-only queries, not the full row fetches loadLogs/loadStats do.
+  useEffect(() => {
+    async function loadSummary() {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - (ACTIVITY_DAYS - 1));
+      cutoff.setHours(0, 0, 0, 0);
+      const [{ count: messageCount }, { count: actionCount }, { count: memoryCount }] = await Promise.all([
+        supabase.from("assistant_messages").select("*", { count: "exact", head: true }),
+        supabase
+          .from("assistant_audit_log")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", cutoff.toISOString()),
+        supabase.from("assistant_memories").select("*", { count: "exact", head: true }),
+      ]);
+      setSummary({ messages: messageCount ?? 0, recentActions: actionCount ?? 0, memories: memoryCount ?? 0 });
+    }
+    loadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -97,12 +123,19 @@ export default function ActivityLog() {
 
   return (
     <div>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-300 mb-2"
-      >
-        {open ? "▾" : "▸"} Aktivitas Aslan
-      </button>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-300"
+        >
+          {open ? "▾" : "▸"} Aktivitas Aslan
+        </button>
+        {!open && summary && (
+          <span className="text-xs font-mono text-slate-600">
+            {summary.messages} obrolan · {summary.recentActions} aksi ({ACTIVITY_DAYS} hari) · {summary.memories} memori
+          </span>
+        )}
+      </div>
       {open && (
         <div className="space-y-3">
           <HudPanel>

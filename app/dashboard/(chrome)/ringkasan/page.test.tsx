@@ -21,11 +21,13 @@ type SupabaseData = {
   studyNotes?: unknown[];
   journalEntries?: unknown[];
   milestones?: unknown[];
+  /** Tables that should error out (once) instead of resolving with data. */
+  failTables?: string[];
 };
 
 // Thenable + fluent chain -- matches whatever combination of
 // .select/.gte/.lte/.lt/.neq/.not/.order/.limit/.upsert the page chains per table.
-function chainable(data: unknown[]) {
+function chainable(data: unknown[], fail = false) {
   const obj: Record<string, unknown> = {
     select: () => obj,
     gte: () => obj,
@@ -36,34 +38,37 @@ function chainable(data: unknown[]) {
     order: () => obj,
     limit: () => obj,
     upsert: () => Promise.resolve({ data: null, error: null }),
-    then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve),
+    then: (resolve: (v: unknown) => unknown) =>
+      Promise.resolve(fail ? { data: null, error: { message: "boom" } } : { data, error: null }).then(resolve),
   };
   return obj;
 }
 
-function mockSupabase(rows: SupabaseData) {
+function mockSupabase(rows: SupabaseData): Set<string> {
+  const failTables = new Set(rows.failTables ?? []);
   vi.doMock("@/lib/supabase/client", () => ({
     createClient: () => ({
       auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
       from: (table: string) => {
-        if (table === "transactions") return chainable(rows.txMonth ?? []);
-        if (table === "budgets") return chainable(rows.budgets ?? []);
-        if (table === "habits") return chainable(rows.habits ?? []);
-        if (table === "habit_checks") return chainable(rows.habitChecks ?? []);
-        if (table === "daily_briefings") return chainable(rows.dailyBriefings ?? []);
-        if (table === "study_notes") return chainable(rows.studyNotes ?? []);
-        if (table === "journal_entries") return chainable(rows.journalEntries ?? []);
-        if (table === "life_milestones") return chainable(rows.milestones ?? []);
+        if (table === "transactions") return chainable(rows.txMonth ?? [], failTables.has("transactions"));
+        if (table === "budgets") return chainable(rows.budgets ?? [], failTables.has("budgets"));
+        if (table === "habits") return chainable(rows.habits ?? [], failTables.has("habits"));
+        if (table === "habit_checks") return chainable(rows.habitChecks ?? [], failTables.has("habit_checks"));
+        if (table === "daily_briefings") return chainable(rows.dailyBriefings ?? [], failTables.has("daily_briefings"));
+        if (table === "study_notes") return chainable(rows.studyNotes ?? [], failTables.has("study_notes"));
+        if (table === "journal_entries") return chainable(rows.journalEntries ?? [], failTables.has("journal_entries"));
+        if (table === "life_milestones") return chainable(rows.milestones ?? [], failTables.has("life_milestones"));
         if (table === "tasks") {
           // Distinguish the due-today vs overdue query by call order --
           // page.tsx issues due first, then overdue.
           taskCallCount += 1;
-          return chainable(taskCallCount === 1 ? (rows.dueTasks ?? []) : (rows.overdueTasks ?? []));
+          return chainable(taskCallCount === 1 ? (rows.dueTasks ?? []) : (rows.overdueTasks ?? []), failTables.has("tasks"));
         }
         throw new Error(`unexpected table: ${table}`);
       },
     }),
   }));
+  return failTables;
 }
 
 let taskCallCount = 0;
@@ -190,6 +195,28 @@ describe("RingkasanPage", () => {
     expect(await screen.findByText(/Kalkulus II/)).toBeInTheDocument();
     expect(screen.getByText(/Udah nulis jurnal hari ini/)).toBeInTheDocument();
     expect(screen.getByText(/Anniversary kerja \(Hari ini\)/)).toBeInTheDocument();
+  });
+
+  it("still shows the briefing when one data source fails, and can retry just that part", async () => {
+    const failTables = mockSupabase({
+      overdueTasks: [{ title: "Revisi laporan" }],
+      journalEntries: [{ entry_date: todayKeyForTest() }],
+      failTables: ["journal_entries"],
+    });
+    const { default: RingkasanPage } = await import("./page");
+    render(<RingkasanPage />);
+
+    // The rest of the briefing still renders even though Jurnal failed.
+    expect(await screen.findByText("Revisi laporan")).toBeInTheDocument();
+    expect(screen.getByText(/Sebagian data nggak kemuat/)).toBeInTheDocument();
+    expect(screen.getByText("Jurnal")).toBeInTheDocument();
+    expect(screen.queryByText(/Udah nulis jurnal hari ini/)).not.toBeInTheDocument();
+
+    failTables.delete("journal_entries");
+    fireEvent.click(screen.getByLabelText("Coba lagi muat Jurnal"));
+
+    await waitFor(() => expect(screen.getByText(/Udah nulis jurnal hari ini/)).toBeInTheDocument());
+    expect(screen.queryByText(/Sebagian data nggak kemuat/)).not.toBeInTheDocument();
   });
 });
 
