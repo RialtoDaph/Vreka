@@ -9,6 +9,7 @@ import { promptForDate } from "@/lib/journalPrompts";
 import { buildHeatmapCells, computeStreak } from "@/lib/habits";
 import HudPanel from "@/components/HudPanel";
 import { useConfirm } from "@/lib/useConfirm";
+import { Flame } from "lucide-react";
 import { inputClass, primaryBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 export default function JurnalPage() {
@@ -150,7 +151,7 @@ export default function JurnalPage() {
         </div>
         {streak > 0 && (
           <div className="flex items-center gap-2 border border-amber-glow/35 bg-amber-glow/10 rounded-full px-3.5 py-2">
-            <span aria-hidden="true">🔥</span>
+            <Flame aria-hidden="true" className="w-4 h-4 text-amber-glow" strokeWidth={2} />
             <span className="font-mono text-sm font-semibold text-amber-glow">{streak} hari beruntun</span>
           </div>
         )}

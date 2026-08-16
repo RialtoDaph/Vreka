@@ -9,6 +9,7 @@ import { localDateTimeValue } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
 import HabitsPanel from "@/components/kerjaan/HabitsPanel";
 import { useConfirm } from "@/lib/useConfirm";
+import { X } from "lucide-react";
 import {
   inputClass,
   labelClass,
@@ -593,9 +594,9 @@ export default function KerjaanPage() {
                                     <button
                                       onClick={() => deleteSubtask(s)}
                                       aria-label={`Hapus sub-task ${s.title}`}
-                                      className="text-[10px] text-rose-glow/70 hover:text-rose-glow font-mono"
+                                      className="text-rose-glow/70 hover:text-rose-glow"
                                     >
-                                      ✕
+                                      <X aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
                                     </button>
                                   </div>
                                 )

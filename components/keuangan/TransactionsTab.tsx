@@ -9,6 +9,7 @@ import { downloadCsv } from "@/lib/csv";
 import HudPanel from "@/components/HudPanel";
 import CategorySelect from "@/components/CategorySelect";
 import { useConfirm } from "@/lib/useConfirm";
+import { Paperclip, Camera } from "lucide-react";
 import {
   inputClass,
   labelClass,
@@ -576,10 +577,20 @@ export default function TransactionsTab() {
                     className="h-16 w-16 object-cover rounded-sm border border-line"
                   />
                 ) : existingReceiptPath ? (
-                  <span className="text-xs text-slate-500 font-mono">📎 Struk udah ada — upload baru buat ganti</span>
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+                    <Paperclip aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    Struk udah ada — upload baru buat ganti
+                  </span>
                 ) : null}
-                <label className={`${ghostBtnClass} cursor-pointer`}>
-                  {receiptPreview || existingReceiptPath ? "Ganti Foto" : "📷 Upload/Scan Struk"}
+                <label className={`${ghostBtnClass} cursor-pointer inline-flex items-center gap-1.5`}>
+                  {receiptPreview || existingReceiptPath ? (
+                    "Ganti Foto"
+                  ) : (
+                    <>
+                      <Camera aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      Upload/Scan Struk
+                    </>
+                  )}
                   <input
                     type="file"
                     accept="image/*"
@@ -651,8 +662,9 @@ export default function TransactionsTab() {
                       disabled={viewingReceiptId === tx.id}
                       className={ghostBtnClass}
                       title="Lihat struk"
+                      aria-label="Lihat struk"
                     >
-                      📎
+                      <Paperclip aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
                     </button>
                   )}
                   <button onClick={() => startEdit(tx)} className={ghostBtnClass}>

@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import * as THREE from "three";
+import { MessageSquare, Zap, Monitor, Wrench, Ear, Mic } from "lucide-react";
 import { TYPE_META, type MemoryMapData, type MemoryNodeType } from "@/lib/memoryMap";
 import { useVoiceAssistant, type VoicePhase } from "@/lib/assistant/useVoiceAssistant";
 import { useGptRealtime } from "@/lib/assistant/useGptRealtime";
 import { THEME } from "@/lib/theme";
+import { NAV_MODULES } from "@/lib/navModules";
 import SignOutButton from "@/components/SignOutButton";
 import ToolbarIconButton from "@/components/asisten/ToolbarIconButton";
 import AslanInbox from "@/components/dashboard/AslanInbox";
@@ -45,17 +47,9 @@ const INITIAL_ORBIT = { theta: 0.6, phi: 1.15, radius: 320 };
 
 const LAST_MODULE_KEY = "aslan-last-module";
 
-const NAV = [
-  { href: "/dashboard/ringkasan", label: "Ringkasan", icon: "☀" },
-  { href: "/dashboard/keuangan", label: "Keuangan", icon: "⌬" },
-  { href: "/dashboard/kerjaan", label: "Kerjaan", icon: "▤" },
-  { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },
-  { href: "/dashboard/kalender", label: "Kalender", icon: "▦" },
-  { href: "/dashboard/jurnal", label: "Jurnal", icon: "✎" },
-  { href: "/dashboard/timeline", label: "Timeline", icon: "⧗" },
-  { href: "/dashboard/asisten", label: "Aslan", icon: "✦" },
-  { href: "/dashboard/ai-core", label: "AI Core", icon: "◉" },
-];
+// Every module except Memory Map itself -- this component is that page, so
+// linking to it here would just be a no-op entry in its own nav drawer.
+const NAV = NAV_MODULES.filter((m) => m.href !== "/dashboard");
 
 const VOICE_PHASE_STYLE: Record<VoicePhase, { color: string; label: string }> = {
   idle: { color: THEME.cyanGlow, label: "Online" },
@@ -830,7 +824,7 @@ export default function MemoryMap({ data, vitals }: Props) {
                   href={item.href}
                   className="relative flex items-center gap-2.5 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-slate-300 hover:text-cyan-glow hover:bg-panel2 transition-colors border-b border-line/60"
                 >
-                  <span aria-hidden="true">{item.icon}</span>
+                  <item.icon aria-hidden="true" className="w-4 h-4 shrink-0" strokeWidth={1.75} />
                   {item.label}
                   {item.href === "/dashboard/kerjaan" && vitals.hasOverdueTask && (
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-glow ml-auto" aria-hidden="true" />
@@ -1096,9 +1090,9 @@ export default function MemoryMap({ data, vitals }: Props) {
                 setLastModuleHref(item.href);
                 setNavOverlay(item.href);
               }}
-              className="relative flex items-center justify-center w-7 h-7 rounded-[3px] text-slate-400 text-sm hover:text-cyan-glow hover:bg-panel2"
+              className="relative flex items-center justify-center w-7 h-7 rounded-[3px] text-slate-400 hover:text-cyan-glow hover:bg-panel2"
             >
-              <span aria-hidden="true">{item.icon}</span>
+              <item.icon aria-hidden="true" className="w-4 h-4" strokeWidth={1.75} />
               {lastModuleHref === item.href && (
                 <span className="absolute top-0.5 right-0.5 w-[5px] h-[5px] rounded-full bg-mint-glow" aria-hidden="true" />
               )}
@@ -1160,7 +1154,10 @@ export default function MemoryMap({ data, vitals }: Props) {
       {lastReply && (
         <div className="absolute z-[2] bottom-24 left-1/2 -translate-x-1/2 w-[min(480px,92vw)]">
           <div className="bg-panel/90 border border-line rounded-lg p-3 backdrop-blur-sm shadow-glow">
-            <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow mb-1.5">🗨 Aslan bilang</p>
+            <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-cyan-glow mb-1.5 flex items-center gap-1.5">
+              <MessageSquare aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
+              Aslan bilang
+            </p>
             <p className="text-[12px] leading-relaxed text-slate-300 m-0">{lastReply}</p>
           </div>
         </div>
@@ -1170,27 +1167,27 @@ export default function MemoryMap({ data, vitals }: Props) {
         <div className="absolute z-[2] bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 max-w-[94vw]">
           <div className="flex items-center flex-wrap justify-center gap-2 bg-panel/85 border border-line rounded-full p-1.5 backdrop-blur-sm">
             <ToolbarIconButton
-              icon="⚡"
+              icon={Zap}
               label={gptRealtimeBusy ? "Stop ngobrol sama Aslan" : "Ngobrol real-time sama Aslan"}
               active={gptRealtimeBusy}
               onClick={toggleGptRealtime}
             />
             {screenShareSupported && (
               <ToolbarIconButton
-                icon="🖥️"
+                icon={Monitor}
                 label={screenShareActive ? "Matiin screen share" : "Share screen ke Aslan"}
                 active={screenShareActive}
                 onClick={toggleScreenShare}
               />
             )}
             <ToolbarIconButton
-              icon="🧰"
+              icon={Wrench}
               label="Tools & Integrasi"
               onClick={() => setNavOverlay("/dashboard/asisten")}
             />
             {handsFreeSupported && (
               <ToolbarIconButton
-                icon="👂"
+                icon={Ear}
                 label={handsFreeMode ? "Matiin mode hands-free" : "Nyalain mode hands-free (panggil 'Aslan')"}
                 active={handsFreeMode}
                 onClick={toggleHandsFree}
@@ -1198,7 +1195,7 @@ export default function MemoryMap({ data, vitals }: Props) {
             )}
             {voiceSupported && (
               <ToolbarIconButton
-                icon="🎤"
+                icon={Mic}
                 label={voiceBusy ? "Stop mode suara" : "Mode suara"}
                 active={voiceBusy}
                 onClick={toggleVoice}

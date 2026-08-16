@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AssistantAuditLog } from "@/lib/types";
 import { TOOL_LABEL, describeToolInput, toolSource } from "@/lib/assistant/toolLabels";
+import { Wrench } from "lucide-react";
 
 const LAST_SEEN_KEY = "aslan-inbox-last-seen";
 const POLL_MS = 60_000;
@@ -64,8 +65,9 @@ export default function AslanInbox() {
           const source = toolSource(log.tool_name);
           return (
             <li key={log.id} className="px-3 py-2.5">
-              <p className="text-xs text-slate-200">
-                🔧 {TOOL_LABEL[log.tool_name] ?? log.tool_name}
+              <p className="flex items-center gap-1.5 text-xs text-slate-200">
+                <Wrench aria-hidden="true" className="w-3 h-3 shrink-0" strokeWidth={2} />
+                {TOOL_LABEL[log.tool_name] ?? log.tool_name}
                 {!log.result_ok && <span className="text-rose-glow"> — gagal</span>}
               </p>
               {(detail || source) && (

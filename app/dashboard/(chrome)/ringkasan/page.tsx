@@ -8,6 +8,7 @@ import { daysUntil, formatDate } from "@/lib/format";
 import { buildDailyBriefing, type BriefingColor, type DailyBriefing } from "@/lib/dailyBriefing";
 import type { DailyBriefingRow } from "@/lib/types";
 import HudPanel from "@/components/HudPanel";
+import { Pause, Play } from "lucide-react";
 import { ghostBtnClass, errorBannerClass } from "@/lib/ui";
 
 const COLOR_CLASSES: Record<BriefingColor, { border: string; text: string; dot: string }> = {
@@ -496,7 +497,11 @@ export default function RingkasanPage() {
                 className="w-9 h-9 shrink-0 rounded-full bg-cyan-glow/15 text-cyan-glow border border-cyan-glow/40 flex items-center justify-center"
                 aria-label={playing ? "Berhenti dengerin ringkasan" : "Dengerin ringkasan"}
               >
-                {playing ? "❚❚" : "▶"}
+                {playing ? (
+                  <Pause aria-hidden="true" className="w-4 h-4" fill="currentColor" strokeWidth={0} />
+                ) : (
+                  <Play aria-hidden="true" className="w-4 h-4 ml-0.5" fill="currentColor" strokeWidth={0} />
+                )}
               </button>
               <div className="flex-1 min-w-0">
                 <p className="text-[12.5px] text-slate-300">

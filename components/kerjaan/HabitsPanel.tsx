@@ -7,6 +7,7 @@ import { buildHeatmapCells, computeStreak } from "@/lib/habits";
 import { todayKey } from "@/lib/date";
 import HudPanel from "@/components/HudPanel";
 import { useConfirm } from "@/lib/useConfirm";
+import { Flame } from "lucide-react";
 import { inputClass, ghostBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 type HeatmapRange = 7 | 30;
@@ -222,7 +223,10 @@ export default function HabitsPanel() {
                       </button>
                     )}
                     {streak > 0 && (
-                      <span className="text-xs font-mono text-amber-glow shrink-0">🔥 {streak} hari</span>
+                      <span className="flex items-center gap-1 text-xs font-mono text-amber-glow shrink-0">
+                        <Flame aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
+                        {streak} hari
+                      </span>
                     )}
                     <button onClick={() => handleDelete(habit.id)} className={dangerBtnClass}>
                       Hapus
