@@ -464,7 +464,7 @@ export default function TransactionsTab() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="50.000"
+                  placeholder="25,50"
                 />
               </div>
               {type !== "transfer" && (

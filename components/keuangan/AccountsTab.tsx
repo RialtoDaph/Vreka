@@ -179,7 +179,7 @@ export default function AccountsTab() {
                   value={startingBalance}
                   onChange={(e) => setStartingBalance(e.target.value)}
                   className={inputClass}
-                  placeholder="0"
+                  placeholder="0,00"
                 />
               </div>
             </div>

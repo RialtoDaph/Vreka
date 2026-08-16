@@ -177,7 +177,7 @@ export default function SavingsTab() {
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   className={inputClass}
-                  placeholder="10.000.000"
+                  placeholder="5.000,00"
                 />
               </div>
               <div>
@@ -189,7 +189,7 @@ export default function SavingsTab() {
                   value={current}
                   onChange={(e) => setCurrent(e.target.value)}
                   className={inputClass}
-                  placeholder="0"
+                  placeholder="0,00"
                 />
               </div>
               <div>

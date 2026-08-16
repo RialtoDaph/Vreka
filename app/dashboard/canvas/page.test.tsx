@@ -7,6 +7,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.resetModules();
+  vi.unstubAllGlobals();
 });
 
 const STICKY = {
@@ -114,7 +115,8 @@ describe("CanvasKerjaPage", () => {
     expect(screen.getByPlaceholderText("Tulis catatan...")).toBeInTheDocument();
   });
 
-  it("deletes a node", async () => {
+  it("deletes a node after confirming", async () => {
+    vi.stubGlobal("confirm", () => true);
     mockSupabase({ nodes: [STICKY] });
     const { default: CanvasKerjaPage } = await import("./page");
     render(<CanvasKerjaPage />);
@@ -126,6 +128,18 @@ describe("CanvasKerjaPage", () => {
     expect(
       await screen.findByText('Kosong -- klik "+ Sticky" atau "+ Kartu Tugas" buat mulai.')
     ).toBeInTheDocument();
+  });
+
+  it("keeps the node when the delete confirmation is declined", async () => {
+    vi.stubGlobal("confirm", () => false);
+    mockSupabase({ nodes: [STICKY] });
+    const { default: CanvasKerjaPage } = await import("./page");
+    render(<CanvasKerjaPage />);
+
+    await screen.findByDisplayValue("Catatan awal");
+    fireEvent.click(screen.getByLabelText("Hapus kartu sticky"));
+
+    expect(screen.getByDisplayValue("Catatan awal")).toBeInTheDocument();
   });
 
   it("draws an arrow after linking two nodes", async () => {

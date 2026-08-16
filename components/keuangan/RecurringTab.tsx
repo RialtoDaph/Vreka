@@ -302,7 +302,7 @@ export default function RecurringTab() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className={inputClass}
-                  placeholder="500.000"
+                  placeholder="1.200,00"
                 />
               </div>
             </div>
