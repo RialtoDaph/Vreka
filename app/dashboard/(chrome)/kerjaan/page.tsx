@@ -1,7 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { createClient } from "@/lib/supabase/client";
 import { Task, TaskPriority, TaskStatus, TaskSubtask } from "@/lib/types";
 import { formatDateTime, daysUntil } from "@/lib/format";
@@ -59,6 +71,68 @@ function toDatetimeLocalValue(iso: string | null): string {
   return iso ? localDateTimeValue(new Date(iso)) : "";
 }
 
+// Render-prop wrapper so useDraggable's hook call can live in its own
+// component (hooks can't be called inside the .map() below) while the
+// actual <li> card JSX -- which closes over a dozen bits of page
+// state/handlers (expandedId, subtask editing, startEdit, handleDelete,
+// ...) -- stays written inline where those closures are in scope, instead
+// of having to thread all of that through as props to a separate file.
+// The caller applies `setNodeRef`/`listeners`/`attributes` directly to its
+// own root element (must be the <li> itself -- an extra wrapper div would
+// be invalid inside a <ul>).
+function DraggableCard({
+  id,
+  children,
+}: {
+  id: string;
+  children: (props: {
+    setNodeRef: (el: HTMLElement | null) => void;
+    listeners: ReturnType<typeof useDraggable>["listeners"];
+    attributes: ReturnType<typeof useDraggable>["attributes"];
+    isDragging: boolean;
+  }) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  return <>{children({ setNodeRef, listeners, attributes, isDragging })}</>;
+}
+
+function DroppableColumn({
+  id,
+  children,
+}: {
+  id: TaskStatus;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-sm transition-colors -m-1 p-1 min-h-[48px] ${
+        isOver ? "bg-cyan-glow/5 ring-1 ring-cyan-glow/30" : ""
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Floating copy shown under the pointer while dragging -- the card being
+// dragged fades out in place (see `isDragging` below) instead of moving
+// itself, which reads better once a drag crosses from one column's list
+// into another's.
+function DragCardPreview({ task }: { task: Task }) {
+  return (
+    <div className="border border-cyan-glow/50 rounded-sm p-3 bg-panel2 shadow-glow w-64 cursor-grabbing">
+      <p className="text-sm text-slate-200 truncate">{task.title}</p>
+      <span
+        className={`inline-block mt-1.5 text-[10px] font-mono border rounded-sm px-1.5 py-0.5 ${PRIORITY_TONE[task.priority]}`}
+      >
+        {PRIORITY_LABEL[task.priority]}
+      </span>
+    </div>
+  );
+}
+
 export default function KerjaanPage() {
   const supabase = createClient();
   const [items, setItems] = useState<Task[]>([]);
@@ -73,6 +147,12 @@ export default function KerjaanPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { confirm, confirmDialog } = useConfirm();
+
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+  );
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -189,6 +269,20 @@ export default function KerjaanPage() {
       setItems(previous);
       setError("Gagal update status. Coba lagi.");
     }
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveDragId(String(event.active.id));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const task = items.find((t) => t.id === active.id);
+    const nextStatus = over.id as TaskStatus;
+    if (!task || task.status === nextStatus) return;
+    updateStatus(task, nextStatus);
   }
 
   async function handleDelete(id: string) {
@@ -414,225 +508,245 @@ export default function KerjaanPage() {
           <p className="text-sm text-slate-500">Memuat...</p>
         </HudPanel>
       ) : (
-        <div className="grid md:grid-cols-3 gap-4 items-start">
-          {COLUMNS.map((col) => {
-            const colItems = items
-              .filter((t) => t.status === col.key && (!projectFilter || t.project === projectFilter))
-              .sort(compareTasks);
-            return (
-              <HudPanel key={col.key}>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className={`font-display font-semibold tracking-wide ${col.tone}`}>
-                    {col.label}
-                  </h2>
-                  <span className="text-xs font-mono text-slate-500">{colItems.length}</span>
-                </div>
+        <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="grid md:grid-cols-3 gap-4 items-start">
+            {COLUMNS.map((col) => {
+              const colItems = items
+                .filter((t) => t.status === col.key && (!projectFilter || t.project === projectFilter))
+                .sort(compareTasks);
+              return (
+                <HudPanel key={col.key}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className={`font-display font-semibold tracking-wide ${col.tone}`}>
+                      {col.label}
+                    </h2>
+                    <span className="text-xs font-mono text-slate-500">{colItems.length}</span>
+                  </div>
 
-                {colItems.length === 0 ? (
-                  <p className="text-sm text-slate-500">Kosong.</p>
-                ) : (
-                  <ul className="space-y-3">
-                    {colItems.map((task) => {
-                      const d = daysUntil(task.deadline);
-                      const urgent = d !== null && d <= 2 && task.status !== "done";
-                      const subtasks = subtasksByTask[task.id] ?? [];
-                      const doneSubtasks = subtasks.filter((s) => s.done).length;
-                      const allSubtasksDone = subtasks.length > 0 && doneSubtasks === subtasks.length && task.status !== "done";
-                      const expanded = expandedId === task.id;
-                      return (
-                        <li
-                          key={task.id}
-                          className="border border-line rounded-sm p-3 bg-panel2/50"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <p
-                              className={`text-sm truncate ${
-                                task.status === "done"
-                                  ? "text-slate-500 line-through"
-                                  : "text-slate-200"
-                              }`}
-                            >
-                              {task.title}
-                            </p>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <button
-                                onClick={() => startEdit(task)}
-                                aria-label={`Edit to-do ${task.title}`}
-                                className="text-slate-600 hover:text-cyan-glow text-xs font-mono leading-none"
-                              >
-                                Edit
-                              </button>
-                              <button onClick={() => handleDelete(task.id)} className={dangerBtnClass}>
-                                Hapus
-                              </button>
-                            </div>
-                          </div>
-                          {task.description && (
-                            <p className="text-xs text-slate-500 truncate mt-0.5">{task.description}</p>
-                          )}
-                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <span
-                              className={`text-[10px] font-mono border rounded-sm px-1.5 py-0.5 ${PRIORITY_TONE[task.priority]}`}
-                            >
-                              {PRIORITY_LABEL[task.priority]}
-                            </span>
-                            {task.project && (
-                              <span className="text-[10px] font-mono border border-cyan-glow/30 text-cyan-glow/80 rounded-sm px-1.5 py-0.5">
-                                {task.project}
-                              </span>
-                            )}
-                            {task.deadline && (
-                              <span
-                                className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-slate-500"}`}
-                              >
-                                {formatDateTime(task.deadline)}
-                              </span>
-                            )}
-                            {subtasks.length > 0 && (
-                              <button
-                                onClick={() => setExpandedId(expanded ? null : task.id)}
-                                title={
-                                  allSubtasksDone
-                                    ? "Semua sub-task selesai -- tandain to-do ini selesai juga?"
-                                    : undefined
-                                }
-                                className={`text-[10px] font-mono ${
-                                  allSubtasksDone
-                                    ? "text-mint-glow hover:text-mint-glow/80"
-                                    : "text-cyan-glow/80 hover:text-cyan-glow"
-                                }`}
-                              >
-                                {allSubtasksDone && "✓ "}
-                                {doneSubtasks}/{subtasks.length} sub-task {expanded ? "▾" : "▸"}
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2 mt-2">
-                            {col.key === "todo" && (
-                              <button
-                                onClick={() => updateStatus(task, "in_progress")}
-                                className={ghostBtnClass}
-                              >
-                                → Mulai
-                              </button>
-                            )}
-                            {col.key === "in_progress" && (
-                              <>
-                                <button
-                                  onClick={() => updateStatus(task, "todo")}
-                                  className={ghostBtnClass}
+                  <DroppableColumn id={col.key}>
+                    {colItems.length === 0 ? (
+                      <p className="text-sm text-slate-500">Kosong.</p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {colItems.map((task) => {
+                          const d = daysUntil(task.deadline);
+                          const urgent = d !== null && d <= 2 && task.status !== "done";
+                          const subtasks = subtasksByTask[task.id] ?? [];
+                          const doneSubtasks = subtasks.filter((s) => s.done).length;
+                          const allSubtasksDone = subtasks.length > 0 && doneSubtasks === subtasks.length && task.status !== "done";
+                          const expanded = expandedId === task.id;
+                          return (
+                            <DraggableCard key={task.id} id={task.id}>
+                              {({ setNodeRef, listeners, attributes, isDragging }) => (
+                                <li
+                                  ref={setNodeRef}
+                                  {...listeners}
+                                  {...attributes}
+                                  className={`border border-line rounded-sm p-3 bg-panel2/50 cursor-grab active:cursor-grabbing ${
+                                    isDragging ? "opacity-30" : ""
+                                  }`}
                                 >
-                                  ← To-do
-                                </button>
-                                <button
-                                  onClick={() => updateStatus(task, "done")}
-                                  className={ghostBtnClass}
-                                >
-                                  ✓ Selesai
-                                </button>
-                              </>
-                            )}
-                            {col.key === "done" && (
-                              <button
-                                onClick={() => updateStatus(task, "todo")}
-                                className={ghostBtnClass}
-                              >
-                                ↺ Buka lagi
-                              </button>
-                            )}
-                            {subtasks.length === 0 && (
-                              <button
-                                onClick={() => setExpandedId(expanded ? null : task.id)}
-                                className="text-[11px] font-mono text-slate-500 hover:text-slate-300"
-                              >
-                                + Sub-task
-                              </button>
-                            )}
-                          </div>
-
-                          {expanded && (
-                            <div className="mt-3 pt-3 border-t border-line/60 space-y-2">
-                              {subtasks.map((s) =>
-                                editingSubtaskId === s.id ? (
-                                  <div key={s.id} className="flex items-center gap-2">
-                                    <input
-                                      type="text"
-                                      autoFocus
-                                      value={subtaskEditValue}
-                                      onChange={(e) => setSubtaskEditValue(e.target.value)}
-                                      onBlur={() => saveSubtaskEdit(s)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.preventDefault();
-                                          saveSubtaskEdit(s);
-                                        } else if (e.key === "Escape") {
-                                          setEditingSubtaskId(null);
-                                        }
-                                      }}
-                                      className={`${inputClass} text-xs py-1 flex-1`}
-                                    />
-                                  </div>
-                                ) : (
-                                  <div key={s.id} className="flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={s.done}
-                                      onChange={() => toggleSubtask(s)}
-                                      className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-cyan-glow"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => startEditSubtask(s)}
-                                      title="Klik buat ganti judul"
-                                      className={`text-xs flex-1 truncate text-left bg-transparent border-none p-0 cursor-text ${
-                                        s.done ? "text-slate-500 line-through" : "text-slate-300"
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p
+                                      className={`text-sm truncate ${
+                                        task.status === "done"
+                                          ? "text-slate-500 line-through"
+                                          : "text-slate-200"
                                       }`}
                                     >
-                                      {s.title}
-                                    </button>
-                                    <button
-                                      onClick={() => deleteSubtask(s)}
-                                      aria-label={`Hapus sub-task ${s.title}`}
-                                      className="text-rose-glow/70 hover:text-rose-glow"
-                                    >
-                                      <X aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
-                                    </button>
+                                      {task.title}
+                                    </p>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button
+                                        onClick={() => startEdit(task)}
+                                        aria-label={`Edit to-do ${task.title}`}
+                                        className="text-slate-600 hover:text-cyan-glow text-xs font-mono leading-none"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button onClick={() => handleDelete(task.id)} className={dangerBtnClass}>
+                                        Hapus
+                                      </button>
+                                    </div>
                                   </div>
-                                )
+                                  {task.description && (
+                                    <p className="text-xs text-slate-500 truncate mt-0.5">{task.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                    <span
+                                      className={`text-[10px] font-mono border rounded-sm px-1.5 py-0.5 ${PRIORITY_TONE[task.priority]}`}
+                                    >
+                                      {PRIORITY_LABEL[task.priority]}
+                                    </span>
+                                    {task.project && (
+                                      <span className="text-[10px] font-mono border border-cyan-glow/30 text-cyan-glow/80 rounded-sm px-1.5 py-0.5">
+                                        {task.project}
+                                      </span>
+                                    )}
+                                    {task.deadline && (
+                                      <span
+                                        className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-slate-500"}`}
+                                      >
+                                        {formatDateTime(task.deadline)}
+                                      </span>
+                                    )}
+                                    {subtasks.length > 0 && (
+                                      <button
+                                        onClick={() => setExpandedId(expanded ? null : task.id)}
+                                        title={
+                                          allSubtasksDone
+                                            ? "Semua sub-task selesai -- tandain to-do ini selesai juga?"
+                                            : undefined
+                                        }
+                                        className={`text-[10px] font-mono ${
+                                          allSubtasksDone
+                                            ? "text-mint-glow hover:text-mint-glow/80"
+                                            : "text-cyan-glow/80 hover:text-cyan-glow"
+                                        }`}
+                                      >
+                                        {allSubtasksDone && "✓ "}
+                                        {doneSubtasks}/{subtasks.length} sub-task {expanded ? "▾" : "▸"}
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 mt-2">
+                                    {col.key === "todo" && (
+                                      <button
+                                        onClick={() => updateStatus(task, "in_progress")}
+                                        className={ghostBtnClass}
+                                      >
+                                        → Mulai
+                                      </button>
+                                    )}
+                                    {col.key === "in_progress" && (
+                                      <>
+                                        <button
+                                          onClick={() => updateStatus(task, "todo")}
+                                          className={ghostBtnClass}
+                                        >
+                                          ← To-do
+                                        </button>
+                                        <button
+                                          onClick={() => updateStatus(task, "done")}
+                                          className={ghostBtnClass}
+                                        >
+                                          ✓ Selesai
+                                        </button>
+                                      </>
+                                    )}
+                                    {col.key === "done" && (
+                                      <button
+                                        onClick={() => updateStatus(task, "todo")}
+                                        className={ghostBtnClass}
+                                      >
+                                        ↺ Buka lagi
+                                      </button>
+                                    )}
+                                    {subtasks.length === 0 && (
+                                      <button
+                                        onClick={() => setExpandedId(expanded ? null : task.id)}
+                                        className="text-[11px] font-mono text-slate-500 hover:text-slate-300"
+                                      >
+                                        + Sub-task
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {expanded && (
+                                    <div className="mt-3 pt-3 border-t border-line/60 space-y-2">
+                                      {subtasks.map((s) =>
+                                        editingSubtaskId === s.id ? (
+                                          <div key={s.id} className="flex items-center gap-2">
+                                            <input
+                                              type="text"
+                                              autoFocus
+                                              value={subtaskEditValue}
+                                              onChange={(e) => setSubtaskEditValue(e.target.value)}
+                                              onBlur={() => saveSubtaskEdit(s)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  e.preventDefault();
+                                                  saveSubtaskEdit(s);
+                                                } else if (e.key === "Escape") {
+                                                  setEditingSubtaskId(null);
+                                                }
+                                              }}
+                                              className={`${inputClass} text-xs py-1 flex-1`}
+                                            />
+                                          </div>
+                                        ) : (
+                                          <div key={s.id} className="flex items-center gap-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={s.done}
+                                              onChange={() => toggleSubtask(s)}
+                                              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-cyan-glow"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => startEditSubtask(s)}
+                                              title="Klik buat ganti judul"
+                                              className={`text-xs flex-1 truncate text-left bg-transparent border-none p-0 cursor-text ${
+                                                s.done ? "text-slate-500 line-through" : "text-slate-300"
+                                              }`}
+                                            >
+                                              {s.title}
+                                            </button>
+                                            <button
+                                              onClick={() => deleteSubtask(s)}
+                                              aria-label={`Hapus sub-task ${s.title}`}
+                                              className="text-rose-glow/70 hover:text-rose-glow"
+                                            >
+                                              <X aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
+                                            </button>
+                                          </div>
+                                        )
+                                      )}
+                                      <div className="flex gap-2">
+                                        <input
+                                          type="text"
+                                          value={subtaskInput}
+                                          onChange={(e) => setSubtaskInput(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              e.preventDefault();
+                                              handleAddSubtask(task.id);
+                                            }
+                                          }}
+                                          placeholder="Sub-task baru..."
+                                          className={`${inputClass} text-xs py-1.5`}
+                                        />
+                                        <button
+                                          onClick={() => handleAddSubtask(task.id)}
+                                          className={ghostBtnClass}
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </li>
                               )}
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={subtaskInput}
-                                  onChange={(e) => setSubtaskInput(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      handleAddSubtask(task.id);
-                                    }
-                                  }}
-                                  placeholder="Sub-task baru..."
-                                  className={`${inputClass} text-xs py-1.5`}
-                                />
-                                <button
-                                  onClick={() => handleAddSubtask(task.id)}
-                                  className={ghostBtnClass}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </HudPanel>
-            );
-          })}
-        </div>
+                            </DraggableCard>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </DroppableColumn>
+                </HudPanel>
+              );
+            })}
+          </div>
+          <DragOverlay>
+            {activeDragId
+              ? (() => {
+                  const dragged = items.find((t) => t.id === activeDragId);
+                  return dragged ? <DragCardPreview task={dragged} /> : null;
+                })()
+              : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       <HabitsPanel />
