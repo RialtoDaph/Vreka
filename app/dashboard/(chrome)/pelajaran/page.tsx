@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { StudyNote, StudyResource } from "@/lib/types";
+import { Flashcard, StudyNote, StudyResource } from "@/lib/types";
+import { nextReview, type ReviewRating } from "@/lib/spacedRepetition";
+import { computeStreak } from "@/lib/studyStreak";
+import { formatDate } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
 import {
   inputClass,
@@ -205,24 +208,38 @@ export default function PelajaranPage() {
   const [resourceLabel, setResourceLabel] = useState("");
   const [resourceUrl, setResourceUrl] = useState("");
 
+  const [sessionDates, setSessionDates] = useState<string[]>([]);
+  const [flashcardsByNote, setFlashcardsByNote] = useState<Record<string, Flashcard[]>>({});
+  const [flashcardNoteId, setFlashcardNoteId] = useState<string | null>(null);
+
   async function load() {
     setLoading(true);
-    const [{ data: noteRows }, { data: sessionRows }, { data: resourceRows }] = await Promise.all([
-      supabase.from("study_notes").select("*").order("updated_at", { ascending: false }),
-      supabase.from("study_sessions").select("note_id, minutes"),
-      supabase.from("study_resources").select("*").order("created_at", { ascending: true }),
-    ]);
+    const [{ data: noteRows }, { data: sessionRows }, { data: resourceRows }, { data: flashcardRows }] =
+      await Promise.all([
+        supabase.from("study_notes").select("*").order("updated_at", { ascending: false }),
+        supabase.from("study_sessions").select("note_id, minutes, created_at"),
+        supabase.from("study_resources").select("*").order("created_at", { ascending: true }),
+        supabase.from("flashcards").select("*").order("due_at", { ascending: true }),
+      ]);
     setItems(noteRows ?? []);
     const totals: Record<string, number> = {};
+    const dates: string[] = [];
     for (const s of sessionRows ?? []) {
       totals[s.note_id] = (totals[s.note_id] ?? 0) + s.minutes;
+      dates.push(s.created_at);
     }
     setSessionTotals(totals);
+    setSessionDates(dates);
     const grouped: Record<string, StudyResource[]> = {};
     for (const r of (resourceRows ?? []) as StudyResource[]) {
       (grouped[r.note_id] ??= []).push(r);
     }
     setResourcesByNote(grouped);
+    const cardsGrouped: Record<string, Flashcard[]> = {};
+    for (const c of (flashcardRows ?? []) as Flashcard[]) {
+      (cardsGrouped[c.note_id] ??= []).push(c);
+    }
+    setFlashcardsByNote(cardsGrouped);
     setLoading(false);
   }
 
@@ -402,6 +419,7 @@ export default function PelajaranPage() {
           setError("Sesi belajar gagal kesimpen. Coba lagi.");
         } else {
           setSessionTotals((prev) => ({ ...prev, [note.id]: (prev[note.id] ?? 0) + minutes }));
+          setSessionDates((prev) => [...prev, new Date().toISOString()]);
         }
       }
     }
@@ -451,6 +469,93 @@ export default function PelajaranPage() {
     }
   }
 
+  async function addFlashcard(noteId: string, front: string, back: string) {
+    setError(null);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data, error: insertError } = await supabase
+      .from("flashcards")
+      .insert({ user_id: user.id, note_id: noteId, front, back })
+      .select("*")
+      .single();
+    if (insertError || !data) {
+      setError("Gagal tambah kartu. Coba lagi.");
+      return;
+    }
+    setFlashcardsByNote((prev) => ({ ...prev, [noteId]: [...(prev[noteId] ?? []), data] }));
+  }
+
+  async function addFlashcards(noteId: string, drafts: { front: string; back: string }[]) {
+    if (drafts.length === 0) return;
+    setError(null);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data, error: insertError } = await supabase
+      .from("flashcards")
+      .insert(drafts.map((d) => ({ user_id: user.id, note_id: noteId, front: d.front, back: d.back })))
+      .select("*");
+    if (insertError || !data) {
+      setError("Gagal simpan kartu. Coba lagi.");
+      return;
+    }
+    setFlashcardsByNote((prev) => ({ ...prev, [noteId]: [...(prev[noteId] ?? []), ...data] }));
+  }
+
+  async function deleteFlashcard(card: Flashcard) {
+    setError(null);
+    const previous = flashcardsByNote;
+    setFlashcardsByNote((prev) => ({
+      ...prev,
+      [card.note_id]: (prev[card.note_id] ?? []).filter((c) => c.id !== card.id),
+    }));
+    const { error: deleteError } = await supabase.from("flashcards").delete().eq("id", card.id);
+    if (deleteError) {
+      setFlashcardsByNote(previous);
+      setError("Gagal hapus kartu. Coba lagi.");
+    }
+  }
+
+  async function rateFlashcard(card: Flashcard, rating: ReviewRating): Promise<Flashcard> {
+    const next = nextReview(card, rating);
+    const lastReviewedAt = new Date().toISOString();
+    const updated: Flashcard = { ...card, ...next, last_reviewed_at: lastReviewedAt };
+    setFlashcardsByNote((prev) => ({
+      ...prev,
+      [card.note_id]: (prev[card.note_id] ?? []).map((c) => (c.id === card.id ? updated : c)),
+    }));
+    const { error: updateError } = await supabase
+      .from("flashcards")
+      .update({
+        ease_factor: next.ease_factor,
+        interval_days: next.interval_days,
+        repetitions: next.repetitions,
+        due_at: next.due_at,
+        last_reviewed_at: lastReviewedAt,
+      })
+      .eq("id", card.id);
+    if (updateError) {
+      setError("Gagal simpen progress kartu. Coba lagi.");
+    }
+    return updated;
+  }
+
+  async function generateFlashcards(note: StudyNote): Promise<{ front: string; back: string }[]> {
+    const res = await fetch("/api/assistant/flashcards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ noteId: note.id }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error ?? "Gagal bikin kartu.");
+    }
+    return data.cards;
+  }
+
   function closeQuiz() {
     setQuizNoteId(null);
     setQuizQuestions([]);
@@ -482,6 +587,11 @@ export default function PelajaranPage() {
     }
   }
 
+  const flashcardReviewDates = Object.values(flashcardsByNote)
+    .flat()
+    .map((c) => c.last_reviewed_at);
+  const streak = computeStreak([...sessionDates, ...flashcardReviewDates]);
+
   return (
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-3 flex-wrap">
@@ -492,6 +602,9 @@ export default function PelajaranPage() {
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
             Pelajaran
           </h1>
+          {streak > 0 && (
+            <p className="font-mono text-xs text-amber-glow mt-1">🔥 {streak} hari beruntun belajar</p>
+          )}
         </div>
         <button onClick={() => setShowForm((s) => !s)} className={primaryBtnClass}>
           {showForm ? "Batal" : "+ Topik Baru"}
@@ -658,6 +771,18 @@ export default function PelajaranPage() {
                       🧠 Mode Kuis
                     </button>
                   )}
+                  <button
+                    onClick={() => setFlashcardNoteId(flashcardNoteId === note.id ? null : note.id)}
+                    className="text-xs font-mono text-mint-glow/80 hover:text-mint-glow"
+                  >
+                    🗂️ Kartu
+                    {(() => {
+                      const due = (flashcardsByNote[note.id] ?? []).filter(
+                        (c) => new Date(c.due_at) <= new Date()
+                      ).length;
+                      return due > 0 ? ` (${due} due)` : "";
+                    })()}
+                  </button>
                   {activeTimerNoteId === note.id ? (
                     <button
                       onClick={() => stopTimer(note)}
@@ -735,6 +860,19 @@ export default function PelajaranPage() {
                       </div>
                     </div>
                   </div>
+                )}
+
+                {flashcardNoteId === note.id && (
+                  <FlashcardPanel
+                    note={note}
+                    cards={flashcardsByNote[note.id] ?? []}
+                    onClose={() => setFlashcardNoteId(null)}
+                    onAdd={(front, back) => addFlashcard(note.id, front, back)}
+                    onDelete={deleteFlashcard}
+                    onGenerate={() => generateFlashcards(note)}
+                    onSaveGenerated={(drafts) => addFlashcards(note.id, drafts)}
+                    onRate={rateFlashcard}
+                  />
                 )}
 
                 {quizNoteId === note.id && (
@@ -866,6 +1004,256 @@ function QuizPanel({
         <button onClick={onClose} className="text-[11px] text-slate-500 hover:text-slate-300 font-mono">
           Batal kuis
         </button>
+      )}
+    </div>
+  );
+}
+
+type GeneratedCard = { front: string; back: string; selected: boolean };
+
+function FlashcardPanel({
+  note,
+  cards,
+  onClose,
+  onAdd,
+  onDelete,
+  onGenerate,
+  onSaveGenerated,
+  onRate,
+}: {
+  note: StudyNote;
+  cards: Flashcard[];
+  onClose: () => void;
+  onAdd: (front: string, back: string) => Promise<void>;
+  onDelete: (card: Flashcard) => void;
+  onGenerate: () => Promise<{ front: string; back: string }[]>;
+  onSaveGenerated: (drafts: { front: string; back: string }[]) => Promise<void>;
+  onRate: (card: Flashcard, rating: ReviewRating) => Promise<Flashcard>;
+}) {
+  const [mode, setMode] = useState<"list" | "review">("list");
+  const [front, setFront] = useState("");
+  const [back, setBack] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<GeneratedCard[] | null>(null);
+  const [savingCandidates, setSavingCandidates] = useState(false);
+
+  const [reviewQueue, setReviewQueue] = useState<Flashcard[]>([]);
+  const [flipped, setFlipped] = useState(false);
+  const [reviewedCount, setReviewedCount] = useState(0);
+
+  const dueNow = cards.filter((c) => new Date(c.due_at) <= new Date());
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!front.trim() || !back.trim()) return;
+    setAdding(true);
+    await onAdd(front.trim(), back.trim());
+    setFront("");
+    setBack("");
+    setAdding(false);
+  }
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const drafts = await onGenerate();
+      setCandidates(drafts.map((d) => ({ ...d, selected: true })));
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : "Gagal bikin kartu.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleSaveCandidates() {
+    if (!candidates) return;
+    const selected = candidates.filter((c) => c.selected).map(({ front, back }) => ({ front, back }));
+    if (selected.length === 0) return;
+    setSavingCandidates(true);
+    await onSaveGenerated(selected);
+    setSavingCandidates(false);
+    setCandidates(null);
+  }
+
+  function startReview() {
+    setReviewQueue(dueNow);
+    setReviewedCount(0);
+    setFlipped(false);
+    setMode("review");
+  }
+
+  async function rate(rating: ReviewRating) {
+    const card = reviewQueue[0];
+    if (!card) return;
+    const updated = await onRate(card, rating);
+    setReviewQueue((prev) => {
+      const rest = prev.slice(1);
+      return rating === "again" ? [...rest, updated] : rest;
+    });
+    setReviewedCount((c) => c + 1);
+    setFlipped(false);
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-line/60 space-y-3">
+      {mode === "list" ? (
+        <>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-xs font-mono text-slate-500">
+              {cards.length} kartu · {dueNow.length} due hari ini
+            </p>
+            <button onClick={startReview} disabled={dueNow.length === 0} className={primaryBtnClass}>
+              Mulai Review ({dueNow.length})
+            </button>
+          </div>
+
+          <form onSubmit={handleAdd} className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              value={front}
+              onChange={(e) => setFront(e.target.value)}
+              placeholder="Depan (kata/istilah)"
+              className={`${inputClass} text-xs py-1.5 flex-1 min-w-0`}
+            />
+            <input
+              type="text"
+              value={back}
+              onChange={(e) => setBack(e.target.value)}
+              placeholder="Belakang (jawaban)"
+              className={`${inputClass} text-xs py-1.5 flex-1 min-w-0`}
+            />
+            <button type="submit" disabled={adding} className={ghostBtnClass}>
+              +
+            </button>
+          </form>
+
+          {note.content && (
+            <div>
+              <button onClick={handleGenerate} disabled={generating} className={ghostBtnClass}>
+                {generating ? "Bikin kartu..." : "✨ Generate dari Catatan"}
+              </button>
+              {generateError && <p className="text-xs text-rose-glow mt-1.5">{generateError}</p>}
+            </div>
+          )}
+
+          {candidates && (
+            <div className="space-y-2 border border-line/60 rounded-sm p-2.5">
+              <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+                Kartu hasil generate -- pilih yang mau disimpan
+              </p>
+              {candidates.map((c, i) => (
+                <label key={i} className="flex items-start gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={c.selected}
+                    onChange={(e) =>
+                      setCandidates((prev) =>
+                        prev ? prev.map((p, pi) => (pi === i ? { ...p, selected: e.target.checked } : p)) : prev
+                      )
+                    }
+                    className="mt-0.5"
+                  />
+                  <span className="text-slate-300">
+                    <span className="text-slate-100">{c.front}</span> — {c.back}
+                  </span>
+                </label>
+              ))}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveCandidates}
+                  disabled={savingCandidates || candidates.every((c) => !c.selected)}
+                  className={primaryBtnClass}
+                >
+                  {savingCandidates ? "Menyimpan..." : "Simpan Terpilih"}
+                </button>
+                <button onClick={() => setCandidates(null)} className={ghostBtnClass}>
+                  Batal
+                </button>
+              </div>
+            </div>
+          )}
+
+          {cards.length > 0 && (
+            <ul className="space-y-1 max-h-40 overflow-y-auto">
+              {cards.map((c) => (
+                <li key={c.id} className="flex items-center gap-2 text-xs text-slate-400">
+                  <span className="flex-1 truncate">{c.front}</span>
+                  <span className="font-mono text-[10px] text-slate-600 shrink-0">
+                    {new Date(c.due_at) <= new Date() ? "due" : formatDate(c.due_at)}
+                  </span>
+                  <button
+                    onClick={() => onDelete(c)}
+                    className="text-[10px] text-rose-glow/70 hover:text-rose-glow font-mono shrink-0"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button onClick={onClose} className="text-[11px] text-slate-500 hover:text-slate-300 font-mono">
+            Tutup
+          </button>
+        </>
+      ) : reviewQueue.length === 0 ? (
+        <div className="text-center space-y-2 py-2">
+          <p className="text-sm text-mint-glow">🎉 Review selesai! {reviewedCount} kartu direview.</p>
+          <button onClick={() => setMode("list")} className={ghostBtnClass}>
+            Kembali
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-[11px] font-mono text-slate-500">
+            {reviewQueue.length} kartu tersisa · {reviewedCount} udah direview
+          </p>
+          <div
+            onClick={() => setFlipped((f) => !f)}
+            className="cursor-pointer border border-line rounded-sm p-6 text-center min-h-24 flex items-center justify-center bg-panel2"
+          >
+            <p className="text-sm text-slate-100">{flipped ? reviewQueue[0].back : reviewQueue[0].front}</p>
+          </div>
+          {!flipped ? (
+            <button onClick={() => setFlipped(true)} className={`${primaryBtnClass} w-full`}>
+              Balik Kartu
+            </button>
+          ) : (
+            <div className="grid grid-cols-4 gap-2">
+              <button
+                onClick={() => rate("again")}
+                className="text-xs py-2 rounded-sm border border-rose-glow/40 text-rose-glow hover:bg-rose-glow/10"
+              >
+                Lupa
+              </button>
+              <button
+                onClick={() => rate("hard")}
+                className="text-xs py-2 rounded-sm border border-amber-glow/40 text-amber-glow hover:bg-amber-glow/10"
+              >
+                Susah
+              </button>
+              <button
+                onClick={() => rate("good")}
+                className="text-xs py-2 rounded-sm border border-cyan-glow/40 text-cyan-glow hover:bg-cyan-glow/10"
+              >
+                Oke
+              </button>
+              <button
+                onClick={() => rate("easy")}
+                className="text-xs py-2 rounded-sm border border-mint-glow/40 text-mint-glow hover:bg-mint-glow/10"
+              >
+                Gampang
+              </button>
+            </div>
+          )}
+          <button onClick={() => setMode("list")} className="text-[11px] text-slate-500 hover:text-slate-300 font-mono">
+            Hentikan review
+          </button>
+        </div>
       )}
     </div>
   );

@@ -165,6 +165,20 @@ export type StudyResource = {
   created_at: string;
 };
 
+export type Flashcard = {
+  id: string;
+  user_id: string;
+  note_id: string;
+  front: string;
+  back: string;
+  ease_factor: number;
+  interval_days: number;
+  repetitions: number;
+  due_at: string;
+  last_reviewed_at: string | null;
+  created_at: string;
+};
+
 export type JournalEntry = {
   id: string;
   user_id: string;

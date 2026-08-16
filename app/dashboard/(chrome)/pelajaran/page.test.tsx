@@ -14,9 +14,35 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-function mockSupabase(notes: unknown[], onUpdate?: (patch: Record<string, unknown>) => void) {
+function chain(data: unknown[]) {
+  const obj: Record<string, unknown> = {
+    select: () => obj,
+    order: () => obj,
+    eq: () => obj,
+    single: () => Promise.resolve({ data: data[0] ?? null, error: null }),
+    then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data, error: null }).then(resolve),
+  };
+  return obj;
+}
+
+function mockSupabase(
+  notes: unknown[],
+  onUpdate?: (patch: Record<string, unknown>) => void,
+  {
+    sessionRows = [] as unknown[],
+    flashcardRows = [] as unknown[],
+    onFlashcardInsert,
+    onFlashcardUpdate,
+  }: {
+    sessionRows?: unknown[];
+    flashcardRows?: unknown[];
+    onFlashcardInsert?: (payload: unknown) => void;
+    onFlashcardUpdate?: (patch: Record<string, unknown>) => void;
+  } = {}
+) {
   vi.doMock("@/lib/supabase/client", () => ({
     createClient: () => ({
+      auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
       from: (table: string) => {
         if (table === "study_notes") {
           return {
@@ -30,10 +56,37 @@ function mockSupabase(notes: unknown[], onUpdate?: (patch: Record<string, unknow
           };
         }
         if (table === "study_sessions") {
-          return { select: () => Promise.resolve({ data: [], error: null }) };
+          return { select: () => Promise.resolve({ data: sessionRows, error: null }) };
         }
         if (table === "study_resources") {
           return { select: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) };
+        }
+        if (table === "flashcards") {
+          return {
+            select: () => chain(flashcardRows),
+            insert: (payload: unknown) => {
+              onFlashcardInsert?.(payload);
+              const inserted = Array.isArray(payload) ? payload : [payload];
+              const withIds = inserted.map((p, i) => ({
+                id: `new-card-${i}`,
+                ease_factor: 2.5,
+                interval_days: 0,
+                repetitions: 0,
+                due_at: new Date().toISOString(),
+                last_reviewed_at: null,
+                created_at: new Date().toISOString(),
+                ...(p as Record<string, unknown>),
+              }));
+              return chain(withIds);
+            },
+            update: (patch: Record<string, unknown>) => ({
+              eq: () => {
+                onFlashcardUpdate?.(patch);
+                return Promise.resolve({ error: null });
+              },
+            }),
+            delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+          };
         }
         throw new Error(`unexpected table: ${table}`);
       },
@@ -317,5 +370,132 @@ describe("PelajaranPage (persist timer)", () => {
     // disabled from the restored timer before that cleanup effect fires.
     await waitFor(() => expect(startButton).not.toBeDisabled());
     expect(window.localStorage.getItem(TIMER_STORAGE_KEY)).toBeNull();
+  });
+});
+
+describe("PelajaranPage (flashcards)", () => {
+  const note = {
+    id: "note-1",
+    title: "Bahasa Inggris B1",
+    category: "Bahasa",
+    content: "though = walaupun, meskipun",
+    progress: 10,
+    created_at: "2026-01-01",
+    updated_at: "2026-01-01",
+  };
+
+  it("adds a flashcard manually and shows it in the card list", async () => {
+    mockSupabase([note]);
+    const { default: PelajaranPage } = await import("./page");
+    render(<PelajaranPage />);
+
+    fireEvent.click(await screen.findByText(/🗂️ Kartu/));
+    fireEvent.change(screen.getByPlaceholderText("Depan (kata/istilah)"), { target: { value: "though" } });
+    fireEvent.change(screen.getByPlaceholderText("Belakang (jawaban)"), { target: { value: "walaupun" } });
+    fireEvent.click(screen.getByText("+"));
+
+    expect(await screen.findByText("though")).toBeInTheDocument();
+  });
+
+  it("reviews a due flashcard end-to-end: flip, rate, and finish the session", async () => {
+    mockSupabase([note], undefined, {
+      flashcardRows: [
+        {
+          id: "card-1",
+          note_id: "note-1",
+          front: "though",
+          back: "walaupun",
+          ease_factor: 2.5,
+          interval_days: 0,
+          repetitions: 0,
+          due_at: "2020-01-01T00:00:00Z",
+          last_reviewed_at: null,
+          created_at: "2020-01-01T00:00:00Z",
+        },
+      ],
+    });
+    const { default: PelajaranPage } = await import("./page");
+    render(<PelajaranPage />);
+
+    fireEvent.click(await screen.findByText(/🗂️ Kartu \(1 due\)/));
+    fireEvent.click(await screen.findByText("Mulai Review (1)"));
+
+    expect(await screen.findByText("though")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Balik Kartu"));
+    expect(await screen.findByText("walaupun")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Oke"));
+    expect(await screen.findByText(/Review selesai! 1 kartu direview/)).toBeInTheDocument();
+  });
+
+  it("deletes a flashcard", async () => {
+    mockSupabase([note], undefined, {
+      flashcardRows: [
+        {
+          id: "card-1",
+          note_id: "note-1",
+          front: "though",
+          back: "walaupun",
+          ease_factor: 2.5,
+          interval_days: 0,
+          repetitions: 0,
+          due_at: "2099-01-01T00:00:00Z",
+          last_reviewed_at: null,
+          created_at: "2020-01-01T00:00:00Z",
+        },
+      ],
+    });
+    const { default: PelajaranPage } = await import("./page");
+    render(<PelajaranPage />);
+
+    fireEvent.click(await screen.findByText(/🗂️ Kartu/));
+    expect(await screen.findByText("though")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("✕"));
+
+    await waitFor(() => expect(screen.queryByText("though")).not.toBeInTheDocument());
+  });
+
+  it("generates flashcard candidates from the note content and saves the selected ones", async () => {
+    mockSupabase([note]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ cards: [{ front: "though", back: "walaupun" }] }),
+      })
+    );
+
+    const { default: PelajaranPage } = await import("./page");
+    render(<PelajaranPage />);
+
+    fireEvent.click(await screen.findByText(/🗂️ Kartu/));
+    fireEvent.click(screen.getByText("✨ Generate dari Catatan"));
+
+    expect(await screen.findByText("though")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Simpan Terpilih"));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Kartu hasil generate -- pilih yang mau disimpan")).not.toBeInTheDocument()
+    );
+  });
+});
+
+describe("PelajaranPage (streak)", () => {
+  it("shows the current streak based on recent study sessions", async () => {
+    const today = new Date().toISOString();
+    mockSupabase([], undefined, { sessionRows: [{ note_id: "note-1", minutes: 20, created_at: today }] });
+    const { default: PelajaranPage } = await import("./page");
+    render(<PelajaranPage />);
+
+    expect(await screen.findByText(/1 hari beruntun belajar/)).toBeInTheDocument();
+  });
+
+  it("doesn't show a streak badge when there's no recent activity", async () => {
+    mockSupabase([]);
+    const { default: PelajaranPage } = await import("./page");
+    render(<PelajaranPage />);
+
+    await screen.findByText("Belum ada topik belajar.");
+    expect(screen.queryByText(/hari beruntun belajar/)).not.toBeInTheDocument();
   });
 });
