@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { getPrimaryAccountId } from "@/lib/accounts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -81,6 +82,10 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
+    // Same reasoning as Aslan's add_transaction tool -- recurring_items has
+    // no per-item account of its own, so without this every auto-posted
+    // transaction would silently miss every account's balance.
+    const accountId = await getPrimaryAccountId(admin, item.user_id);
     const { data: tx, error: txError } = await admin
       .from("transactions")
       .insert({
@@ -90,6 +95,7 @@ export async function GET(request: NextRequest) {
         amount: item.amount,
         description: item.name,
         occurred_on: occurredOn,
+        account_id: accountId,
       })
       .select("id")
       .single();

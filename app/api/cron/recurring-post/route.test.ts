@@ -16,12 +16,16 @@ type AdminMockConfig = {
   // unique-violation, simulating "already posted this period".
   alreadyClaimedItemIds?: string[];
   txInsertResult?: { data: { id: string } | null; error: { message: string } | null };
+  // None set, by default -- matches the normal "user hasn't picked a
+  // primary rekening yet" case.
+  primaryAccountId?: string | null;
 };
 
 function mockAdmin({
   dueItems = [],
   alreadyClaimedItemIds = [],
   txInsertResult,
+  primaryAccountId = null,
 }: AdminMockConfig) {
   const insertedTransactions: unknown[] = [];
   const insertedChecks: Array<{ user_id: string; recurring_item_id: string; transaction_id: string | null; period: string }> = [];
@@ -86,6 +90,21 @@ function mockAdmin({
                 }),
               };
             },
+          };
+        }
+        if (table === "accounts") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  maybeSingle: () =>
+                    Promise.resolve({
+                      data: primaryAccountId ? { id: primaryAccountId } : null,
+                      error: null,
+                    }),
+                }),
+              }),
+            }),
           };
         }
         throw new Error(`unexpected table: ${table}`);
@@ -153,9 +172,34 @@ describe("GET /api/cron/recurring-post", () => {
         amount: 45,
         description: "Internet",
         occurred_on: new Date().toISOString().slice(0, 10),
+        account_id: null,
       },
     ]);
     expect(updatedChecks).toEqual([{ id: "check-item-1", transaction_id: "tx-1" }]);
+  });
+
+  it("posts the auto-posted transaction against the user's primary rekening when they have one", async () => {
+    const { insertedTransactions } = mockAdmin({
+      dueItems: [
+        {
+          id: "item-1",
+          user_id: "user-1",
+          type: "expense",
+          category: "Tagihan",
+          name: "Internet",
+          amount: 45,
+          day_of_month: TODAY_DAY,
+          auto_post: true,
+        },
+      ],
+      primaryAccountId: "acct-1",
+    });
+    const { GET } = await import("./route");
+    await GET(req("test-secret"));
+
+    expect(insertedTransactions).toEqual([
+      expect.objectContaining({ account_id: "acct-1" }),
+    ]);
   });
 
   it("skips a due item whose period-claim loses to a unique-violation, without inserting a duplicate transaction", async () => {
