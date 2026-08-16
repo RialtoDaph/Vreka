@@ -7,6 +7,7 @@ import { listUpcomingEvents, createEvent, updateEvent, deleteEvent } from "@/lib
 import { formatDateTime } from "@/lib/format";
 import { searchAll } from "@/lib/search";
 import { checkBudgetAlertAndNotify } from "@/lib/budgetAlerts";
+import { getPrimaryAccountId } from "@/lib/accounts";
 
 // Email content comes from whoever sent the email, not the user -- a
 // crafted "instruction" buried in a subject/body shouldn't be able to
@@ -651,12 +652,7 @@ export async function executeAssistantTool(
       // transactions Aslan logs still count toward that account's balance
       // instead of always landing "Belum Ditandain" -- null (no primary set)
       // is a normal, expected case, not an error.
-      const { data: primaryAccount } = await supabase
-        .from("accounts")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("is_primary", true)
-        .maybeSingle();
+      const accountId = await getPrimaryAccountId(supabase, userId);
       const { error } = await supabase.from("transactions").insert({
         user_id: userId,
         type,
@@ -667,7 +663,7 @@ export async function executeAssistantTool(
           typeof input.occurred_on === "string" && input.occurred_on
             ? input.occurred_on
             : new Date().toISOString().slice(0, 10),
-        account_id: primaryAccount?.id ?? null,
+        account_id: accountId,
       });
       if (error) return { ok: false, result: error.message };
       if (type === "expense") {
@@ -1146,6 +1142,9 @@ export async function executeAssistantTool(
 
       const today = new Date().toISOString().slice(0, 10);
       const category = debt.direction === "i_owe" ? "Cicilan/Utang" : "Piutang Diterima";
+      // Same reasoning as add_transaction -- without this, every debt
+      // payment Aslan logs would silently miss every account's balance.
+      const accountId = await getPrimaryAccountId(supabase, userId);
       const { data: tx, error: txError } = await supabase
         .from("transactions")
         .insert({
@@ -1156,6 +1155,7 @@ export async function executeAssistantTool(
           description:
             debt.direction === "i_owe" ? `Cicilan ${debt.party_name}` : `Pembayaran dari ${debt.party_name}`,
           occurred_on: today,
+          account_id: accountId,
         })
         .select("id")
         .single();
