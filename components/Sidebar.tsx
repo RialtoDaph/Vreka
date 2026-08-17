@@ -8,7 +8,7 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex md:flex-col gap-1 md:gap-1.5 overflow-x-auto md:overflow-visible">
+    <nav className="flex flex-col gap-1.5">
       {NAV_MODULES.map((item) => {
         const active =
           item.href === "/dashboard"
