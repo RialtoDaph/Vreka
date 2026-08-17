@@ -7,6 +7,7 @@ import { useQueryParamNotice } from "@/lib/useQueryParamNotice";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
+import DataImport from "@/components/asisten/DataImport";
 import GmailDrafts from "@/components/asisten/GmailDrafts";
 import PushNotifications from "@/components/asisten/PushNotifications";
 import NotificationPreferences from "@/components/asisten/NotificationPreferences";
@@ -322,6 +323,9 @@ export default function AiCorePage() {
           </div>
           <div className="py-3">
             <DataExport />
+          </div>
+          <div className="py-3">
+            <DataImport />
           </div>
           <div className="py-3 last:pb-0">
             <TwoFactorAuth />

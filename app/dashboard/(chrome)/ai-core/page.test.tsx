@@ -15,6 +15,7 @@ afterEach(() => {
 // this test only exercises the page's own stat cells + integration wiring.
 vi.mock("@/components/asisten/ActivityLog", () => ({ default: () => <div>ActivityLog</div> }));
 vi.mock("@/components/asisten/DataExport", () => ({ default: () => <div>DataExport</div> }));
+vi.mock("@/components/asisten/DataImport", () => ({ default: () => <div>DataImport</div> }));
 vi.mock("@/components/asisten/GmailDrafts", () => ({ default: () => <div>GmailDrafts</div> }));
 vi.mock("@/components/asisten/PushNotifications", () => ({ default: () => <div>PushNotifications</div> }));
 vi.mock("@/components/asisten/NotificationPreferences", () => ({
@@ -159,6 +160,7 @@ describe("AiCorePage", () => {
     expect(await screen.findByText("ActivityLog")).toBeInTheDocument();
     expect(screen.getByText("NotificationPreferences")).toBeInTheDocument();
     expect(screen.getByText("DataExport")).toBeInTheDocument();
+    expect(screen.getByText("DataImport")).toBeInTheDocument();
     expect(screen.getByText("TwoFactorAuth")).toBeInTheDocument();
   });
 
