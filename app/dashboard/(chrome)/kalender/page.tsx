@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { buildMonthGrid, buildWeekGrid, dateKey, isSameMonth } from "@/lib/calendarGrid";
 import { localDateTime, toIsoWithLocalOffset } from "@/lib/date";
+import { useConfirm } from "@/lib/useConfirm";
 import HudPanel from "@/components/HudPanel";
 import { ghostBtnClass, primaryBtnClass, inputClass, errorBannerClass } from "@/lib/ui";
+import { Pencil, Trash2 } from "lucide-react";
 
 type CalItemType = "kerjaan" | "keuangan" | "pelajaran" | "asisten";
 
@@ -15,6 +17,12 @@ type CalItem = {
   meta?: string;
   time?: string;
   href: string;
+  // Only set for Google Calendar-sourced ("asisten") items -- lets the UI
+  // offer edit/delete for those specifically, since everything else here
+  // is derived read-only from other modules (kerjaan/keuangan/pelajaran).
+  googleEventId?: string;
+  rawStart?: string;
+  rawEnd?: string;
 };
 
 // Order also drives the legend row below the grid.
@@ -37,6 +45,55 @@ function timeFromIso(iso: string): string | undefined {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+// A single item row shared by the week view's day panels and the day-detail
+// modal. Google Calendar items get Edit/Delete buttons (two-way sync);
+// everything else stays a plain link into its owning module.
+function CalItemRow({
+  item,
+  onEdit,
+  onDelete,
+}: {
+  item: CalItem;
+  onEdit: (item: CalItem) => void;
+  onDelete: (item: CalItem) => void;
+}) {
+  const editable = !!item.googleEventId && !!item.rawStart?.includes("T");
+  return (
+    <li className="flex items-start gap-2.5">
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 ${TYPE_META[item.type].dot}`} />
+      <div className="min-w-0 flex-1">
+        <a href={item.href} className="text-sm text-slate-200 hover:underline block truncate">
+          {item.label}
+        </a>
+        <p className="text-[10.5px] font-mono text-slate-500">
+          {item.time ?? "Sepanjang hari"} · {TYPE_META[item.type].badge}
+          {item.meta ? ` · ${item.meta}` : ""}
+        </p>
+      </div>
+      {item.googleEventId && (
+        <div className="flex items-center gap-1 shrink-0">
+          {editable && (
+            <button
+              onClick={() => onEdit(item)}
+              aria-label={`Edit ${item.label}`}
+              className="w-6 h-6 flex items-center justify-center rounded-sm text-slate-500 hover:text-cyan-glow hover:bg-white/5"
+            >
+              <Pencil aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
+            </button>
+          )}
+          <button
+            onClick={() => onDelete(item)}
+            aria-label={`Hapus ${item.label}`}
+            className="w-6 h-6 flex items-center justify-center rounded-sm text-slate-500 hover:text-rose-glow hover:bg-white/5"
+          >
+            <Trash2 aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
 export default function KalenderPage() {
   const supabase = createClient();
   const [view, setView] = useState<"month" | "week">("month");
@@ -57,6 +114,18 @@ export default function KalenderPage() {
   const [eventEnd, setEventEnd] = useState("10:00");
   const [eventSaving, setEventSaving] = useState(false);
   const [eventError, setEventError] = useState<string | null>(null);
+
+  const { confirm, confirmDialog } = useConfirm();
+  const [editingEvent, setEditingEvent] = useState<{
+    googleEventId: string;
+    title: string;
+    date: string;
+    start: string;
+    end: string;
+  } | null>(null);
+  const [eventEditSaving, setEventEditSaving] = useState(false);
+  const [eventEditError, setEventEditError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const grid = useMemo(
     () => (view === "month" ? buildMonthGrid(visibleMonth) : buildWeekGrid(visibleWeek)),
@@ -160,6 +229,9 @@ export default function KalenderPage() {
         meta: e.location || undefined,
         time: timeFromIso(e.start),
         href: "/dashboard/asisten",
+        googleEventId: e.id,
+        rawStart: e.start,
+        rawEnd: e.end,
       });
     }
 
@@ -271,6 +343,77 @@ export default function KalenderPage() {
       setEventError("Gagal bikin event. Coba lagi.");
     } finally {
       setEventSaving(false);
+    }
+  }
+
+  // All-day Google events carry a bare date ("2026-08-05", no time-of-day),
+  // which the edit form's date+time fields can't represent -- editing those
+  // is out of scope for now, only delete is offered for them.
+  function openEditEvent(item: CalItem) {
+    if (!item.googleEventId || !item.rawStart || !item.rawEnd) return;
+    if (!item.rawStart.includes("T")) return;
+    const startDt = new Date(item.rawStart);
+    const endDt = new Date(item.rawEnd);
+    setEventEditError(null);
+    setEditingEvent({
+      googleEventId: item.googleEventId,
+      title: item.label,
+      date: dateKey(startDt),
+      start: `${String(startDt.getHours()).padStart(2, "0")}:${String(startDt.getMinutes()).padStart(2, "0")}`,
+      end: `${String(endDt.getHours()).padStart(2, "0")}:${String(endDt.getMinutes()).padStart(2, "0")}`,
+    });
+  }
+
+  async function handleUpdateEvent(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingEvent || !editingEvent.title.trim()) return;
+    setEventEditSaving(true);
+    setEventEditError(null);
+    try {
+      const startDt = localDateTime(editingEvent.date, editingEvent.start);
+      const endDt = localDateTime(editingEvent.date, editingEvent.end);
+      if (editingEvent.end <= editingEvent.start) endDt.setDate(endDt.getDate() + 1);
+
+      const res = await fetch("/api/google/calendar/update", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: editingEvent.googleEventId,
+          summary: editingEvent.title.trim(),
+          start: toIsoWithLocalOffset(startDt),
+          end: toIsoWithLocalOffset(endDt),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEventEditError(data.error ?? "Gagal update event.");
+        return;
+      }
+      setEditingEvent(null);
+      await loadItems();
+    } catch {
+      setEventEditError("Gagal update event. Coba lagi.");
+    } finally {
+      setEventEditSaving(false);
+    }
+  }
+
+  async function handleDeleteEvent(item: CalItem) {
+    if (!item.googleEventId) return;
+    if (!(await confirm(`Hapus "${item.label}" dari Google Calendar?`))) return;
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/google/calendar/delete?eventId=${encodeURIComponent(item.googleEventId)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.error ?? "Gagal hapus event.");
+        return;
+      }
+      await loadItems();
+    } catch {
+      setDeleteError("Gagal hapus event. Coba lagi.");
     }
   }
 
@@ -423,20 +566,7 @@ export default function KalenderPage() {
                 ) : (
                   <ul className="space-y-2">
                     {items.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2.5">
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 ${TYPE_META[item.type].dot}`}
-                        />
-                        <div className="min-w-0">
-                          <a href={item.href} className="text-sm text-slate-200 hover:underline block truncate">
-                            {item.label}
-                          </a>
-                          <p className="text-[10.5px] font-mono text-slate-500">
-                            {item.time ?? "Sepanjang hari"} · {TYPE_META[item.type].badge}
-                            {item.meta ? ` · ${item.meta}` : ""}
-                          </p>
-                        </div>
-                      </li>
+                      <CalItemRow key={i} item={item} onEdit={openEditEvent} onDelete={handleDeleteEvent} />
                     ))}
                   </ul>
                 )}
@@ -445,6 +575,8 @@ export default function KalenderPage() {
           })}
         </div>
       )}
+
+      {deleteError && <p className={errorBannerClass}>{deleteError}</p>}
 
       <div className="flex items-center gap-4 flex-wrap text-[11.5px] font-mono">
         {(Object.keys(TYPE_META) as CalItemType[]).map((t) => (
@@ -565,26 +697,82 @@ export default function KalenderPage() {
             ) : (
               <ul className="space-y-2.5">
                 {selectedItems.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2.5">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 ${TYPE_META[item.type].dot}`}
-                    />
-                    <div className="min-w-0">
-                      <a href={item.href} className="text-sm text-slate-200 hover:underline block truncate">
-                        {item.label}
-                      </a>
-                      <p className="text-[10.5px] font-mono text-slate-500">
-                        {item.time ?? "Sepanjang hari"} · {TYPE_META[item.type].badge}
-                        {item.meta ? ` · ${item.meta}` : ""}
-                      </p>
-                    </div>
-                  </li>
+                  <CalItemRow key={i} item={item} onEdit={openEditEvent} onDelete={handleDeleteEvent} />
                 ))}
               </ul>
             )}
           </div>
         </div>
       )}
+
+      {editingEvent && (
+        <div
+          className="fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setEditingEvent(null)}
+        >
+          <div
+            className="w-full max-w-sm bg-panel border border-line rounded-lg p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className="font-display font-semibold text-white tracking-wide">Edit Event</h2>
+              <button
+                onClick={() => setEditingEvent(null)}
+                aria-label="Tutup"
+                className="w-8 h-8 rounded-sm border border-line text-slate-400 hover:text-slate-200 text-sm shrink-0"
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleUpdateEvent} className="space-y-2.5">
+              {eventEditError && <p className={errorBannerClass}>{eventEditError}</p>}
+              <input
+                type="text"
+                value={editingEvent.title}
+                onChange={(e) => setEditingEvent({ ...editingEvent, title: e.target.value })}
+                placeholder="Judul event..."
+                className={inputClass}
+                autoFocus
+              />
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="date"
+                  value={editingEvent.date}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, date: e.target.value })}
+                  className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+                />
+                <input
+                  type="time"
+                  value={editingEvent.start}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, start: e.target.value })}
+                  className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+                />
+                <span className="text-xs text-slate-500">s/d</span>
+                <input
+                  type="time"
+                  value={editingEvent.end}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, end: e.target.value })}
+                  className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setEditingEvent(null)} className={ghostBtnClass}>
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={eventEditSaving || !editingEvent.title.trim()}
+                  className={primaryBtnClass}
+                >
+                  {eventEditSaving ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {confirmDialog}
     </div>
   );
 }
