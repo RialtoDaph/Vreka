@@ -6,6 +6,7 @@ import { refreshAccessToken, listMessages, getMessage } from "@/lib/google/gmail
 import { listUpcomingEvents } from "@/lib/google/calendar";
 import { sendTelegramMessage } from "@/lib/telegram/bot";
 import { sendPushToUser } from "@/lib/push";
+import { getNotificationPreferences } from "@/lib/notificationPreferences";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { checkRateLimit } from "@/lib/rateLimit";
 
@@ -142,6 +143,11 @@ export async function GET(request: NextRequest) {
       for (const link of links ?? []) {
         if (!link.chat_id) continue;
         try {
+          const prefs = await getNotificationPreferences(admin, link.user_id);
+          if (!prefs.telegramDailyBriefing) {
+            results.push({ user_id: link.user_id, status: "skip: telegram briefing disabled by user" });
+            continue;
+          }
           if (!(await claimOnce(admin, "daily-digest:telegram", `${link.user_id}:${today}`))) {
             results.push({ user_id: link.user_id, status: "skip: briefing already sent today" });
             continue;
@@ -171,6 +177,11 @@ export async function GET(request: NextRequest) {
 
       for (const userId of userIds) {
         try {
+          const prefs = await getNotificationPreferences(admin, userId);
+          if (!prefs.pushDailyDigest) {
+            results.push({ user_id: userId, status: "skip: push digest disabled by user" });
+            continue;
+          }
           if (!(await claimOnce(admin, "daily-digest:push", `${userId}:${today}`))) {
             results.push({ user_id: userId, status: "skip: push already sent today" });
             continue;
