@@ -16,7 +16,7 @@ export default function SignOutButton() {
   return (
     <button
       onClick={handleSignOut}
-      className="text-xs font-mono uppercase tracking-wider text-slate-400 hover:text-rose-glow border border-line hover:border-rose-glow/40 rounded-sm px-3 py-2 transition-colors"
+      className="text-xs font-mono uppercase tracking-wider text-fg-subtle hover:text-rose-glow border border-line hover:border-rose-glow/40 rounded-sm px-3 py-2 transition-colors"
     >
       Keluar
     </button>

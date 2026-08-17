@@ -374,7 +374,7 @@ export default function TransactionsTab() {
     <div className="space-y-4">
       <div className="flex justify-between items-center gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <label htmlFor="tx-view-month" className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+          <label htmlFor="tx-view-month" className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle">
             Lihat bulan
           </label>
           <input
@@ -407,11 +407,11 @@ export default function TransactionsTab() {
       </div>
 
       {monthSummary && (
-        <p className="font-mono text-xs text-slate-400 flex items-center gap-3 flex-wrap">
+        <p className="font-mono text-xs text-fg-subtle flex items-center gap-3 flex-wrap">
           <span>Pemasukan: <span className="text-mint-glow">{formatCurrency(monthSummary.income)}</span></span>
           <span>Pengeluaran: <span className="text-rose-glow">{formatCurrency(monthSummary.expense)}</span></span>
           <span>Saldo: {formatCurrency(monthSummary.income - monthSummary.expense)}</span>
-          {hasMore && <span className="text-slate-400">(masih ada data lebih lanjut, muat lebih dulu buat total akurat)</span>}
+          {hasMore && <span className="text-fg-subtle">(masih ada data lebih lanjut, muat lebih dulu buat total akurat)</span>}
         </p>
       )}
 
@@ -427,7 +427,7 @@ export default function TransactionsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   type === "expense"
                     ? "bg-rose-glow/10 text-rose-glow"
-                    : "text-slate-400"
+                    : "text-fg-subtle"
                 }`}
               >
                 Keluar
@@ -438,7 +438,7 @@ export default function TransactionsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   type === "income"
                     ? "bg-mint-glow/10 text-mint-glow"
-                    : "text-slate-400"
+                    : "text-fg-subtle"
                 }`}
               >
                 Masuk
@@ -449,7 +449,7 @@ export default function TransactionsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   type === "transfer"
                     ? "bg-cyan-glow/10 text-cyan-glow"
-                    : "text-slate-400"
+                    : "text-fg-subtle"
                 }`}
               >
                 Transfer
@@ -577,7 +577,7 @@ export default function TransactionsTab() {
                     className="h-16 w-16 object-cover rounded-sm border border-line"
                   />
                 ) : existingReceiptPath ? (
-                  <span className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
+                  <span className="flex items-center gap-1.5 text-xs text-fg-subtle font-mono">
                     <Paperclip aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
                     Struk udah ada — upload baru buat ganti
                   </span>
@@ -617,9 +617,9 @@ export default function TransactionsTab() {
 
       <HudPanel>
         {loading ? (
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-subtle">
             {viewMonth ? "Nggak ada transaksi di bulan ini." : "Belum ada transaksi. Mulai catat di atas."}
           </p>
         ) : (
@@ -630,15 +630,15 @@ export default function TransactionsTab() {
                 className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5"
               >
                 <div className="min-w-0">
-                  <p className="text-sm text-slate-200 truncate">
+                  <p className="text-sm text-fg-secondary truncate">
                     {tx.type === "transfer"
                       ? `Transfer: ${accountLabel.get(tx.account_id ?? "") ?? "?"} → ${accountLabel.get(tx.to_account_id ?? "") ?? "?"}`
                       : tx.category}
                     {tx.description ? (
-                      <span className="text-slate-400"> · {tx.description}</span>
+                      <span className="text-fg-subtle"> · {tx.description}</span>
                     ) : null}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-400">
+                  <p className="text-[11px] font-mono text-fg-subtle">
                     {formatDate(tx.occurred_on)}
                     {tx.type !== "transfer" && ` · ${accountLabel.get(tx.account_id ?? "") ?? "Belum ditandain"}`}
                   </p>

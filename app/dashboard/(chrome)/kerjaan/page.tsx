@@ -38,7 +38,7 @@ const PRIORITY_LABEL: Record<TaskPriority, string> = {
 };
 
 const PRIORITY_TONE: Record<TaskPriority, string> = {
-  low: "text-slate-400 border-line",
+  low: "text-fg-subtle border-line",
   medium: "text-amber-glow border-amber-glow/40",
   high: "text-rose-glow border-rose-glow/40",
 };
@@ -59,7 +59,7 @@ function compareTasks(a: Task, b: Task): number {
 }
 
 const COLUMNS: { key: TaskStatus; label: string; tone: string }[] = [
-  { key: "todo", label: "To-do", tone: "text-slate-300" },
+  { key: "todo", label: "To-do", tone: "text-fg-muted" },
   { key: "in_progress", label: "In Progress", tone: "text-amber-glow" },
   { key: "done", label: "Selesai", tone: "text-mint-glow" },
 ];
@@ -123,7 +123,7 @@ function DroppableColumn({
 function DragCardPreview({ task }: { task: Task }) {
   return (
     <div className="border border-cyan-glow/50 rounded-sm p-3 bg-panel2 shadow-glow w-64 cursor-grabbing">
-      <p className="text-sm text-slate-200 truncate">{task.title}</p>
+      <p className="text-sm text-fg-secondary truncate">{task.title}</p>
       <span
         className={`inline-block mt-1.5 text-[10px] font-mono border rounded-sm px-1.5 py-0.5 ${PRIORITY_TONE[task.priority]}`}
       >
@@ -402,7 +402,7 @@ export default function KerjaanPage() {
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
             Modul 02
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">
             Kerjaan
           </h1>
         </div>
@@ -500,7 +500,7 @@ export default function KerjaanPage() {
 
       {!loading && projects.length > 0 && (
         <div className="flex items-center gap-2">
-          <label htmlFor="task-project-filter" className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+          <label htmlFor="task-project-filter" className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle">
             Project
           </label>
           <select
@@ -521,7 +521,7 @@ export default function KerjaanPage() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : (
         <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -536,12 +536,12 @@ export default function KerjaanPage() {
                     <h2 className={`font-display font-semibold tracking-wide ${col.tone}`}>
                       {col.label}
                     </h2>
-                    <span className="text-xs font-mono text-slate-400">{colItems.length}</span>
+                    <span className="text-xs font-mono text-fg-subtle">{colItems.length}</span>
                   </div>
 
                   <DroppableColumn id={col.key}>
                     {colItems.length === 0 ? (
-                      <p className="text-sm text-slate-400">Kosong.</p>
+                      <p className="text-sm text-fg-subtle">Kosong.</p>
                     ) : (
                       <ul className="space-y-3">
                         {colItems.map((task) => {
@@ -566,8 +566,8 @@ export default function KerjaanPage() {
                                     <p
                                       className={`text-sm truncate ${
                                         task.status === "done"
-                                          ? "text-slate-400 line-through"
-                                          : "text-slate-200"
+                                          ? "text-fg-subtle line-through"
+                                          : "text-fg-secondary"
                                       }`}
                                     >
                                       {task.title}
@@ -576,7 +576,7 @@ export default function KerjaanPage() {
                                       <button
                                         onClick={() => startEdit(task)}
                                         aria-label={`Edit to-do ${task.title}`}
-                                        className="text-slate-400 hover:text-cyan-glow text-xs font-mono leading-none"
+                                        className="text-fg-subtle hover:text-cyan-glow text-xs font-mono leading-none"
                                       >
                                         Edit
                                       </button>
@@ -586,7 +586,7 @@ export default function KerjaanPage() {
                                     </div>
                                   </div>
                                   {task.description && (
-                                    <p className="text-xs text-slate-400 truncate mt-0.5">{task.description}</p>
+                                    <p className="text-xs text-fg-subtle truncate mt-0.5">{task.description}</p>
                                   )}
                                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                                     <span
@@ -601,7 +601,7 @@ export default function KerjaanPage() {
                                     )}
                                     {task.deadline && (
                                       <span
-                                        className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-slate-400"}`}
+                                        className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-fg-subtle"}`}
                                       >
                                         {formatDateTime(task.deadline)}
                                       </span>
@@ -662,7 +662,7 @@ export default function KerjaanPage() {
                                     {subtasks.length === 0 && (
                                       <button
                                         onClick={() => setExpandedId(expanded ? null : task.id)}
-                                        className="text-[11px] font-mono text-slate-400 hover:text-slate-300"
+                                        className="text-[11px] font-mono text-fg-subtle hover:text-fg-muted"
                                       >
                                         + Sub-task
                                       </button>
@@ -704,7 +704,7 @@ export default function KerjaanPage() {
                                               onClick={() => startEditSubtask(s)}
                                               title="Klik buat ganti judul"
                                               className={`text-xs flex-1 truncate text-left bg-transparent border-none p-0 cursor-text ${
-                                                s.done ? "text-slate-400 line-through" : "text-slate-300"
+                                                s.done ? "text-fg-subtle line-through" : "text-fg-muted"
                                               }`}
                                             >
                                               {s.title}

@@ -26,15 +26,15 @@ export default function GlobalPageError({
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-void text-slate-200">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-void text-fg-secondary">
       <div className="max-w-md w-full text-center space-y-5">
         <p className="text-xs font-mono uppercase tracking-[0.3em] text-rose-glow">
           Ada yang salah
         </p>
-        <h1 className="font-display text-xl sm:text-2xl font-bold text-white">
+        <h1 className="font-display text-xl sm:text-2xl font-bold text-fg">
           Halaman ini gagal dimuat
         </h1>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-fg-subtle">
           Coba lagi, atau lompat ke modul lain lewat link di bawah -- data kamu aman,
           ini cuma error tampilan.
         </p>
@@ -49,7 +49,7 @@ export default function GlobalPageError({
             <a
               key={m.href}
               href={m.href}
-              className="text-xs font-mono text-slate-400 hover:text-cyan-glow border border-line hover:border-cyan-glow/40 rounded-sm px-2.5 py-1.5 transition-colors"
+              className="text-xs font-mono text-fg-subtle hover:text-cyan-glow border border-line hover:border-cyan-glow/40 rounded-sm px-2.5 py-1.5 transition-colors"
             >
               {m.label}
             </a>

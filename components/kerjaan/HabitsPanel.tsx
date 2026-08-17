@@ -141,7 +141,7 @@ export default function HabitsPanel() {
     <>
       <HudPanel>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display font-semibold text-white tracking-wide">Kebiasaan</h2>
+          <h2 className="font-display font-semibold text-fg tracking-wide">Kebiasaan</h2>
           {habits.length > 0 && (
             <div className="flex gap-0.5 border border-line rounded-md p-0.5">
               {([7, 30] as HeatmapRange[]).map((r) => (
@@ -149,7 +149,7 @@ export default function HabitsPanel() {
                   key={r}
                   onClick={() => setHeatmapRange(r)}
                   className={`px-2.5 py-1 font-mono text-[10px] uppercase rounded-[3px] ${
-                    heatmapRange === r ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-400"
+                    heatmapRange === r ? "bg-cyan-glow/10 text-cyan-glow" : "text-fg-subtle"
                   }`}
                 >
                   {r} hari
@@ -175,9 +175,9 @@ export default function HabitsPanel() {
         </form>
 
         {loading ? (
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         ) : habits.length === 0 ? (
-          <p className="text-sm text-slate-400">Belum ada kebiasaan yang dilacak.</p>
+          <p className="text-sm text-fg-subtle">Belum ada kebiasaan yang dilacak.</p>
         ) : (
           <ul className="divide-y divide-line/60">
             {habits.map((habit) => {
@@ -217,7 +217,7 @@ export default function HabitsPanel() {
                         type="button"
                         onClick={() => startEdit(habit)}
                         title="Klik buat ganti nama"
-                        className="text-sm text-slate-200 flex-1 truncate text-left bg-transparent border-none p-0 cursor-text"
+                        className="text-sm text-fg-secondary flex-1 truncate text-left bg-transparent border-none p-0 cursor-text"
                       >
                         {habit.title}
                       </button>

@@ -52,7 +52,7 @@ export default function BottomNav() {
                 key={item.href}
                 href={item.href}
                 className={`flex flex-col items-center justify-center gap-1 py-2.5 text-[9.5px] font-mono uppercase tracking-wider ${
-                  active ? "text-cyan-glow" : "text-slate-400"
+                  active ? "text-cyan-glow" : "text-fg-subtle"
                 }`}
               >
                 <item.icon aria-hidden="true" className="w-5 h-5" strokeWidth={1.75} />
@@ -65,7 +65,7 @@ export default function BottomNav() {
             onClick={() => setShowMore(true)}
             aria-label="Menu lainnya"
             className={`flex flex-col items-center justify-center gap-1 py-2.5 text-[9.5px] font-mono uppercase tracking-wider ${
-              restActive ? "text-cyan-glow" : "text-slate-400"
+              restActive ? "text-cyan-glow" : "text-fg-subtle"
             }`}
           >
             <MoreHorizontal aria-hidden="true" className="w-5 h-5" strokeWidth={1.75} />
@@ -88,14 +88,14 @@ export default function BottomNav() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle">
                 Menu lainnya
               </span>
               <button
                 type="button"
                 onClick={() => setShowMore(false)}
                 aria-label="Tutup"
-                className="w-7 h-7 flex items-center justify-center rounded-sm border border-line text-slate-400 hover:text-slate-200 text-sm"
+                className="w-7 h-7 flex items-center justify-center rounded-sm border border-line text-fg-subtle hover:text-fg-secondary text-sm"
               >
                 ×
               </button>
@@ -111,7 +111,7 @@ export default function BottomNav() {
                     className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-sm border text-[10px] font-mono uppercase tracking-wider text-center ${
                       active
                         ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-                        : "border-line text-slate-400"
+                        : "border-line text-fg-subtle"
                     }`}
                   >
                     <item.icon aria-hidden="true" className="w-5 h-5" strokeWidth={1.75} />

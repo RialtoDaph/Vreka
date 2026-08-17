@@ -20,13 +20,13 @@ export default function StatCard({
 
   return (
     <HudPanel>
-      <p className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mb-2">
+      <p className="text-[11px] font-mono uppercase tracking-widest text-fg-subtle mb-2">
         {label}
       </p>
       <p className={`font-mono text-2xl sm:text-3xl font-bold ${toneClass}`}>
         {value}
       </p>
-      {hint && <p className="text-xs text-slate-400 mt-1.5">{hint}</p>}
+      {hint && <p className="text-xs text-fg-subtle mt-1.5">{hint}</p>}
     </HudPanel>
   );
 }

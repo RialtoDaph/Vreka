@@ -3,6 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
+// Chart grid/cursor/pie-stroke colors are picked reactively via useTheme()
+// now (light mode) -- stub it to dark so this file's assertions don't need
+// to know about theming.
+vi.mock("@/components/ThemeProvider", () => ({
+  useTheme: () => ({ preference: "dark", resolvedTheme: "dark", setPreference: vi.fn() }),
+}));
+
 // recharts' ResponsiveContainer only renders its children once a
 // ResizeObserver reports a non-zero size, which jsdom never does on its own
 // — the mock has to actually invoke the callback, not just be present.

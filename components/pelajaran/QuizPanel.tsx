@@ -38,14 +38,14 @@ export default function QuizPanel({
   return (
     <div className="mt-3 pt-3 border-t border-line/60 space-y-3">
       {loading ? (
-        <p className="text-xs text-slate-400 font-mono">Bikin soal...</p>
+        <p className="text-xs text-fg-subtle font-mono">Bikin soal...</p>
       ) : error ? (
         <p className="text-xs text-rose-glow">{error}</p>
       ) : (
         <>
           {questions.map((q, qIndex) => (
             <div key={qIndex}>
-              <p className="text-xs text-slate-200 mb-1.5">
+              <p className="text-xs text-fg-secondary mb-1.5">
                 {qIndex + 1}. {q.question}
               </p>
               <div className="space-y-1">
@@ -66,7 +66,7 @@ export default function QuizPanel({
                             ? "border-rose-glow/50 bg-rose-glow/10 text-rose-glow"
                             : selected
                               ? "border-cyan-glow/50 bg-cyan-glow/10 text-cyan-glow"
-                              : "border-line text-slate-400 hover:border-slate-500"
+                              : "border-line text-fg-subtle hover:border-slate-500"
                       }`}
                     >
                       {opt}
@@ -102,7 +102,7 @@ export default function QuizPanel({
         </>
       )}
       {!loading && !error && (
-        <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-300 font-mono">
+        <button onClick={onClose} className="text-[11px] text-fg-subtle hover:text-fg-muted font-mono">
           Batal kuis
         </button>
       )}

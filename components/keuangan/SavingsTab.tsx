@@ -214,11 +214,11 @@ export default function SavingsTab() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Belum ada target tabungan.</p>
+          <p className="text-sm text-fg-subtle">Belum ada target tabungan.</p>
         </HudPanel>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -230,7 +230,7 @@ export default function SavingsTab() {
             return (
               <HudPanel key={goal.id}>
                 <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-sm font-semibold text-slate-100">{goal.name}</h3>
+                  <h3 className="text-sm font-semibold text-fg">{goal.name}</h3>
                   <div className="flex items-center gap-3 shrink-0">
                     <button onClick={() => startEdit(goal)} className={ghostBtnClass}>
                       Edit
@@ -246,12 +246,12 @@ export default function SavingsTab() {
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-xs font-mono text-slate-400 mb-3">
+                <div className="flex justify-between text-xs font-mono text-fg-subtle mb-3">
                   <span>{formatCurrency(Number(goal.current_amount))}</span>
                   <span>{formatCurrency(Number(goal.target_amount))} · {pct}%</span>
                 </div>
                 {goal.deadline && (
-                  <p className="text-[11px] text-slate-400 mb-3">
+                  <p className="text-[11px] text-fg-subtle mb-3">
                     Deadline {formatDate(goal.deadline)}
                   </p>
                 )}

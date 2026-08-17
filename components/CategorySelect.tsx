@@ -93,11 +93,11 @@ export default function CategorySelect({ id, value, onChange, groups, disabled, 
       {open && !disabled && (
         <div className="absolute z-10 mt-1 w-full max-h-64 overflow-y-auto bg-panel border border-line rounded-sm shadow-glow">
           {filteredGroups.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-slate-400">Nggak ada yang cocok.</p>
+            <p className="px-3 py-2 text-xs text-fg-subtle">Nggak ada yang cocok.</p>
           ) : (
             filteredGroups.map((g) => (
               <div key={g.group}>
-                <p className="px-3 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                <p className="px-3 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-fg-subtle">
                   {g.group}
                 </p>
                 {g.items.map((c) => (
@@ -109,7 +109,7 @@ export default function CategorySelect({ id, value, onChange, groups, disabled, 
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => select(c)}
                     className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-panel2 ${
-                      c === value ? "text-cyan-glow" : "text-slate-200"
+                      c === value ? "text-cyan-glow" : "text-fg-secondary"
                     }`}
                   >
                     {c}

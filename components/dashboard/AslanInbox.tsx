@@ -73,7 +73,7 @@ export default function AslanInbox() {
   return (
     <div className="w-[min(300px,88vw)] bg-panel/90 border border-line rounded-lg backdrop-blur-sm shadow-glow overflow-hidden animate-toast-in">
       <div className="flex items-center justify-between px-3 py-2 border-b border-line">
-        <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-slate-400">Aslan · Inbox</span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-fg-subtle">Aslan · Inbox</span>
         <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-mint-glow/20 text-mint-glow font-mono text-[9.5px]">
           {unread.length}
         </span>
@@ -84,13 +84,13 @@ export default function AslanInbox() {
           const source = toolSource(log.tool_name);
           return (
             <li key={log.id} className="px-3 py-2.5">
-              <p className="flex items-center gap-1.5 text-xs text-slate-200">
+              <p className="flex items-center gap-1.5 text-xs text-fg-secondary">
                 <Wrench aria-hidden="true" className="w-3 h-3 shrink-0" strokeWidth={2} />
                 {TOOL_LABEL[log.tool_name] ?? log.tool_name}
                 {!log.result_ok && <span className="text-rose-glow"> — gagal</span>}
               </p>
               {(detail || source) && (
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-[11px] text-fg-subtle mt-0.5">
                   {detail}
                   {detail && source && " — "}
                   {source && `via ${source}`}

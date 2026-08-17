@@ -101,7 +101,7 @@ export default function FlashcardPanel({
       {mode === "list" ? (
         <>
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <p className="text-xs font-mono text-slate-400">
+            <p className="text-xs font-mono text-fg-subtle">
               {cards.length} kartu · {dueNow.length} due hari ini
             </p>
             <button onClick={startReview} disabled={dueNow.length === 0} className={primaryBtnClass}>
@@ -151,7 +151,7 @@ export default function FlashcardPanel({
 
           {candidates && (
             <div className="space-y-2 border border-line/60 rounded-sm p-2.5">
-              <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+              <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle">
                 Kartu hasil generate -- pilih yang mau disimpan
               </p>
               {candidates.map((c, i) => (
@@ -166,8 +166,8 @@ export default function FlashcardPanel({
                     }
                     className="mt-0.5"
                   />
-                  <span className="text-slate-300">
-                    <span className="text-slate-100">{c.front}</span> — {c.back}
+                  <span className="text-fg-muted">
+                    <span className="text-fg">{c.front}</span> — {c.back}
                   </span>
                 </label>
               ))}
@@ -189,9 +189,9 @@ export default function FlashcardPanel({
           {cards.length > 0 && (
             <ul className="space-y-1 max-h-40 overflow-y-auto">
               {cards.map((c) => (
-                <li key={c.id} className="flex items-center gap-2 text-xs text-slate-400">
+                <li key={c.id} className="flex items-center gap-2 text-xs text-fg-subtle">
                   <span className="flex-1 truncate">{c.front}</span>
-                  <span className="font-mono text-[10px] text-slate-400 shrink-0">
+                  <span className="font-mono text-[10px] text-fg-subtle shrink-0">
                     {new Date(c.due_at) <= new Date() ? "due" : formatDate(c.due_at)}
                   </span>
                   <button
@@ -206,7 +206,7 @@ export default function FlashcardPanel({
             </ul>
           )}
 
-          <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-300 font-mono">
+          <button onClick={onClose} className="text-[11px] text-fg-subtle hover:text-fg-muted font-mono">
             Tutup
           </button>
         </>
@@ -222,7 +222,7 @@ export default function FlashcardPanel({
         </div>
       ) : (
         <div className="space-y-3">
-          <p className="text-[11px] font-mono text-slate-400">
+          <p className="text-[11px] font-mono text-fg-subtle">
             {reviewQueue.length} kartu tersisa · {reviewedCount} udah direview
           </p>
           <button
@@ -231,7 +231,7 @@ export default function FlashcardPanel({
             aria-label={flipped ? "Kartu terbalik, tampilan belakang -- klik buat balik lagi" : "Klik buat balik kartu"}
             className="w-full cursor-pointer border border-line rounded-sm p-6 text-center min-h-24 flex items-center justify-center bg-panel2"
           >
-            <p className="text-sm text-slate-100">{flipped ? reviewQueue[0].back : reviewQueue[0].front}</p>
+            <p className="text-sm text-fg">{flipped ? reviewQueue[0].back : reviewQueue[0].front}</p>
           </button>
           {!flipped ? (
             <button onClick={() => setFlipped(true)} className={`${primaryBtnClass} w-full`}>
@@ -265,7 +265,7 @@ export default function FlashcardPanel({
               </button>
             </div>
           )}
-          <button onClick={() => setMode("list")} className="text-[11px] text-slate-400 hover:text-slate-300 font-mono">
+          <button onClick={() => setMode("list")} className="text-[11px] text-fg-subtle hover:text-fg-muted font-mono">
             Hentikan review
           </button>
         </div>

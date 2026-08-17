@@ -27,7 +27,7 @@ export default function AppChrome({ email }: { email: string | null | undefined 
       <div className="flex items-center justify-between md:block mb-0 md:mb-8">
         <Link href="/dashboard" className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-glow pulse-dot" />
-          <span className="font-display font-bold tracking-widest text-white text-lg">
+          <span className="font-display font-bold tracking-widest text-fg text-lg">
             VREKA
           </span>
         </Link>
@@ -42,9 +42,9 @@ export default function AppChrome({ email }: { email: string | null | undefined 
         <Sidebar />
       </div>
       <div className="hidden md:block mt-8 pt-4 border-t border-line">
-        <p className="text-[11px] font-mono text-slate-400 truncate mb-3">{email}</p>
+        <p className="text-[11px] font-mono text-fg-subtle truncate mb-3">{email}</p>
         <SignOutButton />
-        <p className="text-[10px] font-mono text-slate-400 mt-4">
+        <p className="text-[10px] font-mono text-fg-subtle mt-4">
           <kbd className="border border-line rounded-sm px-1 py-0.5">⌘K</kbd> buat cari cepat
         </p>
       </div>

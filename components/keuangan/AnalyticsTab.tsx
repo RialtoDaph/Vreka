@@ -19,9 +19,10 @@ import {
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/format";
-import { CATEGORY_COLORS, CHART_AXIS, CHART_EXPENSE, CHART_GRID, CHART_INCOME, CHART_OTHER } from "@/lib/chartColors";
+import { CATEGORY_COLORS, CHART_AXIS, CHART_EXPENSE, CHART_GRID_DARK, CHART_GRID_LIGHT, CHART_INCOME, CHART_OTHER } from "@/lib/chartColors";
 import { buildAccountBalances } from "@/lib/accountBalances";
-import { THEME } from "@/lib/theme";
+import { DARK_THEME, LIGHT_THEME } from "@/lib/theme";
+import { useTheme } from "@/components/ThemeProvider";
 import type { Account } from "@/lib/types";
 import HudPanel from "@/components/HudPanel";
 
@@ -71,7 +72,7 @@ function CurrencyTooltip({
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="bg-panel border border-line rounded-sm px-3 py-2 text-xs font-mono shadow-glow">
-      {label && <p className="text-slate-400 mb-1">{label}</p>}
+      {label && <p className="text-fg-subtle mb-1">{label}</p>}
       {payload.map((p) => (
         <p key={p.name} style={{ color: p.color }}>
           {p.name}: {formatCurrency(p.value)}
@@ -83,6 +84,15 @@ function CurrencyTooltip({
 
 export default function AnalyticsTab() {
   const supabase = createClient();
+  const { resolvedTheme } = useTheme();
+  const chartGrid = resolvedTheme === "light" ? CHART_GRID_LIGHT : CHART_GRID_DARK;
+  const palette = resolvedTheme === "light" ? LIGHT_THEME : DARK_THEME;
+  // Bar-hover highlight -- a white tint reads as a subtle lighten on the
+  // dark panel; on a white/near-white light panel the same white would be
+  // invisible, so it needs a dark tint there instead (same idea as the
+  // `overlay` Tailwind token, just needed as a literal rgba() for Recharts'
+  // style prop rather than a className).
+  const hoverCursorFill = resolvedTheme === "light" ? "rgba(15,23,42,0.04)" : "rgba(255,255,255,0.03)";
   const [rows, setRows] = useState<TxRow[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,22 +179,22 @@ export default function AnalyticsTab() {
     <div className="space-y-4">
       <HudPanel>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display font-semibold text-white tracking-wide">
+          <h2 className="font-display font-semibold text-fg tracking-wide">
             Tren {MONTHS_BACK} Bulan Terakhir
           </h2>
         </div>
         {loading ? (
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         ) : (
           <div style={{ width: "100%", height: 260 }}>
             <ResponsiveContainer>
               <BarChart data={monthly} barCategoryGap="24%" barGap={2}>
-                <CartesianGrid vertical={false} stroke={CHART_GRID} />
+                <CartesianGrid vertical={false} stroke={chartGrid} />
                 <XAxis
                   dataKey="label"
                   stroke={CHART_AXIS}
                   tick={{ fill: CHART_AXIS, fontSize: 11, fontFamily: "var(--font-jetbrains)" }}
-                  axisLine={{ stroke: CHART_GRID }}
+                  axisLine={{ stroke: chartGrid }}
                   tickLine={false}
                 />
                 <YAxis
@@ -194,7 +204,7 @@ export default function AnalyticsTab() {
                   tickLine={false}
                   width={0}
                 />
-                <Tooltip content={<CurrencyTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                <Tooltip content={<CurrencyTooltip />} cursor={{ fill: hoverCursorFill }} />
                 <Legend
                   wrapperStyle={{ fontSize: 11, fontFamily: "var(--font-jetbrains)", color: CHART_AXIS }}
                 />
@@ -220,10 +230,10 @@ export default function AnalyticsTab() {
 
       <HudPanel>
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="font-display font-semibold text-white tracking-wide">Tren Kekayaan Bersih</h2>
+          <h2 className="font-display font-semibold text-fg tracking-wide">Tren Kekayaan Bersih</h2>
           {!loading && accounts.length > 0 && netWorthTrend.length > 0 && (
             <div className="text-right">
-              <p className="font-mono text-lg text-white leading-tight">
+              <p className="font-mono text-lg text-fg leading-tight">
                 {formatCurrency(netWorthTrend[netWorthTrend.length - 1].total)}
               </p>
               {netWorthTrend.length > 1 &&
@@ -241,9 +251,9 @@ export default function AnalyticsTab() {
           )}
         </div>
         {loading ? (
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         ) : accounts.length === 0 ? (
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-subtle">
             Belum ada rekening tercatat -- tambahin di tab Rekening biar tren kekayaan bersih bisa dihitung.
           </p>
         ) : (
@@ -256,12 +266,12 @@ export default function AnalyticsTab() {
                     <stop offset="100%" stopColor={CHART_INCOME} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke={CHART_GRID} />
+                <CartesianGrid vertical={false} stroke={chartGrid} />
                 <XAxis
                   dataKey="label"
                   stroke={CHART_AXIS}
                   tick={{ fill: CHART_AXIS, fontSize: 11, fontFamily: "var(--font-jetbrains)" }}
-                  axisLine={{ stroke: CHART_GRID }}
+                  axisLine={{ stroke: chartGrid }}
                   tickLine={false}
                 />
                 <YAxis
@@ -271,7 +281,7 @@ export default function AnalyticsTab() {
                   tickLine={false}
                   width={0}
                 />
-                <Tooltip content={<CurrencyTooltip />} cursor={{ stroke: CHART_GRID }} />
+                <Tooltip content={<CurrencyTooltip />} cursor={{ stroke: chartGrid }} />
                 <Area
                   type="monotone"
                   dataKey="total"
@@ -290,14 +300,14 @@ export default function AnalyticsTab() {
 
       <HudPanel>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display font-semibold text-white tracking-wide">
+          <h2 className="font-display font-semibold text-fg tracking-wide">
             Pengeluaran per Kategori (Bulan Ini)
           </h2>
         </div>
         {loading ? (
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         ) : categories.length === 0 ? (
-          <p className="text-sm text-slate-400">Belum ada pengeluaran bulan ini.</p>
+          <p className="text-sm text-fg-subtle">Belum ada pengeluaran bulan ini.</p>
         ) : (
           <div style={{ width: "100%", height: chartHeight }}>
             <ResponsiveContainer>
@@ -314,7 +324,7 @@ export default function AnalyticsTab() {
                 />
                 <Tooltip
                   content={<CurrencyTooltip />}
-                  cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                  cursor={{ fill: hoverCursorFill }}
                 />
                 <Bar dataKey="amount" name="Pengeluaran" fill={CHART_EXPENSE} radius={[0, 4, 4, 0]} maxBarSize={18}>
                   <LabelList
@@ -332,14 +342,14 @@ export default function AnalyticsTab() {
 
       <HudPanel>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display font-semibold text-white tracking-wide">
+          <h2 className="font-display font-semibold text-fg tracking-wide">
             Distribusi Pengeluaran (Bulan Ini)
           </h2>
         </div>
         {loading ? (
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         ) : categoryDonut.length === 0 ? (
-          <p className="text-sm text-slate-400">Belum ada pengeluaran bulan ini.</p>
+          <p className="text-sm text-fg-subtle">Belum ada pengeluaran bulan ini.</p>
         ) : (
           <div className="flex flex-col sm:flex-row items-center gap-5">
             <div style={{ width: 180, height: 180 }} className="shrink-0">
@@ -353,7 +363,7 @@ export default function AnalyticsTab() {
                     outerRadius={80}
                     paddingAngle={2}
                     strokeWidth={2}
-                    stroke={THEME.panel}
+                    stroke={palette.panel}
                   >
                     {categoryDonut.map((slice) => (
                       <Cell key={slice.category} fill={slice.color} />
@@ -372,9 +382,9 @@ export default function AnalyticsTab() {
                       style={{ background: slice.color }}
                       aria-hidden="true"
                     />
-                    <span className="text-slate-300 truncate">{slice.category}</span>
+                    <span className="text-fg-muted truncate">{slice.category}</span>
                   </span>
-                  <span className="font-mono text-slate-400 shrink-0">{formatCurrency(slice.amount)}</span>
+                  <span className="font-mono text-fg-subtle shrink-0">{formatCurrency(slice.amount)}</span>
                 </li>
               ))}
             </ul>

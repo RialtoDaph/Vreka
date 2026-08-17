@@ -57,7 +57,7 @@ export default function StatusAslan({ gmailConnected, telegramConnected, voiceSu
       className="flex items-center gap-2.5 w-full sm:w-auto border border-line bg-panel/50 rounded-full px-3.5 py-2 text-left hover:border-cyan-glow/40 transition-colors"
     >
       <span className="w-1.5 h-1.5 rounded-full bg-mint-glow shrink-0 animate-pulse" aria-hidden="true" />
-      <span className="font-mono text-[10.5px] text-slate-400 truncate">
+      <span className="font-mono text-[10.5px] text-fg-subtle truncate">
         {connected}/4 sistem terhubung · {memoryCount ?? "–"} memori · {toolCallsToday ?? 0} aksi hari ini
         {lastActivityAt && ` · terakhir aktif ${formatDateTime(lastActivityAt)}`}
       </span>

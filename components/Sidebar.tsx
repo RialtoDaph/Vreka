@@ -21,7 +21,7 @@ export default function Sidebar() {
             className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-sm text-sm font-mono uppercase tracking-wider whitespace-nowrap transition-colors border ${
               active
                 ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-panel2"
+                : "border-transparent text-fg-subtle hover:text-fg-secondary hover:bg-panel2"
             }`}
           >
             <item.icon aria-hidden="true" className="w-4 h-4 shrink-0" strokeWidth={1.75} />

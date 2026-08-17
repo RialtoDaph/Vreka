@@ -421,7 +421,7 @@ export default function RingkasanPage() {
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
             Ringkasan Harian
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white capitalize">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg capitalize">
             {dateLabel || "Memuat..."}
           </h1>
         </div>
@@ -455,7 +455,7 @@ export default function RingkasanPage() {
 
       {loading && !briefing ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Menyusun ringkasan...</p>
+          <p className="text-sm text-fg-subtle">Menyusun ringkasan...</p>
         </HudPanel>
       ) : briefing ? (
         <>
@@ -475,8 +475,8 @@ export default function RingkasanPage() {
                       <p className={`font-mono text-[9.5px] uppercase tracking-wider ${c.text} mb-1`}>
                         {p.tag}
                       </p>
-                      <p className="text-sm text-slate-100 mb-0.5">{p.title}</p>
-                      <p className="text-xs text-slate-400">{p.reason}</p>
+                      <p className="text-sm text-fg mb-0.5">{p.title}</p>
+                      <p className="text-xs text-fg-subtle">{p.reason}</p>
                     </div>
                     <a
                       href={p.href}
@@ -504,7 +504,7 @@ export default function RingkasanPage() {
                 )}
               </button>
               <div className="flex-1 min-w-0">
-                <p className="text-[12.5px] text-slate-300">
+                <p className="text-[12.5px] text-fg-muted">
                   {playing ? "Aslan lagi bacain ringkasan..." : "Dengerin ringkasan ini"}
                 </p>
                 {voiceError && <p className="text-[11px] text-rose-glow mt-0.5">{voiceError}</p>}
@@ -519,13 +519,13 @@ export default function RingkasanPage() {
                 <HudPanel key={sec.title}>
                   <div className="flex items-center gap-2 mb-2.5">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
-                    <h2 className="font-display font-semibold text-white tracking-wide text-sm">
+                    <h2 className="font-display font-semibold text-fg tracking-wide text-sm">
                       {sec.title}
                     </h2>
                   </div>
                   <ul className="space-y-1.5">
                     {sec.items.map((item, i) => (
-                      <li key={i} className="text-[13px] text-slate-300 leading-relaxed">
+                      <li key={i} className="text-[13px] text-fg-muted leading-relaxed">
                         • {item}
                       </li>
                     ))}
@@ -538,7 +538,7 @@ export default function RingkasanPage() {
           {briefing.priorities.length > 0 && (
             <HudPanel>
               <div className="flex items-center justify-between gap-3 mb-2">
-                <h2 className="font-display font-semibold text-white tracking-wide text-sm">
+                <h2 className="font-display font-semibold text-fg tracking-wide text-sm">
                   Insight Aslan
                 </h2>
                 {!insight && !insightLoading && (
@@ -547,11 +547,11 @@ export default function RingkasanPage() {
                   </button>
                 )}
               </div>
-              {insightLoading && <p className="text-xs font-mono text-slate-400">Mikir...</p>}
+              {insightLoading && <p className="text-xs font-mono text-fg-subtle">Mikir...</p>}
               {insightError && <p className="text-xs text-rose-glow">{insightError}</p>}
               {insight && (
                 <>
-                  <p className="text-sm text-slate-300 leading-relaxed mb-2">{insight.text}</p>
+                  <p className="text-sm text-fg-muted leading-relaxed mb-2">{insight.text}</p>
                   {insight.sources.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {insight.sources.map((s) => (
@@ -570,7 +570,7 @@ export default function RingkasanPage() {
                 </>
               )}
               {!insight && !insightLoading && !insightError && (
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-fg-subtle">
                   Minta Aslan gali topik prioritas #1 di atas lebih dalam (boleh pake web search).
                 </p>
               )}
@@ -581,7 +581,7 @@ export default function RingkasanPage() {
             <div>
               <div className="flex items-center gap-2.5 mb-3.5">
                 <span className="flex-1 h-px bg-line" />
-                <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
                   Riwayat Briefing
                 </span>
                 <span className="flex-1 h-px bg-line" />
@@ -598,13 +598,13 @@ export default function RingkasanPage() {
                           onClick={() => setOpenHistoryId(open ? null : h.id)}
                           className="w-full flex items-center justify-between gap-2.5 px-3.5 py-2.5 border border-line rounded-md bg-panel/50 text-left"
                         >
-                          <span className="text-[12.5px] text-slate-300 capitalize">
+                          <span className="text-[12.5px] text-fg-muted capitalize">
                             {formatDate(h.briefing_date)}
                           </span>
-                          <span className="font-mono text-xs text-slate-400">{open ? "−" : "+"}</span>
+                          <span className="font-mono text-xs text-fg-subtle">{open ? "−" : "+"}</span>
                         </button>
                         {open && (
-                          <p className="text-xs text-slate-400 leading-relaxed mt-2 ml-3.5">{h.preview}</p>
+                          <p className="text-xs text-fg-subtle leading-relaxed mt-2 ml-3.5">{h.preview}</p>
                         )}
                       </div>
                     );

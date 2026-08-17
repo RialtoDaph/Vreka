@@ -254,7 +254,7 @@ export default function RecurringTab() {
                 type="button"
                 onClick={() => switchType("expense")}
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
-                  type === "expense" ? "bg-rose-glow/10 text-rose-glow" : "text-slate-400"
+                  type === "expense" ? "bg-rose-glow/10 text-rose-glow" : "text-fg-subtle"
                 }`}
               >
                 Keluar
@@ -263,7 +263,7 @@ export default function RecurringTab() {
                 type="button"
                 onClick={() => switchType("income")}
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
-                  type === "income" ? "bg-mint-glow/10 text-mint-glow" : "text-slate-400"
+                  type === "income" ? "bg-mint-glow/10 text-mint-glow" : "text-fg-subtle"
                 }`}
               >
                 Masuk
@@ -311,7 +311,7 @@ export default function RecurringTab() {
             </div>
 
             <div>
-              <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer w-fit">
+              <label className="flex items-center gap-2.5 text-sm text-fg-muted cursor-pointer w-fit">
                 <input
                   type="checkbox"
                   checked={autoPost}
@@ -410,19 +410,19 @@ function RecurringSection({
   return (
     <HudPanel>
       <div className="flex items-center justify-between mb-1">
-        <h3 className="font-display font-semibold text-white tracking-wide">{title}</h3>
+        <h3 className="font-display font-semibold text-fg tracking-wide">{title}</h3>
         <span className={`font-mono text-sm ${toneClass}`}>{formatCurrency(total)}</span>
       </div>
       {items.length > 0 && (
-        <p className="text-[11px] font-mono text-slate-400 mb-3">
+        <p className="text-[11px] font-mono text-fg-subtle mb-3">
           Tercatat bulan ini: {checkedCount}/{items.length} ({formatCurrency(checkedTotal)})
         </p>
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-400">Memuat...</p>
+        <p className="text-sm text-fg-subtle">Memuat...</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-400">{emptyText}</p>
+        <p className="text-sm text-fg-subtle">{emptyText}</p>
       ) : (
         <ul className="divide-y divide-line/60">
           {items.map((item) => {
@@ -443,12 +443,12 @@ function RecurringSection({
                 <div className="min-w-0 flex-1">
                   <p
                     className={`text-sm truncate ${
-                      isChecked ? "text-slate-400 line-through" : "text-slate-200"
+                      isChecked ? "text-fg-subtle line-through" : "text-fg-secondary"
                     }`}
                   >
                     {item.name}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-400">
+                  <p className="text-[11px] font-mono text-fg-subtle">
                     {item.category}
                     {item.auto_post && (
                       <span className="text-cyan-glow inline-flex items-center gap-1">

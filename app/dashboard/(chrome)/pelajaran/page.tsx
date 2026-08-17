@@ -464,7 +464,7 @@ export default function PelajaranPage() {
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
             Modul 03
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">
             Pelajaran
           </h1>
           {streak > 0 && (
@@ -547,11 +547,11 @@ export default function PelajaranPage() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Belum ada topik belajar.</p>
+          <p className="text-sm text-fg-subtle">Belum ada topik belajar.</p>
         </HudPanel>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -602,10 +602,10 @@ export default function PelajaranPage() {
                 ) : (
                   <div className="flex justify-between items-start mb-2 gap-2">
                     <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-slate-100 truncate">
+                      <h3 className="text-sm font-semibold text-fg truncate">
                         {note.title}
                       </h3>
-                      <p className="text-[11px] font-mono text-slate-400">{note.category}</p>
+                      <p className="text-[11px] font-mono text-fg-subtle">{note.category}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <button
@@ -677,7 +677,7 @@ export default function PelajaranPage() {
                     <button
                       onClick={() => startTimer(note.id)}
                       disabled={!!activeTimerNoteId}
-                      className="text-xs font-mono text-slate-400 hover:text-slate-300 disabled:opacity-40"
+                      className="text-xs font-mono text-fg-subtle hover:text-fg-muted disabled:opacity-40"
                     >
                       ⏱ Mulai Sesi
                       {sessionTotals[note.id] ? ` (total ${sessionTotals[note.id]}m)` : ""}
@@ -690,11 +690,11 @@ export default function PelajaranPage() {
                     {note.content && <Markdown>{note.content}</Markdown>}
 
                     <div>
-                      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                      <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-1.5">
                         Resource
                       </p>
                       {(resourcesByNote[note.id] ?? []).length === 0 ? (
-                        <p className="text-xs text-slate-400">Belum ada link resource.</p>
+                        <p className="text-xs text-fg-subtle">Belum ada link resource.</p>
                       ) : (
                         <ul className="space-y-1 mb-2">
                           {(resourcesByNote[note.id] ?? []).map((r) => (

@@ -33,7 +33,7 @@ export default function MarkdownEditor({
           type="button"
           onClick={() => setTab("write")}
           className={`px-2 py-0.5 rounded-sm text-[10.5px] font-mono uppercase tracking-wider transition-colors ${
-            tab === "write" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-400 hover:text-slate-300"
+            tab === "write" ? "bg-cyan-glow/10 text-cyan-glow" : "text-fg-subtle hover:text-fg-muted"
           }`}
         >
           Tulis
@@ -42,7 +42,7 @@ export default function MarkdownEditor({
           type="button"
           onClick={() => setTab("preview")}
           className={`px-2 py-0.5 rounded-sm text-[10.5px] font-mono uppercase tracking-wider transition-colors ${
-            tab === "preview" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-400 hover:text-slate-300"
+            tab === "preview" ? "bg-cyan-glow/10 text-cyan-glow" : "text-fg-subtle hover:text-fg-muted"
           }`}
         >
           Pratinjau
@@ -62,7 +62,7 @@ export default function MarkdownEditor({
           {value.trim() ? (
             <Markdown>{value}</Markdown>
           ) : (
-            <p className="text-sm text-slate-400">Nggak ada isi buat dipratinjau.</p>
+            <p className="text-sm text-fg-subtle">Nggak ada isi buat dipratinjau.</p>
           )}
         </div>
       )}

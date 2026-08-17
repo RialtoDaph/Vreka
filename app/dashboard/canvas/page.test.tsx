@@ -3,6 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
+// Canvas picks its card/line colors reactively via useTheme() now (light
+// mode) -- stub it to the dark palette so the rest of this file's
+// assertions (card backgrounds, colors, etc) don't need to know about
+// theming at all.
+vi.mock("@/components/ThemeProvider", () => ({
+  useTheme: () => ({ preference: "dark", resolvedTheme: "dark", setPreference: vi.fn() }),
+}));
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
