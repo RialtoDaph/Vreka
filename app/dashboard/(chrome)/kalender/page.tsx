@@ -600,11 +600,11 @@ export default function KalenderPage() {
 
       {selectedDay && (
         <div
-          className="fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-center justify-center p-4 animate-backdrop-in"
           onClick={closeDay}
         >
           <div
-            className="w-full max-w-sm max-h-[80vh] overflow-y-auto bg-panel border border-line rounded-lg p-5"
+            className="w-full max-w-sm max-h-[80vh] overflow-y-auto bg-panel border border-line rounded-lg p-5 animate-panel-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 mb-4">
@@ -707,11 +707,11 @@ export default function KalenderPage() {
 
       {editingEvent && (
         <div
-          className="fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-center justify-center p-4 animate-backdrop-in"
           onClick={() => setEditingEvent(null)}
         >
           <div
-            className="w-full max-w-sm bg-panel border border-line rounded-lg p-5"
+            className="w-full max-w-sm bg-panel border border-line rounded-lg p-5 animate-panel-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 mb-4">

@@ -71,7 +71,7 @@ export default function AslanInbox() {
   if (unread.length === 0) return null;
 
   return (
-    <div className="w-[min(300px,88vw)] bg-panel/90 border border-line rounded-lg backdrop-blur-sm shadow-glow overflow-hidden">
+    <div className="w-[min(300px,88vw)] bg-panel/90 border border-line rounded-lg backdrop-blur-sm shadow-glow overflow-hidden animate-toast-in">
       <div className="flex items-center justify-between px-3 py-2 border-b border-line">
         <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-slate-400">Aslan · Inbox</span>
         <span className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-mint-glow/20 text-mint-glow font-mono text-[9.5px]">

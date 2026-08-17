@@ -69,13 +69,13 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-center justify-center px-4"
+      className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-center justify-center px-4 animate-backdrop-in"
       onClick={onCancel}
     >
       <HudPanel
         as="div"
         glow
-        className="w-full max-w-sm"
+        className="w-full max-w-sm animate-panel-in"
       >
         <div
           ref={dialogRef}
