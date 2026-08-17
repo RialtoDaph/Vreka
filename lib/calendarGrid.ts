@@ -27,3 +27,20 @@ export function buildMonthGrid(monthDate: Date): Date[] {
   }
   return days;
 }
+
+// The 7 dates (Sunday through Saturday) of the week containing `anyDayInWeek`
+// -- same Sunday-start convention as buildMonthGrid, just one week instead
+// of the padded 6-week block.
+export function buildWeekGrid(anyDayInWeek: Date): Date[] {
+  const startWeekday = anyDayInWeek.getDay(); // 0 = Sunday
+  const gridStart = new Date(anyDayInWeek.getFullYear(), anyDayInWeek.getMonth(), anyDayInWeek.getDate());
+  gridStart.setDate(gridStart.getDate() - startWeekday);
+
+  const days: Date[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}

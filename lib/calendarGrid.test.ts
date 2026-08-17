@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMonthGrid, dateKey, isSameMonth } from "./calendarGrid";
+import { buildMonthGrid, buildWeekGrid, dateKey, isSameMonth } from "./calendarGrid";
 
 describe("buildMonthGrid", () => {
   it("returns exactly 42 dates", () => {
@@ -32,6 +32,32 @@ describe("buildMonthGrid", () => {
     const grid = buildMonthGrid(monthDate);
     const firstOfMonth = new Date(2026, 7, 1);
     expect(grid[0].getTime()).toBeLessThanOrEqual(firstOfMonth.getTime());
+  });
+});
+
+describe("buildWeekGrid", () => {
+  it("returns exactly 7 dates", () => {
+    expect(buildWeekGrid(new Date("2026-08-15")).length).toBe(7);
+  });
+
+  it("starts on a Sunday and ends on a Saturday", () => {
+    const grid = buildWeekGrid(new Date("2026-08-15")); // a Saturday
+    expect(grid[0].getDay()).toBe(0);
+    expect(grid[6].getDay()).toBe(6);
+    expect(dateKey(grid[6])).toBe("2026-08-15");
+  });
+
+  it("includes the anchor day itself somewhere in the week", () => {
+    const anchor = new Date("2026-08-12"); // a Wednesday
+    const grid = buildWeekGrid(anchor);
+    expect(grid.map(dateKey)).toContain(dateKey(anchor));
+  });
+
+  it("spans a month boundary correctly", () => {
+    // Aug 30, 2026 is a Sunday -- the week runs Aug 30 through Sep 5.
+    const grid = buildWeekGrid(new Date("2026-09-02"));
+    expect(dateKey(grid[0])).toBe("2026-08-30");
+    expect(dateKey(grid[6])).toBe("2026-09-05");
   });
 });
 
