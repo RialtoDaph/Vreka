@@ -21,16 +21,16 @@ afterEach(() => {
 });
 
 describe("ThemeToggle", () => {
-  it("shows Gelap, Terang, and Sistem options with the current preference pressed", async () => {
+  it("shows Gelap, Terang, and Sistem options with Gelap pressed by default", async () => {
     render(
       <ThemeProvider>
         <ThemeToggle />
       </ThemeProvider>
     );
 
-    expect(await screen.findByText("Gelap")).toBeInTheDocument();
-    expect(screen.getByText("Terang")).toBeInTheDocument();
-    expect(screen.getByText("Sistem")).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByText("Terang")).toBeInTheDocument();
+    expect(screen.getByText("Sistem")).toBeInTheDocument();
+    expect(screen.getByText("Gelap")).toHaveAttribute("aria-pressed", "true");
   });
 
   it("switching to Terang applies it immediately and persists it", async () => {

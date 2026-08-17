@@ -39,16 +39,30 @@ beforeEach(() => {
 });
 
 describe("ThemeProvider", () => {
-  it("defaults to system, resolved via the OS preference, when nothing is stored", async () => {
-    mockMatchMedia(true); // OS prefers light
+  it("defaults to dark when nothing is stored, even if the OS prefers light", async () => {
+    mockMatchMedia(true); // OS prefers light -- must NOT leak through as the default
     render(
       <ThemeProvider>
         <Probe />
       </ThemeProvider>
     );
 
-    expect(await screen.findByTestId("resolved")).toHaveTextContent("light");
-    expect(screen.getByTestId("preference")).toHaveTextContent("system");
+    expect(await screen.findByTestId("resolved")).toHaveTextContent("dark");
+    expect(screen.getByTestId("preference")).toHaveTextContent("dark");
+  });
+
+  it("follows the OS preference only once Sistem is explicitly chosen", async () => {
+    mockMatchMedia(true); // OS prefers light
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>
+    );
+    expect(await screen.findByTestId("resolved")).toHaveTextContent("dark");
+
+    fireEvent.click(screen.getByText("Sistem"));
+
+    expect(screen.getByTestId("resolved")).toHaveTextContent("light");
   });
 
   it("uses a stored explicit preference over the OS setting", async () => {
@@ -77,7 +91,7 @@ describe("ThemeProvider", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 
-  it("persists an explicit choice and clears storage when switching back to system", async () => {
+  it("persists every explicit choice, including Sistem -- an absent key means never chosen, not system", async () => {
     render(
       <ThemeProvider>
         <Probe />
@@ -88,10 +102,10 @@ describe("ThemeProvider", () => {
     expect(window.localStorage.getItem("vreka-theme")).toBe("light");
 
     fireEvent.click(screen.getByText("Sistem"));
-    expect(window.localStorage.getItem("vreka-theme")).toBeNull();
+    expect(window.localStorage.getItem("vreka-theme")).toBe("system");
   });
 
-  it("tracks a live OS preference change while set to system", async () => {
+  it("tracks a live OS preference change once Sistem is selected", async () => {
     const { fireChange } = mockMatchMedia(false);
     render(
       <ThemeProvider>
@@ -99,7 +113,8 @@ describe("ThemeProvider", () => {
       </ThemeProvider>
     );
 
-    expect(await screen.findByTestId("resolved")).toHaveTextContent("dark");
+    fireEvent.click(await screen.findByText("Sistem"));
+    expect(screen.getByTestId("resolved")).toHaveTextContent("dark");
 
     // Simulate the OS flipping to light, then fire the change listener the
     // component registered against the *original* matchMedia() result --
@@ -113,6 +128,19 @@ describe("ThemeProvider", () => {
     fireChange();
 
     expect(await screen.findByTestId("resolved")).toHaveTextContent("light");
+  });
+
+  it("reloads back into the stored Sistem preference on a fresh mount", async () => {
+    window.localStorage.setItem("vreka-theme", "system");
+    mockMatchMedia(true); // OS prefers light
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>
+    );
+
+    expect(await screen.findByTestId("preference")).toHaveTextContent("system");
+    expect(screen.getByTestId("resolved")).toHaveTextContent("light");
   });
 });
 
