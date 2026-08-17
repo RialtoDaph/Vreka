@@ -148,24 +148,27 @@ export default function AiCorePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function pollForTelegramLink() {
-    let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts += 1;
-      const { data } = await supabase
-        .from("telegram_links")
-        .select("telegram_username, linked_at")
-        .not("linked_at", "is", null)
-        .maybeSingle();
-      if (data?.linked_at) {
-        setTelegramLinked(true);
-        setTelegramUsername(data.telegram_username ?? null);
-        setTelegramDeepLink(null);
-        clearInterval(interval);
-      } else if (attempts >= 20) {
-        clearInterval(interval);
-      }
-    }, 3000);
+  // Listens for the webhook (app/api/telegram/webhook) marking this user's
+  // row linked, instead of polling every 3s for up to 20 tries. Same ~60s
+  // give-up window as the old poll had, so a channel doesn't stay open
+  // forever if the user never finishes the Telegram-side confirmation.
+  function subscribeForTelegramLink(userId: string) {
+    const channel = supabase
+      .channel(`telegram-link-${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "telegram_links", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const row = payload.new as { telegram_username: string | null; linked_at: string | null };
+          if (!row.linked_at) return;
+          setTelegramLinked(true);
+          setTelegramUsername(row.telegram_username ?? null);
+          setTelegramDeepLink(null);
+          supabase.removeChannel(channel);
+        }
+      )
+      .subscribe();
+    setTimeout(() => supabase.removeChannel(channel), 60_000);
   }
 
   async function handleConnectTelegram() {
@@ -180,7 +183,10 @@ export default function AiCorePage() {
       }
       setTelegramDeepLink(data.deepLink);
       window.open(data.deepLink, "_blank");
-      pollForTelegramLink();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) subscribeForTelegramLink(user.id);
     } catch {
       setTelegramError("Gagal generate link Telegram.");
     } finally {
