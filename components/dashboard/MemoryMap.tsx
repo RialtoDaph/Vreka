@@ -289,7 +289,12 @@ export default function MemoryMap({ data, vitals }: Props) {
     : "";
 
   return (
-    <div className="relative h-dvh bg-void overflow-hidden">
+    // Forced dark regardless of the app-wide light/dark toggle -- an
+    // immersive 3D "space" view, not a themeable content page (its Three.js
+    // scene is hardcoded dark too, via THEME/useMemoryMapScene.ts, so a
+    // light-themed 2D overlay floating over a permanently-dark 3D scene
+    // would look broken rather than just "not yet themed").
+    <div data-theme="dark" className="relative h-dvh bg-void overflow-hidden">
       <div ref={stageRef} className="absolute inset-0">
         <div ref={labelLayerRef} className="absolute inset-0 pointer-events-none z-[1]" />
       </div>
@@ -300,7 +305,7 @@ export default function MemoryMap({ data, vitals }: Props) {
             <p className="text-xs font-mono uppercase tracking-[0.3em] text-amber-glow mb-2">
               Grafis 3D nggak kebuka
             </p>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-fg-subtle">
               Browser/device ini nggak bisa render tampilan 3D-nya. Semua data kamu tetap aman —
               pakai menu di kiri atas buat langsung ke modul yang kamu mau.
             </p>
@@ -327,11 +332,11 @@ export default function MemoryMap({ data, vitals }: Props) {
               )}
             </span>
             <div>
-              <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0 flex items-center gap-1.5">
+              <p className="font-display font-bold tracking-[0.1em] text-fg text-sm leading-tight m-0 flex items-center gap-1.5">
                 VREKA
-                <span className="text-slate-400 text-[10px]">{navOpen ? "▲" : "▼"}</span>
+                <span className="text-fg-subtle text-[10px]">{navOpen ? "▲" : "▼"}</span>
               </p>
-              <p className="font-mono text-[8px] tracking-[0.15em] text-slate-400 m-0">
+              <p className="font-mono text-[8px] tracking-[0.15em] text-fg-subtle m-0">
                 {data.nodes.length} memori · {data.edges.length} koneksi
               </p>
             </div>
@@ -343,7 +348,7 @@ export default function MemoryMap({ data, vitals }: Props) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="relative flex items-center gap-2.5 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-slate-300 hover:text-cyan-glow hover:bg-panel2 transition-colors border-b border-line/60"
+                  className="relative flex items-center gap-2.5 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-fg-muted hover:text-cyan-glow hover:bg-panel2 transition-colors border-b border-line/60"
                 >
                   <item.icon aria-hidden="true" className="w-4 h-4 shrink-0" strokeWidth={1.75} />
                   {item.label}
@@ -362,23 +367,23 @@ export default function MemoryMap({ data, vitals }: Props) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari memori..."
-            className="w-full box-border bg-panel/75 border border-line text-slate-200 font-mono text-xs px-3 py-2.5 rounded-lg outline-none backdrop-blur-sm focus-visible:outline-cyan-glow mb-3.5"
+            className="w-full box-border bg-panel/75 border border-line text-fg-secondary font-mono text-xs px-3 py-2.5 rounded-lg outline-none backdrop-blur-sm focus-visible:outline-cyan-glow mb-3.5"
           />
 
           <div className="bg-panel/75 border border-line rounded-lg px-3 py-2.5 backdrop-blur-sm">
-            <p className="font-mono text-[8.5px] tracking-[0.1em] text-slate-400 m-0 mb-1.5">
+            <p className="font-mono text-[8.5px] tracking-[0.1em] text-fg-subtle m-0 mb-1.5">
               {"// SYSTEM.STATUS"}
             </p>
             <div className="flex items-center gap-1.5 font-mono text-[9.5px] mb-1">
-              <span className="text-slate-400 shrink-0">NODE</span>
+              <span className="text-fg-subtle shrink-0">NODE</span>
               <span className="text-amber-glow ml-auto">{data.nodes.length}</span>
             </div>
             <div className="flex items-center gap-1.5 font-mono text-[9.5px] mb-1">
-              <span className="text-slate-400 shrink-0">MEM</span>
+              <span className="text-fg-subtle shrink-0">MEM</span>
               <span className="text-cyan-glow ml-auto">{vitals.memoryCount}</span>
             </div>
             <div className="flex items-center gap-1.5 font-mono text-[9.5px]">
-              <span className="text-slate-400 shrink-0">INTG</span>
+              <span className="text-fg-subtle shrink-0">INTG</span>
               <span className="text-mint-glow ml-auto">
                 {vitals.integrationsConnected}/{vitals.integrationsTotal}
               </span>
@@ -446,7 +451,7 @@ export default function MemoryMap({ data, vitals }: Props) {
               aria-pressed={focusMode}
               title="Focus Mode"
               className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
-                focusMode ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-slate-400"
+                focusMode ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-fg-subtle"
               }`}
             >
               ◱
@@ -456,7 +461,7 @@ export default function MemoryMap({ data, vitals }: Props) {
                 <button
                   onClick={() => sceneApiRef.current?.fitView()}
                   title="Fit"
-                  className="flex items-center justify-center w-7 h-7 rounded-[5px] border border-transparent text-slate-400 font-mono text-sm hover:text-slate-200"
+                  className="flex items-center justify-center w-7 h-7 rounded-[5px] border border-transparent text-fg-subtle font-mono text-sm hover:text-fg-secondary"
                 >
                   ⊙
                 </button>
@@ -465,7 +470,7 @@ export default function MemoryMap({ data, vitals }: Props) {
                   aria-pressed={spin}
                   title={spin ? "Auto-spin" : "Diam"}
                   className={`flex items-center justify-center w-7 h-7 rounded-[5px] border font-mono text-sm ${
-                    spin ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-slate-400"
+                    spin ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow" : "border-transparent text-fg-subtle"
                   }`}
                 >
                   ◍
@@ -485,7 +490,7 @@ export default function MemoryMap({ data, vitals }: Props) {
 
       {selectedNode && (
         <div className="absolute top-0 right-0 bottom-0 w-full sm:w-[300px] bg-panel/90 border-l border-line backdrop-blur-[10px] p-5 z-[3] overflow-y-auto">
-          <p className="font-mono text-[9.5px] text-slate-400 mb-2.5 truncate">{breadcrumb}</p>
+          <p className="font-mono text-[9.5px] text-fg-subtle mb-2.5 truncate">{breadcrumb}</p>
           <div className="flex items-center justify-between mb-4">
             <span
               className="font-mono text-[9px] uppercase tracking-[0.15em] border rounded-[3px] px-[7px] py-0.5"
@@ -495,25 +500,25 @@ export default function MemoryMap({ data, vitals }: Props) {
             </span>
             <button
               onClick={() => setSelectedId(null)}
-              className="bg-transparent border-none text-slate-400 text-base leading-none cursor-pointer"
+              className="bg-transparent border-none text-fg-subtle text-base leading-none cursor-pointer"
               aria-label="Tutup detail"
             >
               ×
             </button>
           </div>
-          <p className="font-display text-lg font-bold text-white mb-3">{selectedNode.label}</p>
+          <p className="font-display text-lg font-bold text-fg mb-3">{selectedNode.label}</p>
           <div className="flex flex-col gap-2.5">
             {selectedNode.fields.map((f) => (
               <div
                 key={f.k}
                 className="flex justify-between gap-2.5 border-b border-line/60 pb-2"
               >
-                <span className="text-[11.5px] text-slate-400">{f.k}</span>
-                <span className="text-[12.5px] text-slate-300 text-right">{f.v}</span>
+                <span className="text-[11.5px] text-fg-subtle">{f.k}</span>
+                <span className="text-[12.5px] text-fg-muted text-right">{f.v}</span>
               </div>
             ))}
           </div>
-          <p className="font-mono text-[10px] text-slate-400 mt-4">{linkCount} koneksi</p>
+          <p className="font-mono text-[10px] text-fg-subtle mt-4">{linkCount} koneksi</p>
           {selectedNode.href && (
             <a
               href={selectedNode.href}
@@ -525,7 +530,7 @@ export default function MemoryMap({ data, vitals }: Props) {
           {parentHub && (
             <button
               onClick={() => setSelectedId(parentHub.id)}
-              className="mt-3.5 w-full bg-transparent border border-line text-slate-400 font-mono text-[11px] uppercase tracking-wider py-2 rounded-sm hover:text-slate-200 hover:border-slate-500"
+              className="mt-3.5 w-full bg-transparent border border-line text-fg-subtle font-mono text-[11px] uppercase tracking-wider py-2 rounded-sm hover:text-fg-secondary hover:border-slate-500"
             >
               ← Kembali ke {parentHub.label}
             </button>
@@ -544,19 +549,19 @@ export default function MemoryMap({ data, vitals }: Props) {
                 </span>
                 <button
                   onClick={() => setInsightDismissed(true)}
-                  className="bg-transparent border-none text-slate-400 text-sm leading-none cursor-pointer"
+                  className="bg-transparent border-none text-fg-subtle text-sm leading-none cursor-pointer"
                   aria-label="Tutup riset"
                 >
                   ×
                 </button>
               </div>
-              {insightLoading && <p className="font-mono text-[10px] text-slate-400 m-0">Mikir...</p>}
+              {insightLoading && <p className="font-mono text-[10px] text-fg-subtle m-0">Mikir...</p>}
               {insightError && !insightLoading && (
                 <p className="text-[11.5px] text-rose-glow m-0">{insightError}</p>
               )}
               {insight && !insightLoading && (
                 <>
-                  <p className="text-[12.5px] leading-relaxed text-slate-300 mb-2.5 mt-0">{insight.text}</p>
+                  <p className="text-[12.5px] leading-relaxed text-fg-muted mb-2.5 mt-0">{insight.text}</p>
                   {insight.sources.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {insight.sources.map((s) => (
@@ -572,7 +577,7 @@ export default function MemoryMap({ data, vitals }: Props) {
                       ))}
                     </div>
                   )}
-                  <p className="font-mono text-[9px] text-slate-400 m-0">Klik node lain buat gali topik itu</p>
+                  <p className="font-mono text-[9px] text-fg-subtle m-0">Klik node lain buat gali topik itu</p>
                 </>
               )}
             </div>
@@ -611,7 +616,7 @@ export default function MemoryMap({ data, vitals }: Props) {
                 setLastModuleHref(item.href);
                 setNavOverlay(item.href);
               }}
-              className="relative flex items-center justify-center w-7 h-7 rounded-[3px] text-slate-400 hover:text-cyan-glow hover:bg-panel2"
+              className="relative flex items-center justify-center w-7 h-7 rounded-[3px] text-fg-subtle hover:text-cyan-glow hover:bg-panel2"
             >
               <item.icon aria-hidden="true" className="w-4 h-4" strokeWidth={1.75} />
               {lastModuleHref === item.href && (
@@ -638,7 +643,7 @@ export default function MemoryMap({ data, vitals }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shrink-0 h-10 flex items-center justify-between gap-3 px-4 border-b border-line bg-panel/90">
-              <span className="font-mono text-[10.5px] text-slate-400 truncate">
+              <span className="font-mono text-[10.5px] text-fg-subtle truncate">
                 Memory Map ▸ <span className="text-cyan-glow">{NAV.find((n) => n.href === navOverlay)?.label}</span>
               </span>
               <div className="flex items-center gap-1.5 shrink-0">
@@ -646,14 +651,14 @@ export default function MemoryMap({ data, vitals }: Props) {
                   href={navOverlay}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 h-[26px] px-3 rounded-full border border-line bg-panel2 text-slate-400 font-mono text-[10.5px] uppercase tracking-wider no-underline hover:border-cyan-glow/40"
+                  className="flex items-center gap-1.5 h-[26px] px-3 rounded-full border border-line bg-panel2 text-fg-subtle font-mono text-[10.5px] uppercase tracking-wider no-underline hover:border-cyan-glow/40"
                 >
                   Buka penuh ↗
                 </a>
                 <button
                   onClick={() => setNavOverlay(null)}
                   aria-label="Tutup preview"
-                  className="w-[26px] h-[26px] rounded-full border border-line bg-panel2 text-slate-400 text-sm hover:border-cyan-glow/40"
+                  className="w-[26px] h-[26px] rounded-full border border-line bg-panel2 text-fg-subtle text-sm hover:border-cyan-glow/40"
                 >
                   ×
                 </button>
@@ -679,7 +684,7 @@ export default function MemoryMap({ data, vitals }: Props) {
               <MessageSquare aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
               Aslan bilang
             </p>
-            <p className="text-[12px] leading-relaxed text-slate-300 m-0">{lastReply}</p>
+            <p className="text-[12px] leading-relaxed text-fg-muted m-0">{lastReply}</p>
           </div>
         </div>
       )}

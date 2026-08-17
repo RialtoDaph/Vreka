@@ -146,7 +146,7 @@ export default function JurnalPage() {
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
             Jurnal
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">
             Catatan Harian
           </h1>
         </div>
@@ -169,7 +169,7 @@ export default function JurnalPage() {
               value={selectedDate}
               max={today}
               onChange={(e) => e.target.value && handleDateChange(e.target.value)}
-              className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+              className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-fg-secondary focus:border-cyan-glow/60 transition-colors"
             />
             {selectedDate !== today && (
               <button
@@ -180,7 +180,7 @@ export default function JurnalPage() {
               </button>
             )}
           </div>
-          <p className="text-xs font-mono uppercase tracking-wider text-slate-400">
+          <p className="text-xs font-mono uppercase tracking-wider text-fg-subtle">
             {formatDate(selectedDate)}
           </p>
         </div>
@@ -193,7 +193,7 @@ export default function JurnalPage() {
           ariaLabel="Entri jurnal"
         />
 
-        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400 mt-4 mb-2">
+        <p className="text-[10px] font-mono uppercase tracking-wider text-fg-subtle mt-4 mb-2">
           30 hari terakhir
         </p>
         <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
@@ -216,11 +216,11 @@ export default function JurnalPage() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : otherEntries.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Belum ada catatan sebelumnya.</p>
+          <p className="text-sm text-fg-subtle">Belum ada catatan sebelumnya.</p>
         </HudPanel>
       ) : (
         <div className="space-y-3">
@@ -232,7 +232,7 @@ export default function JurnalPage() {
                   className="text-left flex-1 min-w-0"
                 >
                   <p className="text-xs font-mono text-cyan-glow/80">{formatDate(entry.entry_date)}</p>
-                  <p className="text-sm text-slate-400 truncate">{entry.content}</p>
+                  <p className="text-sm text-fg-subtle truncate">{entry.content}</p>
                 </button>
                 <button onClick={() => handleDelete(entry.id)} className={dangerBtnClass}>
                   Hapus

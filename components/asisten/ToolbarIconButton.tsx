@@ -29,8 +29,8 @@ export default function ToolbarIconButton({
         active
           ? "border-cyan-glow bg-cyan-glow/10 text-cyan-glow shadow-glow"
           : disabled
-            ? "border-line/50 text-slate-700 cursor-not-allowed"
-            : "border-line text-slate-400 hover:text-slate-200 hover:border-cyan-glow/40"
+            ? "border-line/50 text-fg-subtle opacity-40 cursor-not-allowed"
+            : "border-line text-fg-subtle hover:text-fg-secondary hover:border-cyan-glow/40"
       }`}
     >
       <Icon aria-hidden="true" className="w-[18px] h-[18px]" strokeWidth={1.75} />

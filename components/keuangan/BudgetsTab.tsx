@@ -192,11 +192,11 @@ export default function BudgetsTab() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-fg-subtle">
             Belum ada anggaran. Set batas bulanan per kategori biar Aslan bisa
             ngingetin kalau kepake kebanyakan.
           </p>
@@ -209,11 +209,11 @@ export default function BudgetsTab() {
             const over = pct >= 100;
             const near = pct >= 90 && pct < 100;
             const barColor = over ? "bg-rose-glow" : near ? "bg-amber-glow" : "bg-cyan-glow";
-            const textColor = over ? "text-rose-glow" : near ? "text-amber-glow" : "text-slate-400";
+            const textColor = over ? "text-rose-glow" : near ? "text-amber-glow" : "text-fg-subtle";
             return (
               <HudPanel key={budget.id}>
                 <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-sm font-semibold text-slate-100">{budget.category}</h3>
+                  <h3 className="text-sm font-semibold text-fg">{budget.category}</h3>
                   <div className="flex items-center gap-3 shrink-0">
                     <button onClick={() => startEdit(budget)} className={ghostBtnClass}>
                       Edit

@@ -190,7 +190,7 @@ export default function AccountsTab() {
                 />
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm text-fg-muted">
               <input
                 type="checkbox"
                 checked={isPrimary}
@@ -207,11 +207,11 @@ export default function AccountsTab() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-400">Belum ada rekening. Tambah dulu biar transaksi bisa ditandain sumbernya.</p>
+          <p className="text-sm text-fg-subtle">Belum ada rekening. Tambah dulu biar transaksi bisa ditandain sumbernya.</p>
         </HudPanel>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -219,7 +219,7 @@ export default function AccountsTab() {
             <HudPanel key={account.id}>
               <div className="flex justify-between items-start mb-2">
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-100 truncate">
+                  <h3 className="text-sm font-semibold text-fg truncate">
                     {account.name}
                     {account.is_primary && (
                       <span className="ml-2 font-mono text-[9.5px] uppercase tracking-wider text-cyan-glow border border-cyan-glow/30 rounded-full px-1.5 py-0.5">
@@ -244,7 +244,7 @@ export default function AccountsTab() {
       )}
 
       {!loading && unassigned !== 0 && (
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-fg-subtle">
           {formatCurrency(unassigned)} dari transaksi yang belum ditandain rekeningnya (tetap keitung di
           Kekayaan Total, tandain di tab Transaksi kalau mau lebih rapi).
         </p>

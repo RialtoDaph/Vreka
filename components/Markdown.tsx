@@ -8,16 +8,16 @@ import remarkGfm from "remark-gfm";
 // list spelled out here instead of a blanket `prose` wrapper.
 const COMPONENTS: Components = {
   h1: ({ children }) => (
-    <h1 className="font-display text-lg font-bold text-white mt-4 mb-2 first:mt-0">{children}</h1>
+    <h1 className="font-display text-lg font-bold text-fg mt-4 mb-2 first:mt-0">{children}</h1>
   ),
   h2: ({ children }) => (
-    <h2 className="font-display text-base font-bold text-white mt-4 mb-1.5 first:mt-0">{children}</h2>
+    <h2 className="font-display text-base font-bold text-fg mt-4 mb-1.5 first:mt-0">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="font-display text-sm font-semibold text-slate-200 mt-3 mb-1 first:mt-0">{children}</h3>
+    <h3 className="font-display text-sm font-semibold text-fg-secondary mt-3 mb-1 first:mt-0">{children}</h3>
   ),
-  p: ({ children }) => <p className="text-sm text-slate-300 leading-relaxed mb-2 last:mb-0">{children}</p>,
-  strong: ({ children }) => <strong className="text-slate-100 font-semibold">{children}</strong>,
+  p: ({ children }) => <p className="text-sm text-fg-muted leading-relaxed mb-2 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="text-fg font-semibold">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,
   a: ({ href, children }) => (
     <a
@@ -29,8 +29,8 @@ const COMPONENTS: Components = {
       {children}
     </a>
   ),
-  ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 mb-2 text-sm text-slate-300">{children}</ul>,
-  ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 mb-2 text-sm text-slate-300">{children}</ol>,
+  ul: ({ children }) => <ul className="list-disc pl-5 space-y-1 mb-2 text-sm text-fg-muted">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1 mb-2 text-sm text-fg-muted">{children}</ol>,
   li: ({ children }) => <li className="marker:text-slate-500">{children}</li>,
   code: ({ children, className }) => {
     // remark-gfm/react-markdown mark fenced code blocks with a
@@ -50,16 +50,16 @@ const COMPONENTS: Components = {
     <pre className="bg-panel2 border border-line rounded-sm p-3 overflow-x-auto mb-2">{children}</pre>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="border-l-2 border-cyan-glow/30 pl-3 text-slate-400 italic mb-2">{children}</blockquote>
+    <blockquote className="border-l-2 border-cyan-glow/30 pl-3 text-fg-subtle italic mb-2">{children}</blockquote>
   ),
   hr: () => <hr className="border-line my-3" />,
   table: ({ children }) => (
     <div className="overflow-x-auto mb-2">
-      <table className="text-sm text-slate-300 border-collapse">{children}</table>
+      <table className="text-sm text-fg-muted border-collapse">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border border-line px-2 py-1 text-left font-mono text-[11px] uppercase tracking-wider text-slate-400">
+    <th className="border border-line px-2 py-1 text-left font-mono text-[11px] uppercase tracking-wider text-fg-subtle">
       {children}
     </th>
   ),

@@ -108,10 +108,10 @@ export default function PushNotifications() {
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div className="min-w-0">
-        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-0.5">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-0.5">
           Push Notification
         </p>
-        <p className="text-slate-300 text-sm">{statusText[status]}</p>
+        <p className="text-fg-muted text-sm">{statusText[status]}</p>
         {error && <p className="text-xs text-rose-glow mt-1">{error}</p>}
       </div>
       {status === "off" && (

@@ -120,7 +120,7 @@ export default function PomodoroTimer() {
   return (
     <HudPanel glow className="flex items-center justify-between gap-4 flex-wrap">
       <div>
-        <p className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1">
+        <p className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-1">
           {isBreak ? (
             <Coffee aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={2} />
           ) : (

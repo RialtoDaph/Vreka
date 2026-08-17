@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { AssistantAuditLog, AssistantMemory } from "@/lib/types";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { buildDailyActivity, buildToolBreakdown, type DailyActivityPoint, type ToolBreakdownEntry } from "@/lib/assistantActivity";
-import { CHART_AXIS, CHART_GRID, CHART_INCOME } from "@/lib/chartColors";
+import { CHART_AXIS, CHART_GRID_DARK, CHART_GRID_LIGHT, CHART_INCOME } from "@/lib/chartColors";
 import { TOOL_LABEL, describeToolInput } from "@/lib/assistant/toolLabels";
 import HudPanel from "@/components/HudPanel";
+import { useTheme } from "@/components/ThemeProvider";
 import { dangerBtnClass } from "@/lib/ui";
 
 const ACTIVITY_DAYS = 14;
@@ -17,7 +18,7 @@ function CountTooltip({ active, payload, label }: { active?: boolean; payload?: 
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="bg-panel border border-line rounded-sm px-3 py-2 text-xs font-mono shadow-glow">
-      {label && <p className="text-slate-400 mb-1">{label}</p>}
+      {label && <p className="text-fg-subtle mb-1">{label}</p>}
       <p style={{ color: CHART_INCOME }}>{payload[0].value} aksi</p>
     </div>
   );
@@ -27,6 +28,9 @@ type Summary = { messages: number; recentActions: number; memories: number };
 
 export default function ActivityLog() {
   const supabase = createClient();
+  const { resolvedTheme } = useTheme();
+  const chartGrid = resolvedTheme === "light" ? CHART_GRID_LIGHT : CHART_GRID_DARK;
+  const hoverCursorFill = resolvedTheme === "light" ? "rgba(15,23,42,0.04)" : "rgba(255,255,255,0.03)";
   const [open, setOpen] = useState(false);
 
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -126,12 +130,12 @@ export default function ActivityLog() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="text-xs font-mono uppercase tracking-wider text-slate-400 hover:text-slate-300"
+          className="text-xs font-mono uppercase tracking-wider text-fg-subtle hover:text-fg-muted"
         >
           {open ? "▾" : "▸"} Aktivitas Aslan
         </button>
         {!open && summary && (
-          <span className="text-xs font-mono text-slate-400">
+          <span className="text-xs font-mono text-fg-subtle">
             {summary.messages} obrolan · {summary.recentActions} aksi ({ACTIVITY_DAYS} hari) · {summary.memories} memori
           </span>
         )}
@@ -140,24 +144,24 @@ export default function ActivityLog() {
         <div className="space-y-3">
           <HudPanel>
             {statsLoading ? (
-              <p className="text-sm text-slate-400">Memuat...</p>
+              <p className="text-sm text-fg-subtle">Memuat...</p>
             ) : (
               <>
-                <p className="text-sm text-slate-300 mb-4">
+                <p className="text-sm text-fg-muted mb-4">
                   {totalMessages} obrolan
                   {firstMessageAt && ` · udah ngobrol sejak ${formatDate(firstMessageAt)}`}
                 </p>
 
                 {toolBreakdown.length > 0 && (
                   <div className="mb-4">
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+                    <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-2">
                       Tool Paling Sering Dipakai ({ACTIVITY_DAYS} Hari Terakhir)
                     </p>
                     <ul className="space-y-1.5">
                       {toolBreakdown.map((t) => (
                         <li key={t.tool_name} className="flex items-center justify-between text-xs">
-                          <span className="text-slate-300">{TOOL_LABEL[t.tool_name] ?? t.tool_name}</span>
-                          <span className="font-mono text-slate-400">{t.count}x</span>
+                          <span className="text-fg-muted">{TOOL_LABEL[t.tool_name] ?? t.tool_name}</span>
+                          <span className="font-mono text-fg-subtle">{t.count}x</span>
                         </li>
                       ))}
                     </ul>
@@ -165,18 +169,18 @@ export default function ActivityLog() {
                 )}
 
                 <div>
-                  <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+                  <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-2">
                     Aktivitas {ACTIVITY_DAYS} Hari Terakhir
                   </p>
                   <div style={{ width: "100%", height: 140 }}>
                     <ResponsiveContainer>
                       <BarChart data={dailyActivity} barCategoryGap="20%">
-                        <CartesianGrid vertical={false} stroke={CHART_GRID} />
+                        <CartesianGrid vertical={false} stroke={chartGrid} />
                         <XAxis
                           dataKey="label"
                           stroke={CHART_AXIS}
                           tick={{ fill: CHART_AXIS, fontSize: 9, fontFamily: "var(--font-jetbrains)" }}
-                          axisLine={{ stroke: CHART_GRID }}
+                          axisLine={{ stroke: chartGrid }}
                           tickLine={false}
                           interval={1}
                         />
@@ -188,7 +192,7 @@ export default function ActivityLog() {
                           width={24}
                           allowDecimals={false}
                         />
-                        <Tooltip content={<CountTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                        <Tooltip content={<CountTooltip />} cursor={{ fill: hoverCursorFill }} />
                         <Bar dataKey="count" name="Aksi" fill={CHART_INCOME} radius={[3, 3, 0, 0]} maxBarSize={16} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -199,20 +203,20 @@ export default function ActivityLog() {
           </HudPanel>
 
           <HudPanel>
-            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-3">
+            <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-3">
               Memori Aslan ({memories.length})
             </p>
             {memoriesLoading ? (
-              <p className="text-sm text-slate-400">Memuat...</p>
+              <p className="text-sm text-fg-subtle">Memuat...</p>
             ) : memories.length === 0 ? (
-              <p className="text-sm text-slate-400">Belum ada memori tersimpan.</p>
+              <p className="text-sm text-fg-subtle">Belum ada memori tersimpan.</p>
             ) : (
               <ul className="divide-y divide-line/60">
                 {memories.map((m) => (
                   <li key={m.id} className="py-2 first:pt-0 last:pb-0 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs text-slate-200">{m.content}</p>
-                      <p className="text-[10px] font-mono text-slate-400">{formatDateTime(m.created_at)}</p>
+                      <p className="text-xs text-fg-secondary">{m.content}</p>
+                      <p className="text-[10px] font-mono text-fg-subtle">{formatDateTime(m.created_at)}</p>
                     </div>
                     <button onClick={() => handleDeleteMemory(m.id)} className={`${dangerBtnClass} shrink-0`}>
                       Hapus
@@ -225,9 +229,9 @@ export default function ActivityLog() {
 
           <HudPanel>
             {loading ? (
-              <p className="text-sm text-slate-400">Memuat...</p>
+              <p className="text-sm text-fg-subtle">Memuat...</p>
             ) : items.length === 0 ? (
-              <p className="text-sm text-slate-400">Belum ada aktivitas tercatat.</p>
+              <p className="text-sm text-fg-subtle">Belum ada aktivitas tercatat.</p>
             ) : (
               <ul className="divide-y divide-line/60">
                 {items.map((log) => {
@@ -235,11 +239,11 @@ export default function ActivityLog() {
                   return (
                     <li key={log.id} className="py-2 first:pt-0 last:pb-0 flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-xs text-slate-200">
+                        <p className="text-xs text-fg-secondary">
                           {TOOL_LABEL[log.tool_name] ?? log.tool_name}
-                          {detail && <span className="text-slate-400"> — {detail}</span>}
+                          {detail && <span className="text-fg-subtle"> — {detail}</span>}
                         </p>
-                        <p className="text-[10px] font-mono text-slate-400">
+                        <p className="text-[10px] font-mono text-fg-subtle">
                           {formatDateTime(log.created_at)}
                         </p>
                       </div>

@@ -5,18 +5,36 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { CanvasArrow, CanvasNode, CanvasNodeKind } from "@/lib/types";
 import { arrowEndpoints, clampZoom, toWorldPoint, zoomFromWheel, type Pan } from "@/lib/canvas";
-import { THEME } from "@/lib/theme";
+import { DARK_THEME, LIGHT_THEME } from "@/lib/theme";
+import { useTheme } from "@/components/ThemeProvider";
 import { useConfirm } from "@/lib/useConfirm";
 import { StickyNote, ListTodo } from "lucide-react";
 
-const CARD_COLORS = [THEME.cyanGlow, THEME.amberGlow, THEME.roseGlow, THEME.mintGlow, THEME.violetGlow];
+// A fixed palette of sticky-note/card accent colors, independent of the
+// app's light/dark toggle -- node.color is persisted verbatim to the
+// database when a card is created, so if this rotated with the *current*
+// theme, a note made in dark mode would carry a stale dark-mode hex once
+// the app is later viewed in light mode (or vice versa). Vivid enough to
+// read fine as a card border/accent against either a light or dark canvas.
+const CARD_COLORS = [
+  DARK_THEME.cyanGlow,
+  DARK_THEME.amberGlow,
+  DARK_THEME.roseGlow,
+  DARK_THEME.mintGlow,
+  DARK_THEME.violetGlow,
+];
+
+function hexToRgba(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
 
 const INITIAL_PAN: Pan = { x: 0, y: 0 };
 
 const canvasToolBtnClass =
-  "bg-panel/80 border border-line text-slate-300 font-mono text-[11px] px-3 py-[7px] rounded-md cursor-pointer whitespace-nowrap backdrop-blur-sm hover:border-cyan-glow/40";
+  "bg-panel/80 border border-line text-fg-muted font-mono text-[11px] px-3 py-[7px] rounded-md cursor-pointer whitespace-nowrap backdrop-blur-sm hover:border-cyan-glow/40";
 const canvasZoomBtnClass =
-  "w-7 h-7 bg-panel/80 border border-line text-slate-300 rounded-md cursor-pointer backdrop-blur-sm hover:border-cyan-glow/40";
+  "w-7 h-7 bg-panel/80 border border-line text-fg-muted rounded-md cursor-pointer backdrop-blur-sm hover:border-cyan-glow/40";
 
 type DragState = { nodeId: string; offsetX: number; offsetY: number };
 type PanState = { startClientX: number; startClientY: number; startPanX: number; startPanY: number };
@@ -24,6 +42,8 @@ type PanState = { startClientX: number; startClientY: number; startPanX: number;
 export default function CanvasKerjaPage() {
   const supabase = createClient();
   const stageRef = useRef<HTMLDivElement>(null);
+  const { resolvedTheme } = useTheme();
+  const palette = resolvedTheme === "light" ? LIGHT_THEME : DARK_THEME;
 
   const [nodes, setNodes] = useState<CanvasNode[]>([]);
   const [arrows, setArrows] = useState<CanvasArrow[]>([]);
@@ -310,7 +330,7 @@ export default function CanvasKerjaPage() {
               <path d="M 42 0 L 0 0 0 42" fill="none" stroke="rgba(75,232,255,.06)" strokeWidth="1" />
             </pattern>
             <marker id="canvas-arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6" fill={THEME.cyanGlow} opacity="0.6" />
+              <path d="M0,0 L6,3 L0,6" fill={palette.cyanGlow} opacity="0.6" />
             </marker>
           </defs>
           <g style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}>
@@ -327,7 +347,7 @@ export default function CanvasKerjaPage() {
                   y1={pts.y1}
                   x2={pts.x2}
                   y2={pts.y2}
-                  stroke={THEME.cyanGlow}
+                  stroke={palette.cyanGlow}
                   strokeWidth={2}
                   opacity={0.45}
                   markerEnd="url(#canvas-arrowhead)"
@@ -340,7 +360,7 @@ export default function CanvasKerjaPage() {
                 y1={linkSource.y + linkSource.h / 2}
                 x2={linkCursor.x}
                 y2={linkCursor.y}
-                stroke={THEME.cyanGlow}
+                stroke={palette.cyanGlow}
                 strokeWidth={2}
                 opacity={0.3}
                 strokeDasharray="4 4"
@@ -355,7 +375,7 @@ export default function CanvasKerjaPage() {
         >
           {nodes.map((node) => {
             const isSticky = node.kind === "sticky";
-            const accent = node.color ?? THEME.cyanGlow;
+            const accent = node.color ?? palette.cyanGlow;
             return (
               <div
                 key={node.id}
@@ -367,8 +387,8 @@ export default function CanvasKerjaPage() {
                   top: node.y,
                   width: node.w,
                   height: node.h,
-                  background: isSticky ? "rgba(15,26,44,.92)" : "rgba(11,18,32,.92)",
-                  border: `1px solid ${isSticky ? `${accent}55` : THEME.line}`,
+                  background: hexToRgba(isSticky ? palette.panel2 : palette.panel, 0.92),
+                  border: `1px solid ${isSticky ? `${accent}55` : palette.line}`,
                   borderLeft: `3px solid ${accent}`,
                   cursor: dragging?.nodeId === node.id ? "grabbing" : "grab",
                   touchAction: "none",
@@ -392,7 +412,7 @@ export default function CanvasKerjaPage() {
                         className="w-2.5 h-2.5 rounded-full shrink-0"
                         style={{
                           background: c,
-                          outline: node.color === c ? `1px solid ${THEME.void}` : "none",
+                          outline: node.color === c ? `1px solid ${palette.void}` : "none",
                           boxShadow: node.color === c ? `0 0 0 1.5px ${c}` : "none",
                         }}
                       />
@@ -405,7 +425,7 @@ export default function CanvasKerjaPage() {
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     aria-label={`Hapus kartu ${isSticky ? "sticky" : "tugas"}`}
-                    className="bg-transparent border-none text-white/40 hover:text-white/70 cursor-pointer text-sm leading-none"
+                    className="bg-transparent border-none text-fg/40 hover:text-fg/70 cursor-pointer text-sm leading-none"
                   >
                     ×
                   </button>
@@ -418,7 +438,7 @@ export default function CanvasKerjaPage() {
                     onPointerDown={(e) => e.stopPropagation()}
                     placeholder="Tulis catatan..."
                     aria-label="Isi catatan sticky"
-                    className="flex-1 w-full bg-transparent border-none text-slate-200 text-[13px] resize-none outline-none"
+                    className="flex-1 w-full bg-transparent border-none text-fg-secondary text-[13px] resize-none outline-none"
                   />
                 ) : (
                   <>
@@ -429,7 +449,7 @@ export default function CanvasKerjaPage() {
                       onPointerDown={(e) => e.stopPropagation()}
                       placeholder="Label"
                       aria-label="Label tugas"
-                      className="w-full bg-transparent border-none text-[9px] font-mono uppercase tracking-wider text-slate-400 outline-none mb-1"
+                      className="w-full bg-transparent border-none text-[9px] font-mono uppercase tracking-wider text-fg-subtle outline-none mb-1"
                     />
                     <input
                       value={node.text}
@@ -438,14 +458,14 @@ export default function CanvasKerjaPage() {
                       onPointerDown={(e) => e.stopPropagation()}
                       placeholder="Judul tugas"
                       aria-label="Judul tugas"
-                      className="w-full bg-transparent border-none text-[13px] text-slate-200 outline-none"
+                      className="w-full bg-transparent border-none text-[13px] text-fg-secondary outline-none"
                     />
                   </>
                 )}
                 <div
                   onPointerDown={(e) => onLinkPointPointerDown(node.id, e)}
                   className="absolute -right-1.5 -bottom-1.5 w-4 h-4 -m-0.5 rounded-full border-2 z-10"
-                  style={{ background: THEME.cyanGlow, borderColor: THEME.void, cursor: "crosshair", touchAction: "none" }}
+                  style={{ background: palette.cyanGlow, borderColor: palette.void, cursor: "crosshair", touchAction: "none" }}
                   aria-hidden="true"
                 />
               </div>
@@ -460,10 +480,10 @@ export default function CanvasKerjaPage() {
             <span className="w-2 h-2 rounded-full bg-cyan-glow" />
           </span>
           <div>
-            <p className="font-display font-bold tracking-[0.1em] text-white text-sm leading-tight m-0">
+            <p className="font-display font-bold tracking-[0.1em] text-fg text-sm leading-tight m-0">
               CANVAS KERJA
             </p>
-            <p className="font-mono text-[8px] tracking-[0.15em] text-slate-400 m-0">
+            <p className="font-mono text-[8px] tracking-[0.15em] text-fg-subtle m-0">
               Modul 08 · {nodes.length} item
             </p>
           </div>
@@ -490,7 +510,7 @@ export default function CanvasKerjaPage() {
         <button onClick={() => setZoom((z) => clampZoom(z - 0.1))} className={canvasZoomBtnClass}>
           −
         </button>
-        <span className="font-mono text-[11px] text-slate-400 px-1.5 flex items-center">
+        <span className="font-mono text-[11px] text-fg-subtle px-1.5 flex items-center">
           {Math.round(zoom * 100)}%
         </span>
         <button onClick={() => setZoom((z) => clampZoom(z + 0.1))} className={canvasZoomBtnClass}>
@@ -509,11 +529,11 @@ export default function CanvasKerjaPage() {
 
       {!loading && nodes.length === 0 && (
         <div className="absolute inset-0 z-[1] flex items-center justify-center pointer-events-none">
-          <p className="text-sm text-slate-400">Kosong -- klik &quot;+ Sticky&quot; atau &quot;+ Kartu Tugas&quot; buat mulai.</p>
+          <p className="text-sm text-fg-subtle">Kosong -- klik &quot;+ Sticky&quot; atau &quot;+ Kartu Tugas&quot; buat mulai.</p>
         </div>
       )}
 
-      <p className="absolute bottom-4 left-5 z-[2] font-mono text-[10px] text-slate-400 tracking-wide max-w-[calc(100%-40px)]">
+      <p className="absolute bottom-4 left-5 z-[2] font-mono text-[10px] text-fg-subtle tracking-wide max-w-[calc(100%-40px)]">
         Drag kanvas kosong buat geser · klik titik cyan di pojok kartu lalu klik kartu lain buat sambung · klik titik
         warna buat ganti warna kartu · scroll atau cubit buat zoom
       </p>

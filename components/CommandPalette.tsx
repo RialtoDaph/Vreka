@@ -163,11 +163,11 @@ export default function CommandPalette() {
           }}
           onKeyDown={handleKeyDown}
           placeholder="Ketik buat cari modul..."
-          className="w-full bg-transparent px-4 py-3.5 text-sm text-white placeholder:text-slate-600 border-b border-line focus:outline-none"
+          className="w-full bg-transparent px-4 py-3.5 text-sm text-fg placeholder:text-slate-600 border-b border-line focus:outline-none"
         />
         <ul className="max-h-72 overflow-y-auto py-1.5">
           {combined.length === 0 ? (
-            <li className="px-4 py-3 text-sm text-slate-400">Nggak ketemu.</li>
+            <li className="px-4 py-3 text-sm text-fg-subtle">Nggak ketemu.</li>
           ) : (
             combined.map((item, i) => (
               <li key={item.key}>
@@ -175,14 +175,14 @@ export default function CommandPalette() {
                   onClick={() => go(item)}
                   onMouseEnter={() => setActiveIndex(i)}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
-                    i === activeIndex ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-300"
+                    i === activeIndex ? "bg-cyan-glow/10 text-cyan-glow" : "text-fg-muted"
                   }`}
                 >
                   <item.icon aria-hidden="true" className="w-4 h-4 shrink-0" strokeWidth={1.75} />
                   <span className="flex-1 min-w-0">
                     <span className="block truncate">{item.label}</span>
                     {item.sublabel ? (
-                      <span className="block truncate text-xs text-slate-400">{item.sublabel}</span>
+                      <span className="block truncate text-xs text-fg-subtle">{item.sublabel}</span>
                     ) : null}
                   </span>
                 </button>
@@ -190,7 +190,7 @@ export default function CommandPalette() {
             ))
           )}
         </ul>
-        <p className="px-4 py-2 text-[10px] font-mono text-slate-400 border-t border-line">
+        <p className="px-4 py-2 text-[10px] font-mono text-fg-subtle border-t border-line">
           ↑↓ pilih · Enter buka · Esc tutup
         </p>
       </div>

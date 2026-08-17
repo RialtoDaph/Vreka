@@ -85,7 +85,7 @@ export default function ConfirmDialog({
           onClick={(e) => e.stopPropagation()}
           onKeyDown={handleDialogKeyDown}
         >
-          <p className="text-sm text-slate-200 leading-relaxed mb-5">{message}</p>
+          <p className="text-sm text-fg-secondary leading-relaxed mb-5">{message}</p>
           <div className="flex justify-end gap-2.5">
             <button onClick={onCancel} className={ghostBtnClass}>
               {cancelLabel}

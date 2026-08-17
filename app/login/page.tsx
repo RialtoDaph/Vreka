@@ -71,10 +71,10 @@ export default function LoginPage() {
               System Online
             </span>
           </div>
-          <h1 className="font-display text-4xl font-bold tracking-wide text-white">
+          <h1 className="font-display text-4xl font-bold tracking-wide text-fg">
             VREKA
           </h1>
-          <p className="text-slate-400 text-sm mt-1 font-body">
+          <p className="text-fg-subtle text-sm mt-1 font-body">
             Command center pribadi kamu
           </p>
         </div>
@@ -87,7 +87,7 @@ export default function LoginPage() {
               className={`flex-1 py-2 uppercase tracking-wider transition-colors ${
                 mode === "signin"
                   ? "bg-cyan-glow/10 text-cyan-glow"
-                  : "text-slate-400 hover:text-slate-300"
+                  : "text-fg-subtle hover:text-fg-muted"
               }`}
             >
               Masuk
@@ -98,7 +98,7 @@ export default function LoginPage() {
               className={`flex-1 py-2 uppercase tracking-wider transition-colors ${
                 mode === "signup"
                   ? "bg-cyan-glow/10 text-cyan-glow"
-                  : "text-slate-400 hover:text-slate-300"
+                  : "text-fg-subtle hover:text-fg-muted"
               }`}
             >
               Daftar
@@ -109,7 +109,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="login-email"
-                className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5"
+                className="block text-xs font-mono uppercase tracking-wider text-fg-subtle mb-1.5"
               >
                 Email
               </label>
@@ -119,14 +119,14 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-panel2 border border-line rounded-sm px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-cyan-glow/60 transition-colors"
+                className="w-full bg-panel2 border border-line rounded-sm px-3 py-2.5 text-sm text-fg placeholder:text-slate-600 focus:border-cyan-glow/60 transition-colors"
                 placeholder="kamu@email.com"
               />
             </div>
             <div>
               <label
                 htmlFor="login-password"
-                className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5"
+                className="block text-xs font-mono uppercase tracking-wider text-fg-subtle mb-1.5"
               >
                 Password
               </label>
@@ -137,7 +137,7 @@ export default function LoginPage() {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-panel2 border border-line rounded-sm px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-cyan-glow/60 transition-colors"
+                className="w-full bg-panel2 border border-line rounded-sm px-3 py-2.5 text-sm text-fg placeholder:text-slate-600 focus:border-cyan-glow/60 transition-colors"
                 placeholder="••••••••"
               />
             </div>

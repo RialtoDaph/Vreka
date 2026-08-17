@@ -124,17 +124,17 @@ export default function TwoFactorAuth() {
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-400">Memuat...</p>;
+    return <p className="text-sm text-fg-subtle">Memuat...</p>;
   }
 
   return (
     <div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-0.5">
+          <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-0.5">
             Autentikasi Dua Faktor (2FA)
           </p>
-          <p className="text-slate-300 text-sm">
+          <p className="text-fg-muted text-sm">
             {activeFactorId
               ? "Aktif — login butuh kode dari aplikasi authenticator."
               : enroll
@@ -163,8 +163,8 @@ export default function TwoFactorAuth() {
 
       {recoveryCodes && (
         <div className="mt-4 space-y-3 bg-panel2/60 border border-line rounded-sm p-3.5">
-          <p className="text-xs text-slate-300">
-            <strong className="text-white">Simpen recovery codes ini sekarang</strong> — cuma ditampilin
+          <p className="text-xs text-fg-muted">
+            <strong className="text-fg">Simpen recovery codes ini sekarang</strong> — cuma ditampilin
             sekali. Kalau HP/app authenticator kamu ilang, satu kode ini bisa dipake buat matiin 2FA lagi
             (kamu tetep login pake password, terus bisa setup 2FA baru).
           </p>
@@ -191,9 +191,9 @@ export default function TwoFactorAuth() {
       {enroll && (
         <div className="mt-4 space-y-3">
           <img src={enroll.qrCode} alt="QR code 2FA" className="w-40 h-40 bg-white rounded-sm p-1" />
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-fg-subtle">
             Nggak bisa scan? Masukin manual di app authenticator kamu:{" "}
-            <span className="font-mono text-slate-300">{enroll.secret}</span>
+            <span className="font-mono text-fg-muted">{enroll.secret}</span>
           </p>
           <form onSubmit={handleVerify} className="flex flex-wrap gap-2 items-start">
             <input

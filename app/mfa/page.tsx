@@ -83,10 +83,10 @@ export default function MfaChallengePage() {
     <main className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="font-display text-2xl font-bold tracking-wide text-white">
+          <h1 className="font-display text-2xl font-bold tracking-wide text-fg">
             {mode === "totp" ? "Verifikasi 2FA" : "Pulihkan Akses"}
           </h1>
-          <p id="mfa-code-hint" className="text-slate-400 text-sm mt-1 font-body">
+          <p id="mfa-code-hint" className="text-fg-subtle text-sm mt-1 font-body">
             {mode === "totp"
               ? "Masukin kode 6 digit dari aplikasi authenticator kamu"
               : "Masukin salah satu recovery code yang kamu simpen pas aktifin 2FA"}
@@ -95,7 +95,7 @@ export default function MfaChallengePage() {
 
         <HudPanel glow>
           {loading ? (
-            <p className="text-sm text-slate-400 text-center">Memuat...</p>
+            <p className="text-sm text-fg-subtle text-center">Memuat...</p>
           ) : mode === "totp" ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <input
@@ -135,7 +135,7 @@ export default function MfaChallengePage() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="w-full text-slate-400 hover:text-slate-300 text-xs font-mono text-center"
+                className="w-full text-fg-subtle hover:text-fg-muted text-xs font-mono text-center"
               >
                 Bukan kamu? Keluar
               </button>
@@ -151,7 +151,7 @@ export default function MfaChallengePage() {
                 className={`${inputClass} text-center text-lg tracking-[0.15em] font-mono`}
                 placeholder="XXXXX-XXXXX"
               />
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-fg-subtle">
                 Ini matiin 2FA di akun kamu (sekali pakai) — kamu bisa login pake password aja abis ini,
                 terus setup 2FA baru kapan aja.
               </p>

@@ -367,13 +367,13 @@ export default function DebtsTab() {
 
       <div className="grid sm:grid-cols-2 gap-3.5">
         <HudPanel>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-subtle mb-1.5">
             Total Utang (kamu berutang)
           </p>
           <p className="font-mono text-xl font-bold text-rose-glow">{formatCurrency(totalUtang)}</p>
         </HudPanel>
         <HudPanel>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-subtle mb-1.5">
             Total Piutang (kamu ditagih)
           </p>
           <p className="font-mono text-xl font-bold text-mint-glow">{formatCurrency(totalPiutang)}</p>
@@ -388,7 +388,7 @@ export default function DebtsTab() {
             className={`px-4 py-1.5 font-mono text-[11.5px] uppercase tracking-wider rounded-full border transition-colors ${
               directionFilter === f.key
                 ? "border-cyan-glow/60 bg-cyan-glow/10 text-cyan-glow"
-                : "border-line text-slate-400 hover:text-slate-300"
+                : "border-line text-fg-subtle hover:text-fg-muted"
             }`}
           >
             {f.label}
@@ -406,7 +406,7 @@ export default function DebtsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   direction === "i_owe"
                     ? "bg-rose-glow/10 text-rose-glow"
-                    : "text-slate-400"
+                    : "text-fg-subtle"
                 }`}
               >
                 Aku Berutang
@@ -417,7 +417,7 @@ export default function DebtsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   direction === "owed_to_me"
                     ? "bg-mint-glow/10 text-mint-glow"
-                    : "text-slate-400"
+                    : "text-fg-subtle"
                 }`}
               >
                 Piutang ke Aku
@@ -475,7 +475,7 @@ export default function DebtsTab() {
             </div>
 
             <div>
-              <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer w-fit">
+              <label className="flex items-center gap-2.5 text-sm text-fg-muted cursor-pointer w-fit">
                 <input
                   type="checkbox"
                   checked={isRecurring}
@@ -510,11 +510,11 @@ export default function DebtsTab() {
 
       <HudPanel>
         {loading ? (
-          <p className="text-sm text-slate-400">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-slate-400">Belum ada utang/piutang tercatat.</p>
+          <p className="text-sm text-fg-subtle">Belum ada utang/piutang tercatat.</p>
         ) : filteredItems.length === 0 ? (
-          <p className="text-sm text-slate-400">Gak ada data di filter ini.</p>
+          <p className="text-sm text-fg-subtle">Gak ada data di filter ini.</p>
         ) : (
           <ul className="divide-y divide-line/60">
             {filteredItems.map((debt) => {
@@ -530,7 +530,7 @@ export default function DebtsTab() {
                 className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-slate-200 truncate">
+                  <p className="text-sm text-fg-secondary truncate">
                     {debt.party_name}
                     {debt.status === "paid" && (
                       <span className="ml-2 text-[10px] font-mono text-mint-glow border border-mint-glow/30 rounded-sm px-1.5 py-0.5">
@@ -543,7 +543,7 @@ export default function DebtsTab() {
                       </span>
                     )}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-400">
+                  <p className="text-[11px] font-mono text-fg-subtle">
                     {debt.is_recurring
                       ? `Berulang · tiap tanggal ${debt.recurrence_day}`
                       : debt.due_date
@@ -558,7 +558,7 @@ export default function DebtsTab() {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <p className="text-[10px] font-mono text-slate-400 mt-0.5">
+                      <p className="text-[10px] font-mono text-fg-subtle mt-0.5">
                         Udah dibayar {formatCurrency(paid)} dari {formatCurrency(Number(debt.amount))}
                       </p>
                     </div>
@@ -574,7 +574,7 @@ export default function DebtsTab() {
                       {formatCurrency(debt.status === "paid" ? Number(debt.amount) : left)}
                     </span>
                     {debt.status !== "paid" && paid > 0 && (
-                      <span className="text-[10px] font-mono text-slate-400">sisa</span>
+                      <span className="text-[10px] font-mono text-fg-subtle">sisa</span>
                     )}
                   </div>
 
