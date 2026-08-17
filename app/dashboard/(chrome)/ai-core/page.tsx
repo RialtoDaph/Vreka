@@ -11,6 +11,7 @@ import DataImport from "@/components/asisten/DataImport";
 import GmailDrafts from "@/components/asisten/GmailDrafts";
 import PushNotifications from "@/components/asisten/PushNotifications";
 import NotificationPreferences from "@/components/asisten/NotificationPreferences";
+import ThemeToggle from "@/components/asisten/ThemeToggle";
 import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
@@ -319,6 +320,9 @@ export default function AiCorePage() {
 
         <div className="divide-y divide-line/60">
           <div className="py-3 first:pt-0">
+            <ThemeToggle />
+          </div>
+          <div className="py-3">
             <NotificationPreferences />
           </div>
           <div className="py-3">

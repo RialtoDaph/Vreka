@@ -6,15 +6,63 @@
   box-sizing: border-box;
 }
 
-html {
+/* Theme tokens -- every surface/text/accent color the app uses is a CSS
+   custom property (space-separated RGB, for Tailwind's `rgb(var(--x) /
+   <alpha-value>)` opacity pattern in tailwind.config.ts) instead of a
+   literal hex baked into each component's className. `:root` is dark (the
+   app's original, unchanged look -- the default for every user who never
+   touches the toggle). `[data-theme="light"]` overrides it; a `dark` value
+   is also written explicitly so a *nested* `[data-theme="dark"]` (used to
+   force Memory Map's immersive 3D view dark regardless of the page theme)
+   can win back over an ancestor's light override.
+   lib/theme.ts's DARK_THEME/LIGHT_THEME objects are the JS-side mirror of
+   these same colors, for the handful of places (MemoryMap's Three.js
+   scene, lib/chartColors.ts) that need an actual color value at runtime
+   instead of a Tailwind class -- keep both in sync when a color changes. */
+:root,
+[data-theme="dark"] {
+  --color-void: 5 8 13; /* #05080d */
+  --color-panel: 11 18 32; /* #0b1220 */
+  --color-panel2: 15 26 44; /* #0f1a2c */
+  --color-line: 28 43 64; /* #1c2b40 */
+  --color-overlay: 255 255 255; /* subtle hover/highlight tint, lightens on dark */
+  --color-cyan-glow: 75 232 255; /* #4be8ff */
+  --color-amber-glow: 255 180 84; /* #ffb454 */
+  --color-rose-glow: 255 93 122; /* #ff5d7a */
+  --color-mint-glow: 75 255 176; /* #4bffb0 */
+  --color-violet-glow: 185 139 255; /* #b98bff */
+  --color-fg: 255 255 255; /* primary text */
+  --color-fg-secondary: 226 232 240; /* slate-200 */
+  --color-fg-muted: 203 213 225; /* slate-300 */
+  --color-fg-subtle: 148 163 184; /* slate-400 */
+  --grid-line-alpha: 0.05;
   color-scheme: dark;
 }
 
+[data-theme="light"] {
+  --color-void: 238 241 247; /* soft page background */
+  --color-panel: 255 255 255; /* elevated card surface */
+  --color-panel2: 241 244 249; /* recessed input/nested surface */
+  --color-line: 219 226 236;
+  --color-overlay: 15 23 42; /* subtle hover/highlight tint, darkens on light */
+  --color-cyan-glow: 14 116 144; /* cyan-700 -- darkened for AA contrast on white */
+  --color-amber-glow: 180 83 9; /* amber-700 */
+  --color-rose-glow: 190 18 60; /* rose-700 */
+  --color-mint-glow: 4 120 87; /* emerald-700 */
+  --color-violet-glow: 109 40 217; /* violet-700 */
+  --color-fg: 15 23 42; /* slate-900 */
+  --color-fg-secondary: 30 41 59; /* slate-800 */
+  --color-fg-muted: 51 65 85; /* slate-700 */
+  --color-fg-subtle: 100 116 139; /* slate-500 */
+  --grid-line-alpha: 0.05;
+  color-scheme: light;
+}
+
 body {
-  background-color: #05080d;
+  background-color: rgb(var(--color-void));
   background-image:
-    linear-gradient(rgba(75, 232, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(75, 232, 255, 0.05) 1px, transparent 1px);
+    linear-gradient(rgba(75, 232, 255, var(--grid-line-alpha)) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(75, 232, 255, var(--grid-line-alpha)) 1px, transparent 1px);
   background-size: 42px 42px;
   background-attachment: fixed;
 }
@@ -25,7 +73,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid #4be8ff;
+  outline: 2px solid rgb(var(--color-cyan-glow));
   outline-offset: 2px;
 }
 
@@ -34,14 +82,14 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #05080d;
+  background: rgb(var(--color-void));
 }
 ::-webkit-scrollbar-thumb {
-  background: #1c2b40;
+  background: rgb(var(--color-line));
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #24405c;
+  background: rgb(var(--color-fg-subtle) / 0.6);
 }
 
 @keyframes scan {
