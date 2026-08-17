@@ -30,7 +30,6 @@ export const EXPORTABLE_TABLES = [
   "flashcards",
   "canvas_arrows",
   "debt_payments",
-  "debt_payment_checks",
   "recurring_item_checks",
 ] as const;
 
