@@ -367,13 +367,13 @@ export default function DebtsTab() {
 
       <div className="grid sm:grid-cols-2 gap-3.5">
         <HudPanel>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">
             Total Utang (kamu berutang)
           </p>
           <p className="font-mono text-xl font-bold text-rose-glow">{formatCurrency(totalUtang)}</p>
         </HudPanel>
         <HudPanel>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">
             Total Piutang (kamu ditagih)
           </p>
           <p className="font-mono text-xl font-bold text-mint-glow">{formatCurrency(totalPiutang)}</p>
@@ -388,7 +388,7 @@ export default function DebtsTab() {
             className={`px-4 py-1.5 font-mono text-[11.5px] uppercase tracking-wider rounded-full border transition-colors ${
               directionFilter === f.key
                 ? "border-cyan-glow/60 bg-cyan-glow/10 text-cyan-glow"
-                : "border-line text-slate-500 hover:text-slate-300"
+                : "border-line text-slate-400 hover:text-slate-300"
             }`}
           >
             {f.label}
@@ -406,7 +406,7 @@ export default function DebtsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   direction === "i_owe"
                     ? "bg-rose-glow/10 text-rose-glow"
-                    : "text-slate-500"
+                    : "text-slate-400"
                 }`}
               >
                 Aku Berutang
@@ -417,7 +417,7 @@ export default function DebtsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   direction === "owed_to_me"
                     ? "bg-mint-glow/10 text-mint-glow"
-                    : "text-slate-500"
+                    : "text-slate-400"
                 }`}
               >
                 Piutang ke Aku
@@ -510,11 +510,11 @@ export default function DebtsTab() {
 
       <HudPanel>
         {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-slate-500">Belum ada utang/piutang tercatat.</p>
+          <p className="text-sm text-slate-400">Belum ada utang/piutang tercatat.</p>
         ) : filteredItems.length === 0 ? (
-          <p className="text-sm text-slate-500">Gak ada data di filter ini.</p>
+          <p className="text-sm text-slate-400">Gak ada data di filter ini.</p>
         ) : (
           <ul className="divide-y divide-line/60">
             {filteredItems.map((debt) => {
@@ -543,7 +543,7 @@ export default function DebtsTab() {
                       </span>
                     )}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-600">
+                  <p className="text-[11px] font-mono text-slate-400">
                     {debt.is_recurring
                       ? `Berulang · tiap tanggal ${debt.recurrence_day}`
                       : debt.due_date
@@ -558,7 +558,7 @@ export default function DebtsTab() {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <p className="text-[10px] font-mono text-slate-600 mt-0.5">
+                      <p className="text-[10px] font-mono text-slate-400 mt-0.5">
                         Udah dibayar {formatCurrency(paid)} dari {formatCurrency(Number(debt.amount))}
                       </p>
                     </div>
@@ -574,7 +574,7 @@ export default function DebtsTab() {
                       {formatCurrency(debt.status === "paid" ? Number(debt.amount) : left)}
                     </span>
                     {debt.status !== "paid" && paid > 0 && (
-                      <span className="text-[10px] font-mono text-slate-600">sisa</span>
+                      <span className="text-[10px] font-mono text-slate-400">sisa</span>
                     )}
                   </div>
 

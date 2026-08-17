@@ -254,7 +254,7 @@ export default function RecurringTab() {
                 type="button"
                 onClick={() => switchType("expense")}
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
-                  type === "expense" ? "bg-rose-glow/10 text-rose-glow" : "text-slate-500"
+                  type === "expense" ? "bg-rose-glow/10 text-rose-glow" : "text-slate-400"
                 }`}
               >
                 Keluar
@@ -263,7 +263,7 @@ export default function RecurringTab() {
                 type="button"
                 onClick={() => switchType("income")}
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
-                  type === "income" ? "bg-mint-glow/10 text-mint-glow" : "text-slate-500"
+                  type === "income" ? "bg-mint-glow/10 text-mint-glow" : "text-slate-400"
                 }`}
               >
                 Masuk
@@ -414,15 +414,15 @@ function RecurringSection({
         <span className={`font-mono text-sm ${toneClass}`}>{formatCurrency(total)}</span>
       </div>
       {items.length > 0 && (
-        <p className="text-[11px] font-mono text-slate-500 mb-3">
+        <p className="text-[11px] font-mono text-slate-400 mb-3">
           Tercatat bulan ini: {checkedCount}/{items.length} ({formatCurrency(checkedTotal)})
         </p>
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Memuat...</p>
+        <p className="text-sm text-slate-400">Memuat...</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-500">{emptyText}</p>
+        <p className="text-sm text-slate-400">{emptyText}</p>
       ) : (
         <ul className="divide-y divide-line/60">
           {items.map((item) => {
@@ -443,12 +443,12 @@ function RecurringSection({
                 <div className="min-w-0 flex-1">
                   <p
                     className={`text-sm truncate ${
-                      isChecked ? "text-slate-500 line-through" : "text-slate-200"
+                      isChecked ? "text-slate-400 line-through" : "text-slate-200"
                     }`}
                   >
                     {item.name}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-600">
+                  <p className="text-[11px] font-mono text-slate-400">
                     {item.category}
                     {item.auto_post && (
                       <span className="text-cyan-glow inline-flex items-center gap-1">

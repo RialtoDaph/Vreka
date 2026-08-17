@@ -38,7 +38,7 @@ export default function QuizPanel({
   return (
     <div className="mt-3 pt-3 border-t border-line/60 space-y-3">
       {loading ? (
-        <p className="text-xs text-slate-500 font-mono">Bikin soal...</p>
+        <p className="text-xs text-slate-400 font-mono">Bikin soal...</p>
       ) : error ? (
         <p className="text-xs text-rose-glow">{error}</p>
       ) : (
@@ -102,7 +102,7 @@ export default function QuizPanel({
         </>
       )}
       {!loading && !error && (
-        <button onClick={onClose} className="text-[11px] text-slate-500 hover:text-slate-300 font-mono">
+        <button onClick={onClose} className="text-[11px] text-slate-400 hover:text-slate-300 font-mono">
           Batal kuis
         </button>
       )}

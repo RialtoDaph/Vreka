@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_MODULES } from "@/lib/navModules";
@@ -26,6 +26,17 @@ export default function BottomNav() {
   );
   const rest = NAV_MODULES.filter((m) => !PRIMARY_HREFS.includes(m.href));
   const restActive = rest.some((m) => isActive(m.href, pathname));
+
+  // Same as ConfirmDialog/CommandPalette -- Escape dismisses without
+  // requiring a keyboard user to tab through every module link first.
+  useEffect(() => {
+    if (!showMore) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowMore(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showMore]);
 
   return (
     <>
@@ -69,10 +80,26 @@ export default function BottomNav() {
           onClick={() => setShowMore(false)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Pilih modul lain"
             className="w-full bg-panel border-t border-line rounded-t-lg p-4 animate-sheet-in"
             style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                Menu lainnya
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowMore(false)}
+                aria-label="Tutup"
+                className="w-7 h-7 flex items-center justify-center rounded-sm border border-line text-slate-400 hover:text-slate-200 text-sm"
+              >
+                ×
+              </button>
+            </div>
             <div className="grid grid-cols-4 gap-3">
               {rest.map((item) => {
                 const active = isActive(item.href, pathname);

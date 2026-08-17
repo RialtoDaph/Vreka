@@ -88,16 +88,16 @@ export default function GmailDrafts() {
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-500">Memuat draft...</p>;
+  if (loading) return <p className="text-sm text-slate-400">Memuat draft...</p>;
 
   return (
     <div>
-      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
         Draft Email {drafts.length > 0 && `(${drafts.length})`}
       </p>
       {error && <p className={`${errorBannerClass} mb-2`}>{error}</p>}
       {drafts.length === 0 ? (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           Nggak ada draft nunggu. Draft yang Aslan bikinin (lewat &quot;bales email&quot;) bakal muncul di sini
           buat direview sebelum dikirim.
         </p>
@@ -106,8 +106,8 @@ export default function GmailDrafts() {
           {drafts.map((d) => (
             <li key={d.id} className="py-2.5 first:pt-0 last:pb-0">
               <p className="text-sm text-slate-200 truncate">{d.subject || "(tanpa subjek)"}</p>
-              <p className="text-xs text-slate-500 truncate">Ke: {d.to || "(?)"}</p>
-              {d.snippet && <p className="text-xs text-slate-600 truncate mt-0.5">{d.snippet}</p>}
+              <p className="text-xs text-slate-400 truncate">Ke: {d.to || "(?)"}</p>
+              {d.snippet && <p className="text-xs text-slate-400 truncate mt-0.5">{d.snippet}</p>}
               <div className="flex items-center gap-3 mt-1.5">
                 <button
                   onClick={() => handleSend(d)}

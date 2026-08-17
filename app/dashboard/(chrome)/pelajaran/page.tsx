@@ -488,8 +488,11 @@ export default function PelajaranPage() {
           <form onSubmit={handleAdd} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Judul Topik</label>
+                <label htmlFor="study-title" className={labelClass}>
+                  Judul Topik
+                </label>
                 <input
+                  id="study-title"
                   type="text"
                   required
                   value={title}
@@ -499,8 +502,11 @@ export default function PelajaranPage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Kategori (opsional)</label>
+                <label htmlFor="study-category" className={labelClass}>
+                  Kategori (opsional)
+                </label>
                 <input
+                  id="study-category"
                   type="text"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
@@ -515,11 +521,15 @@ export default function PelajaranPage() {
                 value={content}
                 onChange={setContent}
                 placeholder="Ringkasan, link materi, progress belajar... (markdown didukung)"
+                ariaLabel="Catatan"
               />
             </div>
             <div>
-              <label className={labelClass}>Progress awal: {progress}%</label>
+              <label htmlFor="study-progress" className={labelClass}>
+                Progress awal: {progress}%
+              </label>
               <input
+                id="study-progress"
                 type="range"
                 min={0}
                 max={100}
@@ -537,11 +547,11 @@ export default function PelajaranPage() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Belum ada topik belajar.</p>
+          <p className="text-sm text-slate-400">Belum ada topik belajar.</p>
         </HudPanel>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -554,6 +564,7 @@ export default function PelajaranPage() {
                   <div className="space-y-2 mb-3">
                     <input
                       type="text"
+                      aria-label="Judul topik"
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
                       className={`${inputClass} text-sm`}
@@ -561,6 +572,7 @@ export default function PelajaranPage() {
                     />
                     <input
                       type="text"
+                      aria-label="Kategori"
                       value={editCategory}
                       onChange={(e) => setEditCategory(e.target.value)}
                       className={`${inputClass} text-sm`}
@@ -572,6 +584,7 @@ export default function PelajaranPage() {
                       placeholder="Catatan"
                       minHeightClass="min-h-20"
                       textClass="text-sm"
+                      ariaLabel="Catatan"
                     />
                     <div className="flex justify-end gap-2">
                       <button onClick={cancelEdit} className={ghostBtnClass}>
@@ -592,7 +605,7 @@ export default function PelajaranPage() {
                       <h3 className="text-sm font-semibold text-slate-100 truncate">
                         {note.title}
                       </h3>
-                      <p className="text-[11px] font-mono text-slate-600">{note.category}</p>
+                      <p className="text-[11px] font-mono text-slate-400">{note.category}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <button
@@ -664,7 +677,7 @@ export default function PelajaranPage() {
                     <button
                       onClick={() => startTimer(note.id)}
                       disabled={!!activeTimerNoteId}
-                      className="text-xs font-mono text-slate-500 hover:text-slate-300 disabled:opacity-40"
+                      className="text-xs font-mono text-slate-400 hover:text-slate-300 disabled:opacity-40"
                     >
                       ⏱ Mulai Sesi
                       {sessionTotals[note.id] ? ` (total ${sessionTotals[note.id]}m)` : ""}
@@ -677,11 +690,11 @@ export default function PelajaranPage() {
                     {note.content && <Markdown>{note.content}</Markdown>}
 
                     <div>
-                      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
+                      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
                         Resource
                       </p>
                       {(resourcesByNote[note.id] ?? []).length === 0 ? (
-                        <p className="text-xs text-slate-600">Belum ada link resource.</p>
+                        <p className="text-xs text-slate-400">Belum ada link resource.</p>
                       ) : (
                         <ul className="space-y-1 mb-2">
                           {(resourcesByNote[note.id] ?? []).map((r) => (

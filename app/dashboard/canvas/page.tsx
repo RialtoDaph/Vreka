@@ -300,7 +300,11 @@ export default function CanvasKerjaPage() {
         onPointerUp={onStagePointerUp}
         onPointerLeave={onStagePointerUp}
       >
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ overflow: "visible" }}>
+        <svg
+          aria-hidden="true"
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ overflow: "visible" }}
+        >
           <defs>
             <pattern id="canvas-grid" width="42" height="42" patternUnits="userSpaceOnUse">
               <path d="M 42 0 L 0 0 0 42" fill="none" stroke="rgba(75,232,255,.06)" strokeWidth="1" />
@@ -413,6 +417,7 @@ export default function CanvasKerjaPage() {
                     onBlur={(e) => persistNodeField(node.id, { text: e.target.value })}
                     onPointerDown={(e) => e.stopPropagation()}
                     placeholder="Tulis catatan..."
+                    aria-label="Isi catatan sticky"
                     className="flex-1 w-full bg-transparent border-none text-slate-200 text-[13px] resize-none outline-none"
                   />
                 ) : (
@@ -423,6 +428,7 @@ export default function CanvasKerjaPage() {
                       onBlur={(e) => persistNodeField(node.id, { label: e.target.value })}
                       onPointerDown={(e) => e.stopPropagation()}
                       placeholder="Label"
+                      aria-label="Label tugas"
                       className="w-full bg-transparent border-none text-[9px] font-mono uppercase tracking-wider text-slate-400 outline-none mb-1"
                     />
                     <input
@@ -431,6 +437,7 @@ export default function CanvasKerjaPage() {
                       onBlur={(e) => persistNodeField(node.id, { text: e.target.value })}
                       onPointerDown={(e) => e.stopPropagation()}
                       placeholder="Judul tugas"
+                      aria-label="Judul tugas"
                       className="w-full bg-transparent border-none text-[13px] text-slate-200 outline-none"
                     />
                   </>
@@ -502,11 +509,11 @@ export default function CanvasKerjaPage() {
 
       {!loading && nodes.length === 0 && (
         <div className="absolute inset-0 z-[1] flex items-center justify-center pointer-events-none">
-          <p className="text-sm text-slate-600">Kosong -- klik &quot;+ Sticky&quot; atau &quot;+ Kartu Tugas&quot; buat mulai.</p>
+          <p className="text-sm text-slate-400">Kosong -- klik &quot;+ Sticky&quot; atau &quot;+ Kartu Tugas&quot; buat mulai.</p>
         </div>
       )}
 
-      <p className="absolute bottom-4 left-5 z-[2] font-mono text-[10px] text-slate-600 tracking-wide max-w-[calc(100%-40px)]">
+      <p className="absolute bottom-4 left-5 z-[2] font-mono text-[10px] text-slate-400 tracking-wide max-w-[calc(100%-40px)]">
         Drag kanvas kosong buat geser · klik titik cyan di pojok kartu lalu klik kartu lain buat sambung · klik titik
         warna buat ganti warna kartu · scroll atau cubit buat zoom
       </p>

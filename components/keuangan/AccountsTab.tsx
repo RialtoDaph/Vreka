@@ -207,11 +207,11 @@ export default function AccountsTab() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Belum ada rekening. Tambah dulu biar transaksi bisa ditandain sumbernya.</p>
+          <p className="text-sm text-slate-400">Belum ada rekening. Tambah dulu biar transaksi bisa ditandain sumbernya.</p>
         </HudPanel>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -244,7 +244,7 @@ export default function AccountsTab() {
       )}
 
       {!loading && unassigned !== 0 && (
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-slate-400">
           {formatCurrency(unassigned)} dari transaksi yang belum ditandain rekeningnya (tetap keitung di
           Kekayaan Total, tandain di tab Transaksi kalau mau lebih rapi).
         </p>

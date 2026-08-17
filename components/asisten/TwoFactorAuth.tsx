@@ -124,14 +124,14 @@ export default function TwoFactorAuth() {
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Memuat...</p>;
+    return <p className="text-sm text-slate-400">Memuat...</p>;
   }
 
   return (
     <div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-0.5">
             Autentikasi Dua Faktor (2FA)
           </p>
           <p className="text-slate-300 text-sm">
@@ -191,7 +191,7 @@ export default function TwoFactorAuth() {
       {enroll && (
         <div className="mt-4 space-y-3">
           <img src={enroll.qrCode} alt="QR code 2FA" className="w-40 h-40 bg-white rounded-sm p-1" />
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-400">
             Nggak bisa scan? Masukin manual di app authenticator kamu:{" "}
             <span className="font-mono text-slate-300">{enroll.secret}</span>
           </p>

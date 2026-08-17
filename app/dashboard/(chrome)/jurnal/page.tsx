@@ -165,6 +165,7 @@ export default function JurnalPage() {
           <div className="flex items-center gap-2">
             <input
               type="date"
+              aria-label="Tanggal entri jurnal"
               value={selectedDate}
               max={today}
               onChange={(e) => e.target.value && handleDateChange(e.target.value)}
@@ -179,7 +180,7 @@ export default function JurnalPage() {
               </button>
             )}
           </div>
-          <p className="text-xs font-mono uppercase tracking-wider text-slate-500">
+          <p className="text-xs font-mono uppercase tracking-wider text-slate-400">
             {formatDate(selectedDate)}
           </p>
         </div>
@@ -189,9 +190,10 @@ export default function JurnalPage() {
           onChange={setContent}
           placeholder="Tulis apa aja..."
           minHeightClass="min-h-32"
+          ariaLabel="Entri jurnal"
         />
 
-        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mt-4 mb-2">
+        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400 mt-4 mb-2">
           30 hari terakhir
         </p>
         <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
@@ -214,11 +216,11 @@ export default function JurnalPage() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         </HudPanel>
       ) : otherEntries.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Belum ada catatan sebelumnya.</p>
+          <p className="text-sm text-slate-400">Belum ada catatan sebelumnya.</p>
         </HudPanel>
       ) : (
         <div className="space-y-3">
