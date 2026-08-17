@@ -8,9 +8,10 @@ import { todayKey } from "@/lib/date";
 import { promptForDate } from "@/lib/journalPrompts";
 import { buildHeatmapCells, computeStreak } from "@/lib/habits";
 import HudPanel from "@/components/HudPanel";
+import MarkdownEditor from "@/components/MarkdownEditor";
 import { useConfirm } from "@/lib/useConfirm";
 import { Flame } from "lucide-react";
-import { inputClass, primaryBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
+import { primaryBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 export default function JurnalPage() {
   const supabase = createClient();
@@ -183,11 +184,11 @@ export default function JurnalPage() {
           </p>
         </div>
         <p className="text-sm text-cyan-glow/90 italic mb-3">{prompt}</p>
-        <textarea
+        <MarkdownEditor
           value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className={`${inputClass} min-h-32`}
+          onChange={setContent}
           placeholder="Tulis apa aja..."
+          minHeightClass="min-h-32"
         />
 
         <p className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mt-4 mb-2">
