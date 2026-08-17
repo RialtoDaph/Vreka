@@ -26,13 +26,22 @@ function resolveSystemTheme(): ResolvedTheme {
 // mount (no flash) and keeps it reactive afterwards: live system-preference
 // changes while "system" is selected, and immediate updates when the user
 // flips the toggle.
+//
+// No stored value means the user has never touched the toggle -- that
+// resolves to "dark" (the app's original look), NOT "system". Following
+// the OS preference by default would silently flip a never-touched-it user
+// to light mode the moment they happen to be on a light-mode device, which
+// is exactly the surprise a default is supposed to avoid. "system" only
+// takes effect once explicitly chosen (and is then itself persisted, unlike
+// dark/light).
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>("system");
+  const [preference, setPreferenceState] = useState<ThemePreference>("dark");
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    const pref: ThemePreference = stored === "light" || stored === "dark" ? stored : "system";
+    const pref: ThemePreference =
+      stored === "light" || stored === "dark" || stored === "system" ? stored : "dark";
     setPreferenceState(pref);
     setResolvedTheme(pref === "system" ? resolveSystemTheme() : pref);
   }, []);
@@ -59,8 +68,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   function setPreference(next: ThemePreference) {
     setPreferenceState(next);
     setResolvedTheme(next === "system" ? resolveSystemTheme() : next);
-    if (next === "system") window.localStorage.removeItem(STORAGE_KEY);
-    else window.localStorage.setItem(STORAGE_KEY, next);
+    // Always persisted, "system" included -- an absent key means "never
+    // chosen" (defaults to dark), which is a different state from having
+    // explicitly chosen to follow the OS.
+    window.localStorage.setItem(STORAGE_KEY, next);
   }
 
   return (

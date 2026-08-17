@@ -7,15 +7,20 @@ import "./globals.css";
 // Runs before first paint (a plain <script>, not a React effect -- effects
 // only run after hydration, too late to avoid a dark->light flash) so
 // <html data-theme> is already correct by the time CSS applies. Mirrors
-// ThemeProvider's own resolution: an explicit stored "light"/"dark" wins,
-// anything else (unset, "system") falls through to the OS preference.
+// ThemeProvider's own resolution: an explicit stored "light"/"dark" wins;
+// explicit "system" follows the OS preference; anything else -- including
+// simply unset, meaning the toggle was never touched -- stays "dark", the
+// app's original default. (Falling through unset to the OS preference here
+// would silently flip a never-touched-it user to light mode the instant
+// their device happens to prefer it.)
 const THEME_BOOTSTRAP_SCRIPT = `
 (function () {
   try {
     var stored = localStorage.getItem("vreka-theme");
-    var theme = stored === "light" || stored === "dark"
-      ? stored
-      : (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    var theme;
+    if (stored === "light" || stored === "dark") theme = stored;
+    else if (stored === "system") theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    else theme = "dark";
     document.documentElement.dataset.theme = theme;
   } catch (e) {}
 })();
