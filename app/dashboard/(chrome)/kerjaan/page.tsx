@@ -558,7 +558,12 @@ export default function KerjaanPage() {
                                   ref={setNodeRef}
                                   {...listeners}
                                   {...attributes}
-                                  className={`border border-line rounded-sm p-3 bg-panel2/50 cursor-grab active:cursor-grabbing ${
+                                  // touch-none (touch-action: none) so the browser's own
+                                  // scroll/swipe-navigation gesture recognizer doesn't
+                                  // compete with dnd-kit's TouchSensor for a touch drag --
+                                  // without it a touch-and-move on a card gets intercepted
+                                  // as a page scroll/swipe before the drag ever starts.
+                                  className={`touch-none border border-line rounded-sm p-3 bg-panel2/50 cursor-grab active:cursor-grabbing ${
                                     isDragging ? "opacity-30" : ""
                                   }`}
                                 >
