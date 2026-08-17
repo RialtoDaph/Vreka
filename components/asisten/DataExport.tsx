@@ -2,35 +2,8 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { EXPORTABLE_TABLES } from "@/lib/exportableTables";
 import { ghostBtnClass } from "@/lib/ui";
-
-// Semua tabel yang RLS-scope ke user_id — daftar ini sengaja eksplisit
-// (bukan introspeksi otomatis) biar jelas tabel apa aja yang keikut kalau
-// ada modul baru ditambah nanti.
-const EXPORTABLE_TABLES = [
-  "transactions",
-  "recurring_items",
-  "recurring_item_checks",
-  "debts",
-  "debt_payments",
-  "savings_goals",
-  "budgets",
-  "tasks",
-  "task_subtasks",
-  "study_notes",
-  "study_sessions",
-  "study_resources",
-  "habits",
-  "habit_checks",
-  "journal_entries",
-  "life_milestones",
-  "canvas_nodes",
-  "canvas_arrows",
-  "daily_briefings",
-  "assistant_memories",
-  "assistant_messages",
-  "assistant_audit_log",
-] as const;
 
 export default function DataExport() {
   const supabase = createClient();
