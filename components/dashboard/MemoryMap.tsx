@@ -630,11 +630,11 @@ export default function MemoryMap({ data, vitals }: Props) {
 
       {navOverlay && (
         <div
-          className="fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-center justify-center"
+          className="fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-center justify-center animate-backdrop-in"
           onClick={() => setNavOverlay(null)}
         >
           <div
-            className="relative w-[92vw] h-[85vh] sm:w-[75vw] sm:h-[75vh] bg-void border border-line rounded-lg overflow-hidden shadow-2xl flex flex-col"
+            className="relative w-[92vw] h-[85vh] sm:w-[75vw] sm:h-[75vh] bg-void border border-line rounded-lg overflow-hidden shadow-2xl flex flex-col animate-panel-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shrink-0 h-10 flex items-center justify-between gap-3 px-4 border-b border-line bg-panel/90">

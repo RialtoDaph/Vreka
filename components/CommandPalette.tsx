@@ -142,7 +142,7 @@ export default function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center pt-[15vh] px-4"
+      className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center pt-[15vh] px-4 animate-backdrop-in"
       onClick={() => setOpen(false)}
     >
       <div
@@ -150,7 +150,7 @@ export default function CommandPalette() {
         role="dialog"
         aria-label="Command palette"
         aria-modal="true"
-        className="w-full max-w-lg bg-panel border border-cyan-glow/30 rounded-md shadow-glow overflow-hidden"
+        className="w-full max-w-lg bg-panel border border-cyan-glow/30 rounded-md shadow-glow overflow-hidden animate-panel-in"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleDialogKeyDown}
       >

@@ -65,11 +65,11 @@ export default function BottomNav() {
 
       {showMore && (
         <div
-          className="md:hidden fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-end"
+          className="md:hidden fixed inset-0 z-50 bg-void/75 backdrop-blur-sm flex items-end animate-backdrop-in"
           onClick={() => setShowMore(false)}
         >
           <div
-            className="w-full bg-panel border-t border-line rounded-t-lg p-4"
+            className="w-full bg-panel border-t border-line rounded-t-lg p-4 animate-sheet-in"
             style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
             onClick={(e) => e.stopPropagation()}
           >
