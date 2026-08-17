@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 afterEach(() => {
@@ -192,6 +192,69 @@ describe("KalenderPage", () => {
 
     fireEvent.click(await screen.findByLabelText(occursKey));
     expect(await screen.findAllByText("Bayar Bank Transfer")).not.toHaveLength(0);
+  });
+
+  it("shows a day's full item list inline in the week view, without opening a day modal", async () => {
+    const today = todayStr();
+    mockSupabase([
+      { title: "Tugas 1", deadline: `${today}T08:00:00Z` },
+      { title: "Tugas 2", deadline: `${today}T09:00:00Z` },
+      { title: "Tugas 3", deadline: `${today}T10:00:00Z` },
+    ]);
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    await screen.findByLabelText(today);
+    fireEvent.click(screen.getByText("Minggu"));
+
+    // All 3 show up directly (no "+N lagi" capping, no day click needed) --
+    // that's the whole point of the agenda view over the month grid's chips.
+    expect(await screen.findByText("Tugas 1")).toBeInTheDocument();
+    expect(screen.getByText("Tugas 2")).toBeInTheDocument();
+    expect(screen.getByText("Tugas 3")).toBeInTheDocument();
+    expect(screen.queryByText(/lagi/)).not.toBeInTheDocument();
+  });
+
+  it("shows Kosong for an empty day in the week view", async () => {
+    mockSupabase();
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    await screen.findByLabelText(todayStr());
+    fireEvent.click(screen.getByText("Minggu"));
+
+    expect((await screen.findAllByText("Kosong.")).length).toBeGreaterThan(0);
+  });
+
+  it("quick-adds an event for a specific day from the week view", async () => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowKey = tomorrow.toISOString().slice(0, 10);
+    // Only meaningful when tomorrow stays in the same visible week.
+    if (tomorrow.getDay() === 0) return;
+
+    mockSupabase();
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    await screen.findByLabelText(todayStr());
+    fireEvent.click(screen.getByText("Minggu"));
+
+    const tomorrowHeading = await screen.findByText(
+      new Intl.DateTimeFormat("id-ID", { weekday: "long", day: "2-digit", month: "short" }).format(tomorrow)
+    );
+    const dayPanel = tomorrowHeading.closest("div.relative") as HTMLElement;
+    fireEvent.click(within(dayPanel).getByText("+ Event"));
+
+    const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(dateInput.value).toBe(tomorrowKey);
   });
 
   it("shows a study session as a Pelajaran item on the day it happened", async () => {
