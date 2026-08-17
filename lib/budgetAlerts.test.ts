@@ -155,4 +155,21 @@ describe("checkBudgetAlertAndNotify", () => {
 
     expect(sendPushToUser).toHaveBeenCalledTimes(1);
   });
+
+  it("skips entirely when the user turned off budget-alert push in their preferences", async () => {
+    const sendPushToUser = vi.fn();
+    vi.doMock("@/lib/push", () => ({ sendPushToUser }));
+    const { checkBudgetAlertAndNotify } = await import("./budgetAlerts");
+    const supabase = makeSupabase({
+      notification_preferences: [{ user_id: "user-1", push_budget_alerts: false }],
+      budgets: [{ user_id: "user-1", category: "Makanan", monthly_limit: 1000 }],
+      transactions: [
+        { user_id: "user-1", type: "expense", category: "Makanan", amount: 1200, occurred_on: thisMonthDay },
+      ],
+      budget_alert_log: [],
+    });
+
+    await checkBudgetAlertAndNotify(supabase as never, "user-1", "Makanan");
+    expect(sendPushToUser).not.toHaveBeenCalled();
+  });
 });

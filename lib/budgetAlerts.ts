@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendPushToUser } from "@/lib/push";
+import { getNotificationPreferences } from "@/lib/notificationPreferences";
 
 export type BudgetAlertLevel = "warn" | "over";
 
@@ -31,6 +32,9 @@ export async function checkBudgetAlertAndNotify(
   userId: string,
   category: string
 ): Promise<void> {
+  const prefs = await getNotificationPreferences(supabase, userId);
+  if (!prefs.pushBudgetAlerts) return;
+
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   const month = now.toISOString().slice(0, 7);

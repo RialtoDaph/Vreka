@@ -39,6 +39,10 @@ function mockAdmin(tables: Record<string, Array<{ data: unknown; error?: unknown
   const counters: Record<string, number> = {};
   const withDefaults: Record<string, Array<{ data: unknown; error?: unknown }>> = {
     cron_dedupe: [{ data: null, error: null }],
+    // Defaults to "never customized" (every category on) unless a test
+    // overrides it -- matches getNotificationPreferences()'s real fallback
+    // for a user with no notification_preferences row.
+    notification_preferences: [{ data: null, error: null }],
     ...tables,
   };
   vi.doMock("@/lib/supabase/admin", () => ({
@@ -313,5 +317,45 @@ describe("GET /api/cron/daily-digest", () => {
 
     expect(body.results).toEqual([]);
     expect(pushCalls).toHaveLength(0);
+  });
+
+  it("skips the push digest for a user who turned it off in their notification preferences", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
+    vi.stubEnv("VAPID_PUBLIC_KEY", "pub");
+    vi.stubEnv("VAPID_PRIVATE_KEY", "priv");
+    mockGoogle();
+    const pushCalls = mockPush();
+
+    mockAdmin({
+      push_subscriptions: [{ data: [{ user_id: "user-1" }] }],
+      notification_preferences: [{ data: { push_daily_digest: false } }],
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(req("test-secret"));
+    const body = await res.json();
+
+    expect(body.results).toEqual([{ user_id: "user-1", status: "skip: push digest disabled by user" }]);
+    expect(pushCalls).toHaveLength(0);
+  });
+
+  it("skips the Telegram briefing for a user who turned it off in their notification preferences", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-bot-token");
+    mockGoogle();
+    const sent = mockTelegram();
+
+    mockAdmin({
+      telegram_links: [{ data: [{ user_id: "user-1", chat_id: 555 }] }],
+      notification_preferences: [{ data: { telegram_daily_briefing: false } }],
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(req("test-secret"));
+    const body = await res.json();
+
+    expect(body.results).toEqual([{ user_id: "user-1", status: "skip: telegram briefing disabled by user" }]);
+    expect(sent).toHaveLength(0);
   });
 });
