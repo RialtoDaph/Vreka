@@ -21,6 +21,7 @@ vi.mock("@/components/asisten/PushNotifications", () => ({ default: () => <div>P
 vi.mock("@/components/asisten/NotificationPreferences", () => ({
   default: () => <div>NotificationPreferences</div>,
 }));
+vi.mock("@/components/asisten/ThemeToggle", () => ({ default: () => <div>ThemeToggle</div> }));
 vi.mock("@/components/asisten/TwoFactorAuth", () => ({ default: () => <div>TwoFactorAuth</div> }));
 
 function chainable(data: unknown[] = []) {
@@ -158,6 +159,7 @@ describe("AiCorePage", () => {
     render(<AiCorePage />);
 
     expect(await screen.findByText("ActivityLog")).toBeInTheDocument();
+    expect(screen.getByText("ThemeToggle")).toBeInTheDocument();
     expect(screen.getByText("NotificationPreferences")).toBeInTheDocument();
     expect(screen.getByText("DataExport")).toBeInTheDocument();
     expect(screen.getByText("DataImport")).toBeInTheDocument();

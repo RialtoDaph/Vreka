@@ -1,29 +1,46 @@
 import type { Config } from "tailwindcss";
-import { THEME } from "./lib/theme";
+
+// Every color here resolves through a CSS custom property (defined for
+// both `:root`/[data-theme="dark"] and [data-theme="light"] in
+// app/globals.css) instead of a literal hex -- that's what makes
+// `bg-panel`, `text-cyan-glow/80`, etc. repaint automatically when the
+// theme toggle flips `data-theme` on <html>. The `rgb(var(--x) /
+// <alpha-value>)` form is Tailwind's documented pattern for keeping
+// opacity modifiers (`/70`, `/50`, ...) working with CSS-var-backed colors.
+function themedColor(cssVar: string) {
+  return `rgb(var(${cssVar}) / <alpha-value>)`;
+}
 
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        void: THEME.void,
-        panel: THEME.panel,
-        panel2: THEME.panel2,
-        line: THEME.line,
+        void: themedColor("--color-void"),
+        panel: themedColor("--color-panel"),
+        panel2: themedColor("--color-panel2"),
+        line: themedColor("--color-line"),
+        overlay: themedColor("--color-overlay"),
+        fg: {
+          DEFAULT: themedColor("--color-fg"),
+          secondary: themedColor("--color-fg-secondary"),
+          muted: themedColor("--color-fg-muted"),
+          subtle: themedColor("--color-fg-subtle"),
+        },
         cyan: {
-          glow: THEME.cyanGlow,
+          glow: themedColor("--color-cyan-glow"),
         },
         amber: {
-          glow: THEME.amberGlow,
+          glow: themedColor("--color-amber-glow"),
         },
         rose: {
-          glow: THEME.roseGlow,
+          glow: themedColor("--color-rose-glow"),
         },
         mint: {
-          glow: THEME.mintGlow,
+          glow: themedColor("--color-mint-glow"),
         },
         violet: {
-          glow: THEME.violetGlow,
+          glow: themedColor("--color-violet-glow"),
         },
       },
       fontFamily: {
