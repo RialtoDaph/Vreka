@@ -106,18 +106,18 @@ export default function NotificationPreferences() {
 
   return (
     <div>
-      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2.5">
+      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2.5">
         Preferensi Notifikasi
       </p>
       {loading ? (
-        <p className="text-sm text-slate-500">Memuat...</p>
+        <p className="text-sm text-slate-400">Memuat...</p>
       ) : (
         <div className="space-y-3">
           {ROWS.map((row) => (
             <div key={row.key} className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm text-slate-200">{row.label}</p>
-                <p className="text-[11px] text-slate-500">{row.detail}</p>
+                <p className="text-[11px] text-slate-400">{row.detail}</p>
               </div>
               <ToggleSwitch
                 on={prefs[row.key]}

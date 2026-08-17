@@ -90,7 +90,7 @@ export default function AslanInbox() {
                 {!log.result_ok && <span className="text-rose-glow"> — gagal</span>}
               </p>
               {(detail || source) && (
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-[11px] text-slate-400 mt-0.5">
                   {detail}
                   {detail && source && " — "}
                   {source && `via ${source}`}

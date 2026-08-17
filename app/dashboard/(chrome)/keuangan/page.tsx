@@ -143,44 +143,44 @@ export default function KeuanganPage() {
       {stats && (
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           <HudPanel>
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-500 mb-2">
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-400 mb-2">
               Kekayaan Total
             </p>
             <p className="font-mono text-xl font-bold text-mint-glow">
               {kekayaanTotal !== null ? formatCurrency(kekayaanTotal) : "…"}
             </p>
-            <p className="text-[11.5px] text-slate-500 mt-1.5">
+            <p className="text-[11.5px] text-slate-400 mt-1.5">
               {accountCount > 0 ? `Dari ${accountCount} rekening` : "Belum ada rekening — cek tab Rekening"}
             </p>
           </HudPanel>
           <HudPanel>
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-500 mb-2">
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-400 mb-2">
               Saldo Bulan Ini
             </p>
             <p className="font-mono text-xl font-bold text-mint-glow">{formatCurrency(stats.saldo)}</p>
-            <p className="text-[11.5px] text-slate-500 mt-1.5">Pemasukan − pengeluaran</p>
+            <p className="text-[11.5px] text-slate-400 mt-1.5">Pemasukan − pengeluaran</p>
           </HudPanel>
           <HudPanel>
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-500 mb-2">
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-400 mb-2">
               Pengeluaran Bulan Ini
             </p>
             <p className="font-mono text-xl font-bold text-amber-glow">
               {formatCurrency(stats.expenseThisMonth)}
             </p>
-            <p className="text-[11.5px] text-slate-500 mt-1.5">
+            <p className="text-[11.5px] text-slate-400 mt-1.5">
               {stats.expensePctOfAverage !== null
                 ? `${stats.expensePctOfAverage}% dari rata-rata bulan sebelumnya`
                 : "Belum ada histori bulan sebelumnya"}
             </p>
           </HudPanel>
           <HudPanel>
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-500 mb-2">
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-slate-400 mb-2">
               Progress Tabungan
             </p>
             <p className="font-mono text-xl font-bold text-cyan-glow">
               {stats.savingsProgressPct !== null ? `${stats.savingsProgressPct}%` : "—"}
             </p>
-            <p className="text-[11.5px] text-slate-500 mt-1.5">{stats.savingsHint}</p>
+            <p className="text-[11.5px] text-slate-400 mt-1.5">{stats.savingsHint}</p>
           </HudPanel>
         </div>
       )}
@@ -201,7 +201,7 @@ export default function KeuanganPage() {
             </button>
           )}
         </div>
-        {researchLoading && <p className="text-xs font-mono text-slate-500">Nyari info...</p>}
+        {researchLoading && <p className="text-xs font-mono text-slate-400">Nyari info...</p>}
         {researchError && <p className="text-xs text-rose-glow">{researchError}</p>}
         {research && (
           <>
@@ -224,7 +224,7 @@ export default function KeuanganPage() {
           </>
         )}
         {!research && !researchLoading && !researchError && (
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-slate-400">
             Harga emas, kurs USD/EUR, dan satu berita teknologi -- buat bahan mikir nabung & investasi (web
             search real-time, bukan basa-basi).
           </p>
@@ -239,7 +239,7 @@ export default function KeuanganPage() {
             className={`px-4 py-2.5 uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors ${
               tab === t.key
                 ? "border-cyan-glow text-cyan-glow"
-                : "border-transparent text-slate-500 hover:text-slate-300"
+                : "border-transparent text-slate-400 hover:text-slate-300"
             }`}
           >
             {t.label}

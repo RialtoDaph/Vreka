@@ -74,4 +74,26 @@ describe("BottomNav", () => {
 
     expect(screen.getByLabelText("Menu lainnya")).toHaveClass("text-cyan-glow");
   });
+
+  it("closes the sheet when Escape is pressed, for keyboard users who can't tap the backdrop", () => {
+    pathHolder.path = "/dashboard";
+    render(<BottomNav />);
+
+    fireEvent.click(screen.getByLabelText("Menu lainnya"));
+    expect(screen.getByText("Jurnal")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByText("Jurnal")).not.toBeInTheDocument();
+  });
+
+  it("closes the sheet via its own visible Tutup button", () => {
+    pathHolder.path = "/dashboard";
+    render(<BottomNav />);
+
+    fireEvent.click(screen.getByLabelText("Menu lainnya"));
+    fireEvent.click(screen.getByLabelText("Tutup"));
+
+    expect(screen.queryByText("Jurnal")).not.toBeInTheDocument();
+  });
 });

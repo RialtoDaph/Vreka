@@ -422,8 +422,11 @@ export default function KerjaanPage() {
         <HudPanel>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className={labelClass}>Judul</label>
+              <label htmlFor="task-title" className={labelClass}>
+                Judul
+              </label>
               <input
+                id="task-title"
                 type="text"
                 required
                 value={title}
@@ -434,8 +437,11 @@ export default function KerjaanPage() {
             </div>
             <div className="grid sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2">
-                <label className={labelClass}>Deadline (opsional)</label>
+                <label htmlFor="task-deadline" className={labelClass}>
+                  Deadline (opsional)
+                </label>
                 <input
+                  id="task-deadline"
                   type="datetime-local"
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
@@ -443,8 +449,11 @@ export default function KerjaanPage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Prioritas</label>
+                <label htmlFor="task-priority" className={labelClass}>
+                  Prioritas
+                </label>
                 <select
+                  id="task-priority"
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as TaskPriority)}
                   className={inputClass}
@@ -457,8 +466,11 @@ export default function KerjaanPage() {
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Catatan (opsional)</label>
+                <label htmlFor="task-description" className={labelClass}>
+                  Catatan (opsional)
+                </label>
                 <input
+                  id="task-description"
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -466,8 +478,11 @@ export default function KerjaanPage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Project (opsional)</label>
+                <label htmlFor="task-project" className={labelClass}>
+                  Project (opsional)
+                </label>
                 <input
+                  id="task-project"
                   type="text"
                   value={project}
                   onChange={(e) => setProject(e.target.value)}
@@ -485,10 +500,11 @@ export default function KerjaanPage() {
 
       {!loading && projects.length > 0 && (
         <div className="flex items-center gap-2">
-          <label className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+          <label htmlFor="task-project-filter" className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
             Project
           </label>
           <select
+            id="task-project-filter"
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
             className={`${inputClass} w-auto`}
@@ -505,7 +521,7 @@ export default function KerjaanPage() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         </HudPanel>
       ) : (
         <DndContext sensors={dndSensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -520,12 +536,12 @@ export default function KerjaanPage() {
                     <h2 className={`font-display font-semibold tracking-wide ${col.tone}`}>
                       {col.label}
                     </h2>
-                    <span className="text-xs font-mono text-slate-500">{colItems.length}</span>
+                    <span className="text-xs font-mono text-slate-400">{colItems.length}</span>
                   </div>
 
                   <DroppableColumn id={col.key}>
                     {colItems.length === 0 ? (
-                      <p className="text-sm text-slate-500">Kosong.</p>
+                      <p className="text-sm text-slate-400">Kosong.</p>
                     ) : (
                       <ul className="space-y-3">
                         {colItems.map((task) => {
@@ -550,7 +566,7 @@ export default function KerjaanPage() {
                                     <p
                                       className={`text-sm truncate ${
                                         task.status === "done"
-                                          ? "text-slate-500 line-through"
+                                          ? "text-slate-400 line-through"
                                           : "text-slate-200"
                                       }`}
                                     >
@@ -560,7 +576,7 @@ export default function KerjaanPage() {
                                       <button
                                         onClick={() => startEdit(task)}
                                         aria-label={`Edit to-do ${task.title}`}
-                                        className="text-slate-600 hover:text-cyan-glow text-xs font-mono leading-none"
+                                        className="text-slate-400 hover:text-cyan-glow text-xs font-mono leading-none"
                                       >
                                         Edit
                                       </button>
@@ -570,7 +586,7 @@ export default function KerjaanPage() {
                                     </div>
                                   </div>
                                   {task.description && (
-                                    <p className="text-xs text-slate-500 truncate mt-0.5">{task.description}</p>
+                                    <p className="text-xs text-slate-400 truncate mt-0.5">{task.description}</p>
                                   )}
                                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                                     <span
@@ -585,7 +601,7 @@ export default function KerjaanPage() {
                                     )}
                                     {task.deadline && (
                                       <span
-                                        className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-slate-500"}`}
+                                        className={`text-[10px] font-mono ${urgent ? "text-rose-glow" : "text-slate-400"}`}
                                       >
                                         {formatDateTime(task.deadline)}
                                       </span>
@@ -646,7 +662,7 @@ export default function KerjaanPage() {
                                     {subtasks.length === 0 && (
                                       <button
                                         onClick={() => setExpandedId(expanded ? null : task.id)}
-                                        className="text-[11px] font-mono text-slate-500 hover:text-slate-300"
+                                        className="text-[11px] font-mono text-slate-400 hover:text-slate-300"
                                       >
                                         + Sub-task
                                       </button>
@@ -688,7 +704,7 @@ export default function KerjaanPage() {
                                               onClick={() => startEditSubtask(s)}
                                               title="Klik buat ganti judul"
                                               className={`text-xs flex-1 truncate text-left bg-transparent border-none p-0 cursor-text ${
-                                                s.done ? "text-slate-500 line-through" : "text-slate-300"
+                                                s.done ? "text-slate-400 line-through" : "text-slate-300"
                                               }`}
                                             >
                                               {s.title}

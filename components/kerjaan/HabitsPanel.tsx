@@ -149,7 +149,7 @@ export default function HabitsPanel() {
                   key={r}
                   onClick={() => setHeatmapRange(r)}
                   className={`px-2.5 py-1 font-mono text-[10px] uppercase rounded-[3px] ${
-                    heatmapRange === r ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-500"
+                    heatmapRange === r ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-400"
                   }`}
                 >
                   {r} hari
@@ -175,9 +175,9 @@ export default function HabitsPanel() {
         </form>
 
         {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         ) : habits.length === 0 ? (
-          <p className="text-sm text-slate-500">Belum ada kebiasaan yang dilacak.</p>
+          <p className="text-sm text-slate-400">Belum ada kebiasaan yang dilacak.</p>
         ) : (
           <ul className="divide-y divide-line/60">
             {habits.map((habit) => {

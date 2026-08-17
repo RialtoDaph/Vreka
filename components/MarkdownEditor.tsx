@@ -14,6 +14,7 @@ export default function MarkdownEditor({
   minHeightClass = "min-h-24",
   textClass = "",
   autoFocus,
+  ariaLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -21,6 +22,7 @@ export default function MarkdownEditor({
   minHeightClass?: string;
   textClass?: string;
   autoFocus?: boolean;
+  ariaLabel?: string;
 }) {
   const [tab, setTab] = useState<"write" | "preview">("write");
 
@@ -31,7 +33,7 @@ export default function MarkdownEditor({
           type="button"
           onClick={() => setTab("write")}
           className={`px-2 py-0.5 rounded-sm text-[10.5px] font-mono uppercase tracking-wider transition-colors ${
-            tab === "write" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-500 hover:text-slate-300"
+            tab === "write" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-400 hover:text-slate-300"
           }`}
         >
           Tulis
@@ -40,7 +42,7 @@ export default function MarkdownEditor({
           type="button"
           onClick={() => setTab("preview")}
           className={`px-2 py-0.5 rounded-sm text-[10.5px] font-mono uppercase tracking-wider transition-colors ${
-            tab === "preview" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-500 hover:text-slate-300"
+            tab === "preview" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-400 hover:text-slate-300"
           }`}
         >
           Pratinjau
@@ -52,6 +54,7 @@ export default function MarkdownEditor({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           autoFocus={autoFocus}
+          aria-label={ariaLabel}
           className={`${inputClass} ${minHeightClass} ${textClass}`}
         />
       ) : (
@@ -59,7 +62,7 @@ export default function MarkdownEditor({
           {value.trim() ? (
             <Markdown>{value}</Markdown>
           ) : (
-            <p className="text-sm text-slate-600">Nggak ada isi buat dipratinjau.</p>
+            <p className="text-sm text-slate-400">Nggak ada isi buat dipratinjau.</p>
           )}
         </div>
       )}

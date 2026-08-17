@@ -87,7 +87,7 @@ export default function LoginPage() {
               className={`flex-1 py-2 uppercase tracking-wider transition-colors ${
                 mode === "signin"
                   ? "bg-cyan-glow/10 text-cyan-glow"
-                  : "text-slate-500 hover:text-slate-300"
+                  : "text-slate-400 hover:text-slate-300"
               }`}
             >
               Masuk
@@ -98,7 +98,7 @@ export default function LoginPage() {
               className={`flex-1 py-2 uppercase tracking-wider transition-colors ${
                 mode === "signup"
                   ? "bg-cyan-glow/10 text-cyan-glow"
-                  : "text-slate-500 hover:text-slate-300"
+                  : "text-slate-400 hover:text-slate-300"
               }`}
             >
               Daftar
@@ -107,10 +107,14 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+              <label
+                htmlFor="login-email"
+                className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5"
+              >
                 Email
               </label>
               <input
+                id="login-email"
                 type="email"
                 required
                 value={email}
@@ -120,10 +124,14 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+              <label
+                htmlFor="login-password"
+                className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5"
+              >
                 Password
               </label>
               <input
+                id="login-password"
                 type="password"
                 required
                 minLength={6}

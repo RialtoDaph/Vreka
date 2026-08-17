@@ -94,7 +94,7 @@ function AssistantReplyCard({ content }: { content: string }) {
           ›
         </button>
       </div>
-      <p className="text-[10px] font-mono text-slate-600 text-center mt-1">
+      <p className="text-[10px] font-mono text-slate-400 text-center mt-1">
         {clampedPage + 1}/{pages.length}
       </p>
     </div>
@@ -265,10 +265,14 @@ export default function AsistenPage() {
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <div>
-            <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
+            <label
+              htmlFor="assistant-model"
+              className="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5"
+            >
               Model
             </label>
             <select
+              id="assistant-model"
               value={model}
               onChange={(e) => setModel(e.target.value as typeof model)}
               className="bg-panel2 border border-line rounded-sm px-3 py-2 text-sm text-white focus:border-cyan-glow/60 transition-colors"
@@ -293,9 +297,9 @@ export default function AsistenPage() {
       <HudPanel className="flex-1 flex flex-col min-h-0" as="section">
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {loading ? (
-            <p className="text-sm text-slate-500">Memuat...</p>
+            <p className="text-sm text-slate-400">Memuat...</p>
           ) : messages.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-400">
               Belum ada percakapan. Tanya apa aja soal keuangan, kerjaan, atau
               pelajaran kamu — atau minta dicatetin sesuatu.
             </p>
@@ -331,7 +335,7 @@ export default function AsistenPage() {
                 alt=""
                 className="w-7 h-7 rounded-full border border-cyan-glow/40 shrink-0"
               />
-              <div className="max-w-[85%] rounded-sm px-3 py-2 text-sm border bg-panel2 border-line text-slate-500 font-mono">
+              <div className="max-w-[85%] rounded-sm px-3 py-2 text-sm border bg-panel2 border-line text-slate-400 font-mono">
                 Mikir...
               </div>
             </div>

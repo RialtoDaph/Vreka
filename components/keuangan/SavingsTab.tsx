@@ -214,11 +214,11 @@ export default function SavingsTab() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Belum ada target tabungan.</p>
+          <p className="text-sm text-slate-400">Belum ada target tabungan.</p>
         </HudPanel>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -251,7 +251,7 @@ export default function SavingsTab() {
                   <span>{formatCurrency(Number(goal.target_amount))} · {pct}%</span>
                 </div>
                 {goal.deadline && (
-                  <p className="text-[11px] text-slate-600 mb-3">
+                  <p className="text-[11px] text-slate-400 mb-3">
                     Deadline {formatDate(goal.deadline)}
                   </p>
                 )}

@@ -135,7 +135,7 @@ export default function MfaChallengePage() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="w-full text-slate-500 hover:text-slate-300 text-xs font-mono text-center"
+                className="w-full text-slate-400 hover:text-slate-300 text-xs font-mono text-center"
               >
                 Bukan kamu? Keluar
               </button>
@@ -151,7 +151,7 @@ export default function MfaChallengePage() {
                 className={`${inputClass} text-center text-lg tracking-[0.15em] font-mono`}
                 placeholder="XXXXX-XXXXX"
               />
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-400">
                 Ini matiin 2FA di akun kamu (sekali pakai) — kamu bisa login pake password aja abis ini,
                 terus setup 2FA baru kapan aja.
               </p>

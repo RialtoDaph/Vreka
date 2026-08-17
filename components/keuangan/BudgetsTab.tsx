@@ -192,11 +192,11 @@ export default function BudgetsTab() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-400">
             Belum ada anggaran. Set batas bulanan per kategori biar Aslan bisa
             ngingetin kalau kepake kebanyakan.
           </p>

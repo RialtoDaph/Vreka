@@ -49,7 +49,7 @@ export default function GlobalPageError({
             <a
               key={m.href}
               href={m.href}
-              className="text-xs font-mono text-slate-500 hover:text-cyan-glow border border-line hover:border-cyan-glow/40 rounded-sm px-2.5 py-1.5 transition-colors"
+              className="text-xs font-mono text-slate-400 hover:text-cyan-glow border border-line hover:border-cyan-glow/40 rounded-sm px-2.5 py-1.5 transition-colors"
             >
               {m.label}
             </a>

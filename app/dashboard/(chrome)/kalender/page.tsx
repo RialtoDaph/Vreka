@@ -65,7 +65,7 @@ function CalItemRow({
         <a href={item.href} className="text-sm text-slate-200 hover:underline block truncate">
           {item.label}
         </a>
-        <p className="text-[10.5px] font-mono text-slate-500">
+        <p className="text-[10.5px] font-mono text-slate-400">
           {item.time ?? "Sepanjang hari"} · {TYPE_META[item.type].badge}
           {item.meta ? ` · ${item.meta}` : ""}
         </p>
@@ -76,7 +76,7 @@ function CalItemRow({
             <button
               onClick={() => onEdit(item)}
               aria-label={`Edit ${item.label}`}
-              className="w-6 h-6 flex items-center justify-center rounded-sm text-slate-500 hover:text-cyan-glow hover:bg-white/5"
+              className="w-6 h-6 flex items-center justify-center rounded-sm text-slate-400 hover:text-cyan-glow hover:bg-white/5"
             >
               <Pencil aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
             </button>
@@ -84,7 +84,7 @@ function CalItemRow({
           <button
             onClick={() => onDelete(item)}
             aria-label={`Hapus ${item.label}`}
-            className="w-6 h-6 flex items-center justify-center rounded-sm text-slate-500 hover:text-rose-glow hover:bg-white/5"
+            className="w-6 h-6 flex items-center justify-center rounded-sm text-slate-400 hover:text-rose-glow hover:bg-white/5"
           >
             <Trash2 aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
           </button>
@@ -433,7 +433,7 @@ export default function KalenderPage() {
             <button
               onClick={() => setView("month")}
               className={`px-2.5 py-1.5 font-mono text-[10.5px] uppercase tracking-wider rounded-[3px] ${
-                view === "month" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-500 hover:text-slate-300"
+                view === "month" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-400 hover:text-slate-300"
               }`}
             >
               Bulan
@@ -441,7 +441,7 @@ export default function KalenderPage() {
             <button
               onClick={() => setView("week")}
               className={`px-2.5 py-1.5 font-mono text-[10.5px] uppercase tracking-wider rounded-[3px] ${
-                view === "week" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-500 hover:text-slate-300"
+                view === "week" ? "bg-cyan-glow/10 text-cyan-glow" : "text-slate-400 hover:text-slate-300"
               }`}
             >
               Minggu
@@ -488,7 +488,7 @@ export default function KalenderPage() {
         <HudPanel>
           <div className="grid grid-cols-7 gap-1 mb-1">
             {WEEKDAYS.map((w) => (
-              <div key={w} className="text-center text-[10px] font-mono uppercase text-slate-500 py-1">
+              <div key={w} className="text-center text-[10px] font-mono uppercase text-slate-400 py-1">
                 {w}
               </div>
             ))}
@@ -562,7 +562,7 @@ export default function KalenderPage() {
                   </button>
                 </div>
                 {items.length === 0 ? (
-                  <p className="text-xs text-slate-600">Kosong.</p>
+                  <p className="text-xs text-slate-400">Kosong.</p>
                 ) : (
                   <ul className="space-y-2">
                     {items.map((item, i) => (
@@ -588,7 +588,7 @@ export default function KalenderPage() {
       </div>
 
       {!calendarConnected && (
-        <p className="text-[11px] text-slate-600">
+        <p className="text-[11px] text-slate-400">
           Google Calendar belum di-connect — cuma nampilin kerjaan/keuangan/pelajaran, dan event baru
           belum bisa disimpan. Connect di bagian{" "}
           <a href="/dashboard/ai-core" className="text-cyan-glow/80 hover:text-cyan-glow hover:underline">
@@ -639,6 +639,7 @@ export default function KalenderPage() {
                 {eventError && <p className={errorBannerClass}>{eventError}</p>}
                 <input
                   type="text"
+                  aria-label="Judul event"
                   value={eventTitle}
                   onChange={(e) => setEventTitle(e.target.value)}
                   placeholder="Judul event..."
@@ -648,19 +649,22 @@ export default function KalenderPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <input
                     type="date"
+                    aria-label="Tanggal event"
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
                     className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
                   />
                   <input
                     type="time"
+                    aria-label="Jam mulai"
                     value={eventStart}
                     onChange={(e) => setEventStart(e.target.value)}
                     className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
                   />
-                  <span className="text-xs text-slate-500">s/d</span>
+                  <span className="text-xs text-slate-400">s/d</span>
                   <input
                     type="time"
+                    aria-label="Jam selesai"
                     value={eventEnd}
                     onChange={(e) => setEventEnd(e.target.value)}
                     className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
@@ -672,7 +676,7 @@ export default function KalenderPage() {
                     lewat tengah malam).
                   </p>
                 )}
-                <p className="text-[11px] text-slate-600">
+                <p className="text-[11px] text-slate-400">
                   Event dibuat langsung di Google Calendar kamu — pastiin udah connect di halaman Aslan.
                 </p>
                 <div className="flex justify-end gap-2">
@@ -691,9 +695,9 @@ export default function KalenderPage() {
             )}
 
             {loading ? (
-              <p className="text-sm text-slate-500">Memuat...</p>
+              <p className="text-sm text-slate-400">Memuat...</p>
             ) : selectedItems.length === 0 ? (
-              <p className="text-sm text-slate-500">Tidak ada aktivitas.</p>
+              <p className="text-sm text-slate-400">Tidak ada aktivitas.</p>
             ) : (
               <ul className="space-y-2.5">
                 {selectedItems.map((item, i) => (
@@ -728,6 +732,7 @@ export default function KalenderPage() {
               {eventEditError && <p className={errorBannerClass}>{eventEditError}</p>}
               <input
                 type="text"
+                aria-label="Judul event"
                 value={editingEvent.title}
                 onChange={(e) => setEditingEvent({ ...editingEvent, title: e.target.value })}
                 placeholder="Judul event..."
@@ -737,19 +742,22 @@ export default function KalenderPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <input
                   type="date"
+                  aria-label="Tanggal event"
                   value={editingEvent.date}
                   onChange={(e) => setEditingEvent({ ...editingEvent, date: e.target.value })}
                   className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
                 />
                 <input
                   type="time"
+                  aria-label="Jam mulai"
                   value={editingEvent.start}
                   onChange={(e) => setEditingEvent({ ...editingEvent, start: e.target.value })}
                   className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
                 />
-                <span className="text-xs text-slate-500">s/d</span>
+                <span className="text-xs text-slate-400">s/d</span>
                 <input
                   type="time"
+                  aria-label="Jam selesai"
                   value={editingEvent.end}
                   onChange={(e) => setEditingEvent({ ...editingEvent, end: e.target.value })}
                   className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"

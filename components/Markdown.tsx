@@ -59,7 +59,7 @@ const COMPONENTS: Components = {
     </div>
   ),
   th: ({ children }) => (
-    <th className="border border-line px-2 py-1 text-left font-mono text-[11px] uppercase tracking-wider text-slate-500">
+    <th className="border border-line px-2 py-1 text-left font-mono text-[11px] uppercase tracking-wider text-slate-400">
       {children}
     </th>
   ),

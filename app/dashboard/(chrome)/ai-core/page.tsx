@@ -30,14 +30,14 @@ function IntegrationCard({
   return (
     <div className="border border-line rounded-sm p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 flex items-center gap-1.5 min-w-0">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5 min-w-0">
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
           <span className="truncate">{title}</span>
         </p>
         {status !== "info" && (
           <span
             className={`text-[9px] font-mono uppercase tracking-wider shrink-0 ${
-              status === "connected" ? "text-mint-glow" : "text-slate-600"
+              status === "connected" ? "text-mint-glow" : "text-slate-400"
             }`}
           >
             {status === "connected" ? "LINKED" : "UNLINKED"}
@@ -53,7 +53,7 @@ function IntegrationCard({
 function StatCell({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="border border-line rounded-sm px-3 py-2.5">
-      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1">{label}</p>
+      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-400 mb-1">{label}</p>
       <p className="font-display text-lg text-white">{value}</p>
     </div>
   );
@@ -233,7 +233,7 @@ export default function AiCorePage() {
           <StatCell label="Total Obrolan" value={totalMessages ?? "–"} />
         </div>
 
-        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
           Integrasi
         </p>
         <div className="grid sm:grid-cols-2 gap-3 mb-5">

@@ -126,12 +126,12 @@ export default function ActivityLog() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="text-xs font-mono uppercase tracking-wider text-slate-500 hover:text-slate-300"
+          className="text-xs font-mono uppercase tracking-wider text-slate-400 hover:text-slate-300"
         >
           {open ? "▾" : "▸"} Aktivitas Aslan
         </button>
         {!open && summary && (
-          <span className="text-xs font-mono text-slate-600">
+          <span className="text-xs font-mono text-slate-400">
             {summary.messages} obrolan · {summary.recentActions} aksi ({ACTIVITY_DAYS} hari) · {summary.memories} memori
           </span>
         )}
@@ -140,7 +140,7 @@ export default function ActivityLog() {
         <div className="space-y-3">
           <HudPanel>
             {statsLoading ? (
-              <p className="text-sm text-slate-500">Memuat...</p>
+              <p className="text-sm text-slate-400">Memuat...</p>
             ) : (
               <>
                 <p className="text-sm text-slate-300 mb-4">
@@ -150,14 +150,14 @@ export default function ActivityLog() {
 
                 {toolBreakdown.length > 0 && (
                   <div className="mb-4">
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+                    <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
                       Tool Paling Sering Dipakai ({ACTIVITY_DAYS} Hari Terakhir)
                     </p>
                     <ul className="space-y-1.5">
                       {toolBreakdown.map((t) => (
                         <li key={t.tool_name} className="flex items-center justify-between text-xs">
                           <span className="text-slate-300">{TOOL_LABEL[t.tool_name] ?? t.tool_name}</span>
-                          <span className="font-mono text-slate-500">{t.count}x</span>
+                          <span className="font-mono text-slate-400">{t.count}x</span>
                         </li>
                       ))}
                     </ul>
@@ -165,7 +165,7 @@ export default function ActivityLog() {
                 )}
 
                 <div>
-                  <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+                  <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
                     Aktivitas {ACTIVITY_DAYS} Hari Terakhir
                   </p>
                   <div style={{ width: "100%", height: 140 }}>
@@ -199,20 +199,20 @@ export default function ActivityLog() {
           </HudPanel>
 
           <HudPanel>
-            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-3">
+            <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-3">
               Memori Aslan ({memories.length})
             </p>
             {memoriesLoading ? (
-              <p className="text-sm text-slate-500">Memuat...</p>
+              <p className="text-sm text-slate-400">Memuat...</p>
             ) : memories.length === 0 ? (
-              <p className="text-sm text-slate-500">Belum ada memori tersimpan.</p>
+              <p className="text-sm text-slate-400">Belum ada memori tersimpan.</p>
             ) : (
               <ul className="divide-y divide-line/60">
                 {memories.map((m) => (
                   <li key={m.id} className="py-2 first:pt-0 last:pb-0 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs text-slate-200">{m.content}</p>
-                      <p className="text-[10px] font-mono text-slate-600">{formatDateTime(m.created_at)}</p>
+                      <p className="text-[10px] font-mono text-slate-400">{formatDateTime(m.created_at)}</p>
                     </div>
                     <button onClick={() => handleDeleteMemory(m.id)} className={`${dangerBtnClass} shrink-0`}>
                       Hapus
@@ -225,9 +225,9 @@ export default function ActivityLog() {
 
           <HudPanel>
             {loading ? (
-              <p className="text-sm text-slate-500">Memuat...</p>
+              <p className="text-sm text-slate-400">Memuat...</p>
             ) : items.length === 0 ? (
-              <p className="text-sm text-slate-500">Belum ada aktivitas tercatat.</p>
+              <p className="text-sm text-slate-400">Belum ada aktivitas tercatat.</p>
             ) : (
               <ul className="divide-y divide-line/60">
                 {items.map((log) => {
@@ -237,9 +237,9 @@ export default function ActivityLog() {
                       <div className="min-w-0">
                         <p className="text-xs text-slate-200">
                           {TOOL_LABEL[log.tool_name] ?? log.tool_name}
-                          {detail && <span className="text-slate-500"> — {detail}</span>}
+                          {detail && <span className="text-slate-400"> — {detail}</span>}
                         </p>
-                        <p className="text-[10px] font-mono text-slate-600">
+                        <p className="text-[10px] font-mono text-slate-400">
                           {formatDateTime(log.created_at)}
                         </p>
                       </div>

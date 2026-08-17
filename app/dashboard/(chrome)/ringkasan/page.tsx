@@ -455,7 +455,7 @@ export default function RingkasanPage() {
 
       {loading && !briefing ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Menyusun ringkasan...</p>
+          <p className="text-sm text-slate-400">Menyusun ringkasan...</p>
         </HudPanel>
       ) : briefing ? (
         <>
@@ -547,7 +547,7 @@ export default function RingkasanPage() {
                   </button>
                 )}
               </div>
-              {insightLoading && <p className="text-xs font-mono text-slate-500">Mikir...</p>}
+              {insightLoading && <p className="text-xs font-mono text-slate-400">Mikir...</p>}
               {insightError && <p className="text-xs text-rose-glow">{insightError}</p>}
               {insight && (
                 <>
@@ -570,7 +570,7 @@ export default function RingkasanPage() {
                 </>
               )}
               {!insight && !insightLoading && !insightError && (
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-slate-400">
                   Minta Aslan gali topik prioritas #1 di atas lebih dalam (boleh pake web search).
                 </p>
               )}
@@ -581,7 +581,7 @@ export default function RingkasanPage() {
             <div>
               <div className="flex items-center gap-2.5 mb-3.5">
                 <span className="flex-1 h-px bg-line" />
-                <span className="font-mono text-[10px] uppercase tracking-wider text-slate-600">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400">
                   Riwayat Briefing
                 </span>
                 <span className="flex-1 h-px bg-line" />
@@ -601,7 +601,7 @@ export default function RingkasanPage() {
                           <span className="text-[12.5px] text-slate-300 capitalize">
                             {formatDate(h.briefing_date)}
                           </span>
-                          <span className="font-mono text-xs text-slate-500">{open ? "−" : "+"}</span>
+                          <span className="font-mono text-xs text-slate-400">{open ? "−" : "+"}</span>
                         </button>
                         {open && (
                           <p className="text-xs text-slate-400 leading-relaxed mt-2 ml-3.5">{h.preview}</p>

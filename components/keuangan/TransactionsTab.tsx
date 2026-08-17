@@ -374,7 +374,7 @@ export default function TransactionsTab() {
     <div className="space-y-4">
       <div className="flex justify-between items-center gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <label htmlFor="tx-view-month" className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+          <label htmlFor="tx-view-month" className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
             Lihat bulan
           </label>
           <input
@@ -411,7 +411,7 @@ export default function TransactionsTab() {
           <span>Pemasukan: <span className="text-mint-glow">{formatCurrency(monthSummary.income)}</span></span>
           <span>Pengeluaran: <span className="text-rose-glow">{formatCurrency(monthSummary.expense)}</span></span>
           <span>Saldo: {formatCurrency(monthSummary.income - monthSummary.expense)}</span>
-          {hasMore && <span className="text-slate-600">(masih ada data lebih lanjut, muat lebih dulu buat total akurat)</span>}
+          {hasMore && <span className="text-slate-400">(masih ada data lebih lanjut, muat lebih dulu buat total akurat)</span>}
         </p>
       )}
 
@@ -427,7 +427,7 @@ export default function TransactionsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   type === "expense"
                     ? "bg-rose-glow/10 text-rose-glow"
-                    : "text-slate-500"
+                    : "text-slate-400"
                 }`}
               >
                 Keluar
@@ -438,7 +438,7 @@ export default function TransactionsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   type === "income"
                     ? "bg-mint-glow/10 text-mint-glow"
-                    : "text-slate-500"
+                    : "text-slate-400"
                 }`}
               >
                 Masuk
@@ -449,7 +449,7 @@ export default function TransactionsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   type === "transfer"
                     ? "bg-cyan-glow/10 text-cyan-glow"
-                    : "text-slate-500"
+                    : "text-slate-400"
                 }`}
               >
                 Transfer
@@ -577,7 +577,7 @@ export default function TransactionsTab() {
                     className="h-16 w-16 object-cover rounded-sm border border-line"
                   />
                 ) : existingReceiptPath ? (
-                  <span className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+                  <span className="flex items-center gap-1.5 text-xs text-slate-400 font-mono">
                     <Paperclip aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={1.75} />
                     Struk udah ada — upload baru buat ganti
                   </span>
@@ -617,9 +617,9 @@ export default function TransactionsTab() {
 
       <HudPanel>
         {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-400">
             {viewMonth ? "Nggak ada transaksi di bulan ini." : "Belum ada transaksi. Mulai catat di atas."}
           </p>
         ) : (
@@ -635,7 +635,7 @@ export default function TransactionsTab() {
                       ? `Transfer: ${accountLabel.get(tx.account_id ?? "") ?? "?"} → ${accountLabel.get(tx.to_account_id ?? "") ?? "?"}`
                       : tx.category}
                     {tx.description ? (
-                      <span className="text-slate-500"> · {tx.description}</span>
+                      <span className="text-slate-400"> · {tx.description}</span>
                     ) : null}
                   </p>
                   <p className="text-[11px] font-mono text-slate-400">

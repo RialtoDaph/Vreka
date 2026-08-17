@@ -167,7 +167,7 @@ export default function CommandPalette() {
         />
         <ul className="max-h-72 overflow-y-auto py-1.5">
           {combined.length === 0 ? (
-            <li className="px-4 py-3 text-sm text-slate-500">Nggak ketemu.</li>
+            <li className="px-4 py-3 text-sm text-slate-400">Nggak ketemu.</li>
           ) : (
             combined.map((item, i) => (
               <li key={item.key}>
@@ -182,7 +182,7 @@ export default function CommandPalette() {
                   <span className="flex-1 min-w-0">
                     <span className="block truncate">{item.label}</span>
                     {item.sublabel ? (
-                      <span className="block truncate text-xs text-slate-500">{item.sublabel}</span>
+                      <span className="block truncate text-xs text-slate-400">{item.sublabel}</span>
                     ) : null}
                   </span>
                 </button>
@@ -190,7 +190,7 @@ export default function CommandPalette() {
             ))
           )}
         </ul>
-        <p className="px-4 py-2 text-[10px] font-mono text-slate-600 border-t border-line">
+        <p className="px-4 py-2 text-[10px] font-mono text-slate-400 border-t border-line">
           ↑↓ pilih · Enter buka · Esc tutup
         </p>
       </div>

@@ -174,7 +174,7 @@ export default function AnalyticsTab() {
           </h2>
         </div>
         {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         ) : (
           <div style={{ width: "100%", height: 260 }}>
             <ResponsiveContainer>
@@ -241,9 +241,9 @@ export default function AnalyticsTab() {
           )}
         </div>
         {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         ) : accounts.length === 0 ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-400">
             Belum ada rekening tercatat -- tambahin di tab Rekening biar tren kekayaan bersih bisa dihitung.
           </p>
         ) : (
@@ -295,9 +295,9 @@ export default function AnalyticsTab() {
           </h2>
         </div>
         {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         ) : categories.length === 0 ? (
-          <p className="text-sm text-slate-500">Belum ada pengeluaran bulan ini.</p>
+          <p className="text-sm text-slate-400">Belum ada pengeluaran bulan ini.</p>
         ) : (
           <div style={{ width: "100%", height: chartHeight }}>
             <ResponsiveContainer>
@@ -337,9 +337,9 @@ export default function AnalyticsTab() {
           </h2>
         </div>
         {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-slate-400">Memuat...</p>
         ) : categoryDonut.length === 0 ? (
-          <p className="text-sm text-slate-500">Belum ada pengeluaran bulan ini.</p>
+          <p className="text-sm text-slate-400">Belum ada pengeluaran bulan ini.</p>
         ) : (
           <div className="flex flex-col sm:flex-row items-center gap-5">
             <div style={{ width: 180, height: 180 }} className="shrink-0">

@@ -366,19 +366,19 @@ export default function MemoryMap({ data, vitals }: Props) {
           />
 
           <div className="bg-panel/75 border border-line rounded-lg px-3 py-2.5 backdrop-blur-sm">
-            <p className="font-mono text-[8.5px] tracking-[0.1em] text-slate-500 m-0 mb-1.5">
+            <p className="font-mono text-[8.5px] tracking-[0.1em] text-slate-400 m-0 mb-1.5">
               {"// SYSTEM.STATUS"}
             </p>
             <div className="flex items-center gap-1.5 font-mono text-[9.5px] mb-1">
-              <span className="text-slate-500 shrink-0">NODE</span>
+              <span className="text-slate-400 shrink-0">NODE</span>
               <span className="text-amber-glow ml-auto">{data.nodes.length}</span>
             </div>
             <div className="flex items-center gap-1.5 font-mono text-[9.5px] mb-1">
-              <span className="text-slate-500 shrink-0">MEM</span>
+              <span className="text-slate-400 shrink-0">MEM</span>
               <span className="text-cyan-glow ml-auto">{vitals.memoryCount}</span>
             </div>
             <div className="flex items-center gap-1.5 font-mono text-[9.5px]">
-              <span className="text-slate-500 shrink-0">INTG</span>
+              <span className="text-slate-400 shrink-0">INTG</span>
               <span className="text-mint-glow ml-auto">
                 {vitals.integrationsConnected}/{vitals.integrationsTotal}
               </span>
@@ -485,7 +485,7 @@ export default function MemoryMap({ data, vitals }: Props) {
 
       {selectedNode && (
         <div className="absolute top-0 right-0 bottom-0 w-full sm:w-[300px] bg-panel/90 border-l border-line backdrop-blur-[10px] p-5 z-[3] overflow-y-auto">
-          <p className="font-mono text-[9.5px] text-slate-500 mb-2.5 truncate">{breadcrumb}</p>
+          <p className="font-mono text-[9.5px] text-slate-400 mb-2.5 truncate">{breadcrumb}</p>
           <div className="flex items-center justify-between mb-4">
             <span
               className="font-mono text-[9px] uppercase tracking-[0.15em] border rounded-[3px] px-[7px] py-0.5"
@@ -550,7 +550,7 @@ export default function MemoryMap({ data, vitals }: Props) {
                   ×
                 </button>
               </div>
-              {insightLoading && <p className="font-mono text-[10px] text-slate-500 m-0">Mikir...</p>}
+              {insightLoading && <p className="font-mono text-[10px] text-slate-400 m-0">Mikir...</p>}
               {insightError && !insightLoading && (
                 <p className="text-[11.5px] text-rose-glow m-0">{insightError}</p>
               )}
@@ -572,7 +572,7 @@ export default function MemoryMap({ data, vitals }: Props) {
                       ))}
                     </div>
                   )}
-                  <p className="font-mono text-[9px] text-slate-600 m-0">Klik node lain buat gali topik itu</p>
+                  <p className="font-mono text-[9px] text-slate-400 m-0">Klik node lain buat gali topik itu</p>
                 </>
               )}
             </div>
@@ -638,7 +638,7 @@ export default function MemoryMap({ data, vitals }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shrink-0 h-10 flex items-center justify-between gap-3 px-4 border-b border-line bg-panel/90">
-              <span className="font-mono text-[10.5px] text-slate-500 truncate">
+              <span className="font-mono text-[10.5px] text-slate-400 truncate">
                 Memory Map ▸ <span className="text-cyan-glow">{NAV.find((n) => n.href === navOverlay)?.label}</span>
               </span>
               <div className="flex items-center gap-1.5 shrink-0">
