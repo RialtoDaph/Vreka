@@ -7,7 +7,6 @@ import { TOOL_LABEL, describeToolInput, toolSource } from "@/lib/assistant/toolL
 import { Wrench } from "lucide-react";
 
 const LAST_SEEN_KEY = "aslan-inbox-last-seen";
-const POLL_MS = 60_000;
 const MAX_SHOWN = 5;
 
 export default function AslanInbox() {
@@ -16,30 +15,50 @@ export default function AslanInbox() {
 
   useEffect(() => {
     let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    async function poll() {
+    async function init() {
       // First-ever visit: nothing to catch up on -- start the cursor at
       // "now" so only activity from here on ever shows up as unread,
       // instead of dumping a user's whole history on them at once.
       const lastSeen = window.localStorage.getItem(LAST_SEEN_KEY);
       if (!lastSeen) {
         window.localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString());
-        return;
+      } else {
+        // Catches up on anything logged while this component wasn't
+        // mounted (tab closed, page not visited) -- the live subscription
+        // below only sees inserts that happen *after* it connects.
+        const { data } = await supabase
+          .from("assistant_audit_log")
+          .select("*")
+          .gt("created_at", lastSeen)
+          .order("created_at", { ascending: false })
+          .limit(MAX_SHOWN);
+        if (!cancelled) setUnread((data ?? []) as AssistantAuditLog[]);
       }
-      const { data } = await supabase
-        .from("assistant_audit_log")
-        .select("*")
-        .gt("created_at", lastSeen)
-        .order("created_at", { ascending: false })
-        .limit(MAX_SHOWN);
-      if (!cancelled) setUnread((data ?? []) as AssistantAuditLog[]);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled || !user) return;
+
+      channel = supabase
+        .channel(`assistant-inbox-${user.id}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "assistant_audit_log", filter: `user_id=eq.${user.id}` },
+          (payload) => {
+            if (cancelled) return;
+            setUnread((prev) => [payload.new as AssistantAuditLog, ...prev].slice(0, MAX_SHOWN));
+          }
+        )
+        .subscribe();
     }
 
-    poll();
-    const interval = setInterval(poll, POLL_MS);
+    init();
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (channel) supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
