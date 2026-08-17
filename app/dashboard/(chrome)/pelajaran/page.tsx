@@ -9,6 +9,8 @@ import { formatDate } from "@/lib/format";
 import { useConfirm } from "@/lib/useConfirm";
 import { Flame, Brain, Layers, Link2, X } from "lucide-react";
 import HudPanel from "@/components/HudPanel";
+import Markdown from "@/components/Markdown";
+import MarkdownEditor from "@/components/MarkdownEditor";
 import PomodoroTimer from "@/components/pelajaran/PomodoroTimer";
 import QuizPanel, { type QuizQuestion } from "@/components/pelajaran/QuizPanel";
 import FlashcardPanel from "@/components/pelajaran/FlashcardPanel";
@@ -509,11 +511,10 @@ export default function PelajaranPage() {
             </div>
             <div>
               <label className={labelClass}>Catatan</label>
-              <textarea
+              <MarkdownEditor
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className={`${inputClass} min-h-24`}
-                placeholder="Ringkasan, link materi, progress belajar..."
+                onChange={setContent}
+                placeholder="Ringkasan, link materi, progress belajar... (markdown didukung)"
               />
             </div>
             <div>
@@ -565,11 +566,12 @@ export default function PelajaranPage() {
                       className={`${inputClass} text-sm`}
                       placeholder="Kategori"
                     />
-                    <textarea
+                    <MarkdownEditor
                       value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className={`${inputClass} text-sm min-h-20`}
+                      onChange={setEditContent}
                       placeholder="Catatan"
+                      minHeightClass="min-h-20"
+                      textClass="text-sm"
                     />
                     <div className="flex justify-end gap-2">
                       <button onClick={cancelEdit} className={ghostBtnClass}>
@@ -672,9 +674,7 @@ export default function PelajaranPage() {
 
                 {expanded && (
                   <div className="mt-2 space-y-3">
-                    {note.content && (
-                      <p className="text-sm text-slate-400 whitespace-pre-wrap">{note.content}</p>
-                    )}
+                    {note.content && <Markdown>{note.content}</Markdown>}
 
                     <div>
                       <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5">
