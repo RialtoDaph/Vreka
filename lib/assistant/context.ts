@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime, formatGrams } from "@/lib/format";
 import { computeStreak } from "@/lib/habits";
 import { getCalendarAccessToken } from "@/lib/google/credentials";
 import { listUpcomingEvents } from "@/lib/google/calendar";
@@ -112,10 +112,12 @@ export async function buildAssistantSystemPrompt(
 
   const goalsLines =
     (goals ?? [])
-      .map(
-        (g) =>
-          `- ${g.name}: ${formatCurrency(Number(g.current_amount))} / ${formatCurrency(Number(g.target_amount))}`
-      )
+      .map((g) => {
+        const base = `- ${g.name}: ${formatCurrency(Number(g.current_amount))} / ${formatCurrency(Number(g.target_amount))}`;
+        return g.asset_type === "gold" && Number(g.total_grams) > 0
+          ? `${base} (${formatGrams(Number(g.total_grams))} emas)`
+          : base;
+      })
       .join("\n") || "(belum ada target tabungan)";
 
   const debtLines =

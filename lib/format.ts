@@ -15,6 +15,10 @@ export function parseAmount(value: string): number {
   return Number(cleaned);
 }
 
+export function formatGrams(grams: number): string {
+  return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 }).format(grams)} gram`;
+}
+
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
