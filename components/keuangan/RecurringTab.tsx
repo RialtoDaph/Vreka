@@ -8,6 +8,8 @@ import { currentMonthKey, todayKey } from "@/lib/date";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
 import CategorySelect from "@/components/CategorySelect";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
+import { Zap } from "lucide-react";
 import {
   inputClass,
   labelClass,
@@ -27,6 +29,7 @@ export default function RecurringTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [type, setType] = useState<TransactionType>("expense");
   const [name, setName] = useState("");
@@ -138,7 +141,7 @@ export default function RecurringTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus pos tetap ini? Riwayat centangnya ikut hilang.")) return;
+    if (!(await confirm("Yakin mau hapus pos tetap ini? Riwayat centangnya ikut hilang."))) return;
     setError(null);
     const previousItems = items;
     const previousChecks = checks;
@@ -251,7 +254,7 @@ export default function RecurringTab() {
                 type="button"
                 onClick={() => switchType("expense")}
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
-                  type === "expense" ? "bg-rose-glow/10 text-rose-glow" : "text-slate-500"
+                  type === "expense" ? "bg-rose-glow/10 text-rose-glow" : "text-fg-subtle"
                 }`}
               >
                 Keluar
@@ -260,7 +263,7 @@ export default function RecurringTab() {
                 type="button"
                 onClick={() => switchType("income")}
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
-                  type === "income" ? "bg-mint-glow/10 text-mint-glow" : "text-slate-500"
+                  type === "income" ? "bg-mint-glow/10 text-mint-glow" : "text-fg-subtle"
                 }`}
               >
                 Masuk
@@ -308,7 +311,7 @@ export default function RecurringTab() {
             </div>
 
             <div>
-              <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer w-fit">
+              <label className="flex items-center gap-2.5 text-sm text-fg-muted cursor-pointer w-fit">
                 <input
                   type="checkbox"
                   checked={autoPost}
@@ -367,6 +370,8 @@ export default function RecurringTab() {
           onDelete={handleDelete}
         />
       </div>
+
+      {confirmDialog}
     </div>
   );
 }
@@ -405,19 +410,19 @@ function RecurringSection({
   return (
     <HudPanel>
       <div className="flex items-center justify-between mb-1">
-        <h3 className="font-display font-semibold text-white tracking-wide">{title}</h3>
+        <h3 className="font-display font-semibold text-fg tracking-wide">{title}</h3>
         <span className={`font-mono text-sm ${toneClass}`}>{formatCurrency(total)}</span>
       </div>
       {items.length > 0 && (
-        <p className="text-[11px] font-mono text-slate-500 mb-3">
+        <p className="text-[11px] font-mono text-fg-subtle mb-3">
           Tercatat bulan ini: {checkedCount}/{items.length} ({formatCurrency(checkedTotal)})
         </p>
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-500">Memuat...</p>
+        <p className="text-sm text-fg-subtle">Memuat...</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-500">{emptyText}</p>
+        <p className="text-sm text-fg-subtle">{emptyText}</p>
       ) : (
         <ul className="divide-y divide-line/60">
           {items.map((item) => {
@@ -438,15 +443,19 @@ function RecurringSection({
                 <div className="min-w-0 flex-1">
                   <p
                     className={`text-sm truncate ${
-                      isChecked ? "text-slate-500 line-through" : "text-slate-200"
+                      isChecked ? "text-fg-subtle line-through" : "text-fg-secondary"
                     }`}
                   >
                     {item.name}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-600">
+                  <p className="text-[11px] font-mono text-fg-subtle">
                     {item.category}
                     {item.auto_post && (
-                      <span className="text-cyan-glow"> · ⚡ auto tgl {item.day_of_month}</span>
+                      <span className="text-cyan-glow inline-flex items-center gap-1">
+                        {" · "}
+                        <Zap aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
+                        auto tgl {item.day_of_month}
+                      </span>
                     )}
                   </p>
                 </div>

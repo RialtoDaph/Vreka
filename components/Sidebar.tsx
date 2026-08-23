@@ -2,27 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const NAV = [
-  { href: "/dashboard", label: "Memory Map", icon: "◈" },
-  { href: "/dashboard/ringkasan", label: "Ringkasan", icon: "☀" },
-  { href: "/dashboard/keuangan", label: "Keuangan", icon: "⌬" },
-  { href: "/dashboard/kerjaan", label: "Kerjaan", icon: "▤" },
-  { href: "/dashboard/canvas", label: "Canvas", icon: "▧" },
-  { href: "/dashboard/pelajaran", label: "Pelajaran", icon: "◎" },
-  { href: "/dashboard/kalender", label: "Kalender", icon: "▦" },
-  { href: "/dashboard/jurnal", label: "Jurnal", icon: "✎" },
-  { href: "/dashboard/timeline", label: "Timeline", icon: "⧗" },
-  { href: "/dashboard/asisten", label: "Aslan", icon: "✦" },
-  { href: "/dashboard/ai-core", label: "AI Core", icon: "◉" },
-];
+import { NAV_MODULES } from "@/lib/navModules";
 
 export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex md:flex-col gap-1 md:gap-1.5 overflow-x-auto md:overflow-visible">
-      {NAV.map((item) => {
+    <nav className="flex flex-col gap-1.5">
+      {NAV_MODULES.map((item) => {
         const active =
           item.href === "/dashboard"
             ? pathname === "/dashboard"
@@ -34,10 +21,10 @@ export default function Sidebar() {
             className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-sm text-sm font-mono uppercase tracking-wider whitespace-nowrap transition-colors border ${
               active
                 ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-panel2"
+                : "border-transparent text-fg-subtle hover:text-fg-secondary hover:bg-panel2"
             }`}
           >
-            <span aria-hidden="true">{item.icon}</span>
+            <item.icon aria-hidden="true" className="w-4 h-4 shrink-0" strokeWidth={1.75} />
             {item.label}
           </Link>
         );

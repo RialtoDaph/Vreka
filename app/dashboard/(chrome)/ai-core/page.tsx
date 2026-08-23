@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useVoiceAssistant } from "@/lib/assistant/useVoiceAssistant";
+import { useQueryParamNotice } from "@/lib/useQueryParamNotice";
 import HudPanel from "@/components/HudPanel";
 import ActivityLog from "@/components/asisten/ActivityLog";
 import DataExport from "@/components/asisten/DataExport";
+import DataImport from "@/components/asisten/DataImport";
 import GmailDrafts from "@/components/asisten/GmailDrafts";
 import PushNotifications from "@/components/asisten/PushNotifications";
+import NotificationPreferences from "@/components/asisten/NotificationPreferences";
+import ThemeToggle from "@/components/asisten/ThemeToggle";
 import TwoFactorAuth from "@/components/asisten/TwoFactorAuth";
 import { primaryBtnClass, ghostBtnClass } from "@/lib/ui";
 
@@ -27,21 +31,21 @@ function IntegrationCard({
   return (
     <div className="border border-line rounded-sm p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 flex items-center gap-1.5 min-w-0">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle flex items-center gap-1.5 min-w-0">
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
           <span className="truncate">{title}</span>
         </p>
         {status !== "info" && (
           <span
             className={`text-[9px] font-mono uppercase tracking-wider shrink-0 ${
-              status === "connected" ? "text-mint-glow" : "text-slate-600"
+              status === "connected" ? "text-mint-glow" : "text-fg-subtle"
             }`}
           >
             {status === "connected" ? "LINKED" : "UNLINKED"}
           </span>
         )}
       </div>
-      <p className="text-xs text-slate-300 truncate">{detail}</p>
+      <p className="text-xs text-fg-muted truncate">{detail}</p>
       {action}
     </div>
   );
@@ -50,8 +54,8 @@ function IntegrationCard({
 function StatCell({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="border border-line rounded-sm px-3 py-2.5">
-      <p className="text-[9px] font-mono uppercase tracking-wider text-slate-500 mb-1">{label}</p>
-      <p className="font-display text-lg text-white">{value}</p>
+      <p className="text-[9px] font-mono uppercase tracking-wider text-fg-subtle mb-1">{label}</p>
+      <p className="font-display text-lg text-fg">{value}</p>
     </div>
   );
 }
@@ -100,16 +104,12 @@ export default function AiCorePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+  useQueryParamNotice(["gmail_error", "gmail"], (params) => {
     const gmailError = params.get("gmail_error");
     const gmailConnected = params.get("gmail");
     if (gmailError) setGmailNotice(`Gagal connect Gmail: ${gmailError}`);
     else if (gmailConnected === "connected") setGmailNotice("Gmail berhasil terhubung.");
-    if (gmailError || gmailConnected) {
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, []);
+  });
 
   useEffect(() => {
     async function loadGmailStatus() {
@@ -151,24 +151,27 @@ export default function AiCorePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function pollForTelegramLink() {
-    let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts += 1;
-      const { data } = await supabase
-        .from("telegram_links")
-        .select("telegram_username, linked_at")
-        .not("linked_at", "is", null)
-        .maybeSingle();
-      if (data?.linked_at) {
-        setTelegramLinked(true);
-        setTelegramUsername(data.telegram_username ?? null);
-        setTelegramDeepLink(null);
-        clearInterval(interval);
-      } else if (attempts >= 20) {
-        clearInterval(interval);
-      }
-    }, 3000);
+  // Listens for the webhook (app/api/telegram/webhook) marking this user's
+  // row linked, instead of polling every 3s for up to 20 tries. Same ~60s
+  // give-up window as the old poll had, so a channel doesn't stay open
+  // forever if the user never finishes the Telegram-side confirmation.
+  function subscribeForTelegramLink(userId: string) {
+    const channel = supabase
+      .channel(`telegram-link-${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "telegram_links", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const row = payload.new as { telegram_username: string | null; linked_at: string | null };
+          if (!row.linked_at) return;
+          setTelegramLinked(true);
+          setTelegramUsername(row.telegram_username ?? null);
+          setTelegramDeepLink(null);
+          supabase.removeChannel(channel);
+        }
+      )
+      .subscribe();
+    setTimeout(() => supabase.removeChannel(channel), 60_000);
   }
 
   async function handleConnectTelegram() {
@@ -183,7 +186,10 @@ export default function AiCorePage() {
       }
       setTelegramDeepLink(data.deepLink);
       window.open(data.deepLink, "_blank");
-      pollForTelegramLink();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) subscribeForTelegramLink(user.id);
     } catch {
       setTelegramError("Gagal generate link Telegram.");
     } finally {
@@ -212,7 +218,7 @@ export default function AiCorePage() {
         <span className="w-2 h-2 rounded-full bg-mint-glow animate-pulse shrink-0" aria-hidden="true" />
         <div>
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">AI Core</p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">Status &amp; Integrasi</h1>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">Status &amp; Integrasi</h1>
         </div>
       </header>
 
@@ -228,7 +234,7 @@ export default function AiCorePage() {
           <StatCell label="Total Obrolan" value={totalMessages ?? "–"} />
         </div>
 
-        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-2">
           Integrasi
         </p>
         <div className="grid sm:grid-cols-2 gap-3 mb-5">
@@ -314,7 +320,16 @@ export default function AiCorePage() {
 
         <div className="divide-y divide-line/60">
           <div className="py-3 first:pt-0">
+            <ThemeToggle />
+          </div>
+          <div className="py-3">
+            <NotificationPreferences />
+          </div>
+          <div className="py-3">
             <DataExport />
+          </div>
+          <div className="py-3">
+            <DataImport />
           </div>
           <div className="py-3 last:pb-0">
             <TwoFactorAuth />

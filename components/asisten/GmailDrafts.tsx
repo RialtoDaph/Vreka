@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/lib/useConfirm";
 import { ghostBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 type Draft = { id: string; to: string; subject: string; snippet: string };
@@ -13,6 +14,7 @@ export default function GmailDrafts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -37,7 +39,11 @@ export default function GmailDrafts() {
   }, []);
 
   async function handleSend(draft: Draft) {
-    if (!window.confirm(`Kirim email ke ${draft.to || "(?)"} — "${draft.subject || "(tanpa subjek)"}"?`)) return;
+    const ok = await confirm(
+      `Kirim email ke ${draft.to || "(?)"} — "${draft.subject || "(tanpa subjek)"}"?`,
+      { tone: "default" }
+    );
+    if (!ok) return;
     setBusyId(draft.id);
     setError(null);
     try {
@@ -60,7 +66,7 @@ export default function GmailDrafts() {
   }
 
   async function handleDiscard(draft: Draft) {
-    if (!window.confirm("Buang draft ini? Nggak bakal kekirim.")) return;
+    if (!(await confirm("Buang draft ini? Nggak bakal kekirim.", { confirmLabel: "Buang" }))) return;
     setBusyId(draft.id);
     setError(null);
     try {
@@ -82,16 +88,16 @@ export default function GmailDrafts() {
     }
   }
 
-  if (loading) return <p className="text-sm text-slate-500">Memuat draft...</p>;
+  if (loading) return <p className="text-sm text-fg-subtle">Memuat draft...</p>;
 
   return (
     <div>
-      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+      <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-2">
         Draft Email {drafts.length > 0 && `(${drafts.length})`}
       </p>
       {error && <p className={`${errorBannerClass} mb-2`}>{error}</p>}
       {drafts.length === 0 ? (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-fg-subtle">
           Nggak ada draft nunggu. Draft yang Aslan bikinin (lewat &quot;bales email&quot;) bakal muncul di sini
           buat direview sebelum dikirim.
         </p>
@@ -99,9 +105,9 @@ export default function GmailDrafts() {
         <ul className="divide-y divide-line/60">
           {drafts.map((d) => (
             <li key={d.id} className="py-2.5 first:pt-0 last:pb-0">
-              <p className="text-sm text-slate-200 truncate">{d.subject || "(tanpa subjek)"}</p>
-              <p className="text-xs text-slate-500 truncate">Ke: {d.to || "(?)"}</p>
-              {d.snippet && <p className="text-xs text-slate-600 truncate mt-0.5">{d.snippet}</p>}
+              <p className="text-sm text-fg-secondary truncate">{d.subject || "(tanpa subjek)"}</p>
+              <p className="text-xs text-fg-subtle truncate">Ke: {d.to || "(?)"}</p>
+              {d.snippet && <p className="text-xs text-fg-subtle truncate mt-0.5">{d.snippet}</p>}
               <div className="flex items-center gap-3 mt-1.5">
                 <button
                   onClick={() => handleSend(d)}
@@ -125,6 +131,8 @@ export default function GmailDrafts() {
       <button onClick={load} className={`${ghostBtnClass} mt-3`}>
         ↻ Refresh
       </button>
+
+      {confirmDialog}
     </div>
   );
 }

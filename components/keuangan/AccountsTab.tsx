@@ -6,6 +6,7 @@ import { Account } from "@/lib/types";
 import { buildAccountBalances } from "@/lib/accountBalances";
 import { formatCurrency, parseAmount } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -31,6 +32,7 @@ export default function AccountsTab() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [name, setName] = useState("");
   const [startingBalance, setStartingBalance] = useState("");
@@ -131,7 +133,12 @@ export default function AccountsTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus rekening ini? Transaksi yang udah ditandain ke sini nggak akan ikut kehapus, cuma nggak ditandain lagi.")) return;
+    if (
+      !(await confirm(
+        "Yakin mau hapus rekening ini? Transaksi yang udah ditandain ke sini nggak akan ikut kehapus, cuma nggak ditandain lagi."
+      ))
+    )
+      return;
     setError(null);
     const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -183,7 +190,7 @@ export default function AccountsTab() {
                 />
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm text-fg-muted">
               <input
                 type="checkbox"
                 checked={isPrimary}
@@ -200,11 +207,11 @@ export default function AccountsTab() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Belum ada rekening. Tambah dulu biar transaksi bisa ditandain sumbernya.</p>
+          <p className="text-sm text-fg-subtle">Belum ada rekening. Tambah dulu biar transaksi bisa ditandain sumbernya.</p>
         </HudPanel>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -212,7 +219,7 @@ export default function AccountsTab() {
             <HudPanel key={account.id}>
               <div className="flex justify-between items-start mb-2">
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-100 truncate">
+                  <h3 className="text-sm font-semibold text-fg truncate">
                     {account.name}
                     {account.is_primary && (
                       <span className="ml-2 font-mono text-[9.5px] uppercase tracking-wider text-cyan-glow border border-cyan-glow/30 rounded-full px-1.5 py-0.5">
@@ -237,11 +244,13 @@ export default function AccountsTab() {
       )}
 
       {!loading && unassigned !== 0 && (
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-fg-subtle">
           {formatCurrency(unassigned)} dari transaksi yang belum ditandain rekeningnya (tetap keitung di
           Kekayaan Total, tandain di tab Transaksi kalau mau lebih rapi).
         </p>
       )}
+
+      {confirmDialog}
     </div>
   );
 }

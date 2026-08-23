@@ -7,6 +7,7 @@ import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
 import { currentMonthKey, todayKey } from "@/lib/date";
 import { sumPaidByDebt, remainingDebtAmount } from "@/lib/debts";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -38,6 +39,7 @@ export default function DebtsTab() {
   const [undoingId, setUndoingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("semua");
+  const { confirm, confirmDialog } = useConfirm();
 
   const [partyName, setPartyName] = useState("");
   const [direction, setDirection] = useState<DebtDirection>("i_owe");
@@ -278,7 +280,7 @@ export default function DebtsTab() {
   // app's cash flow stay in sync automatically.
   async function handleUndoPayment(payment: DebtPayment) {
     if (undoingId) return;
-    if (!window.confirm("Batalkan pembayaran ini? Transaksinya ikut kehapus.")) return;
+    if (!(await confirm("Batalkan pembayaran ini? Transaksinya ikut kehapus."))) return;
     setUndoingId(payment.id);
     setError(null);
     const previousPayments = payments;
@@ -313,7 +315,7 @@ export default function DebtsTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus catatan utang/piutang ini? Riwayat pembayarannya ikut hilang.")) return;
+    if (!(await confirm("Yakin mau hapus catatan utang/piutang ini? Riwayat pembayarannya ikut hilang."))) return;
     setError(null);
     const previousItems = items;
     const previousPayments = payments;
@@ -365,13 +367,13 @@ export default function DebtsTab() {
 
       <div className="grid sm:grid-cols-2 gap-3.5">
         <HudPanel>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-subtle mb-1.5">
             Total Utang (kamu berutang)
           </p>
           <p className="font-mono text-xl font-bold text-rose-glow">{formatCurrency(totalUtang)}</p>
         </HudPanel>
         <HudPanel>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-fg-subtle mb-1.5">
             Total Piutang (kamu ditagih)
           </p>
           <p className="font-mono text-xl font-bold text-mint-glow">{formatCurrency(totalPiutang)}</p>
@@ -386,7 +388,7 @@ export default function DebtsTab() {
             className={`px-4 py-1.5 font-mono text-[11.5px] uppercase tracking-wider rounded-full border transition-colors ${
               directionFilter === f.key
                 ? "border-cyan-glow/60 bg-cyan-glow/10 text-cyan-glow"
-                : "border-line text-slate-500 hover:text-slate-300"
+                : "border-line text-fg-subtle hover:text-fg-muted"
             }`}
           >
             {f.label}
@@ -404,7 +406,7 @@ export default function DebtsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   direction === "i_owe"
                     ? "bg-rose-glow/10 text-rose-glow"
-                    : "text-slate-500"
+                    : "text-fg-subtle"
                 }`}
               >
                 Aku Berutang
@@ -415,7 +417,7 @@ export default function DebtsTab() {
                 className={`px-4 py-2 uppercase tracking-wider transition-colors ${
                   direction === "owed_to_me"
                     ? "bg-mint-glow/10 text-mint-glow"
-                    : "text-slate-500"
+                    : "text-fg-subtle"
                 }`}
               >
                 Piutang ke Aku
@@ -473,7 +475,7 @@ export default function DebtsTab() {
             </div>
 
             <div>
-              <label className="flex items-center gap-2.5 text-sm text-slate-300 cursor-pointer w-fit">
+              <label className="flex items-center gap-2.5 text-sm text-fg-muted cursor-pointer w-fit">
                 <input
                   type="checkbox"
                   checked={isRecurring}
@@ -508,11 +510,11 @@ export default function DebtsTab() {
 
       <HudPanel>
         {loading ? (
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         ) : items.length === 0 ? (
-          <p className="text-sm text-slate-500">Belum ada utang/piutang tercatat.</p>
+          <p className="text-sm text-fg-subtle">Belum ada utang/piutang tercatat.</p>
         ) : filteredItems.length === 0 ? (
-          <p className="text-sm text-slate-500">Gak ada data di filter ini.</p>
+          <p className="text-sm text-fg-subtle">Gak ada data di filter ini.</p>
         ) : (
           <ul className="divide-y divide-line/60">
             {filteredItems.map((debt) => {
@@ -528,7 +530,7 @@ export default function DebtsTab() {
                 className="py-3 first:pt-0 last:pb-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-slate-200 truncate">
+                  <p className="text-sm text-fg-secondary truncate">
                     {debt.party_name}
                     {debt.status === "paid" && (
                       <span className="ml-2 text-[10px] font-mono text-mint-glow border border-mint-glow/30 rounded-sm px-1.5 py-0.5">
@@ -541,7 +543,7 @@ export default function DebtsTab() {
                       </span>
                     )}
                   </p>
-                  <p className="text-[11px] font-mono text-slate-600">
+                  <p className="text-[11px] font-mono text-fg-subtle">
                     {debt.is_recurring
                       ? `Berulang · tiap tanggal ${debt.recurrence_day}`
                       : debt.due_date
@@ -556,7 +558,7 @@ export default function DebtsTab() {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <p className="text-[10px] font-mono text-slate-600 mt-0.5">
+                      <p className="text-[10px] font-mono text-fg-subtle mt-0.5">
                         Udah dibayar {formatCurrency(paid)} dari {formatCurrency(Number(debt.amount))}
                       </p>
                     </div>
@@ -572,7 +574,7 @@ export default function DebtsTab() {
                       {formatCurrency(debt.status === "paid" ? Number(debt.amount) : left)}
                     </span>
                     {debt.status !== "paid" && paid > 0 && (
-                      <span className="text-[10px] font-mono text-slate-600">sisa</span>
+                      <span className="text-[10px] font-mono text-fg-subtle">sisa</span>
                     )}
                   </div>
 
@@ -633,6 +635,8 @@ export default function DebtsTab() {
           </ul>
         )}
       </HudPanel>
+
+      {confirmDialog}
     </div>
   );
 }

@@ -15,8 +15,13 @@ afterEach(() => {
 // this test only exercises the page's own stat cells + integration wiring.
 vi.mock("@/components/asisten/ActivityLog", () => ({ default: () => <div>ActivityLog</div> }));
 vi.mock("@/components/asisten/DataExport", () => ({ default: () => <div>DataExport</div> }));
+vi.mock("@/components/asisten/DataImport", () => ({ default: () => <div>DataImport</div> }));
 vi.mock("@/components/asisten/GmailDrafts", () => ({ default: () => <div>GmailDrafts</div> }));
 vi.mock("@/components/asisten/PushNotifications", () => ({ default: () => <div>PushNotifications</div> }));
+vi.mock("@/components/asisten/NotificationPreferences", () => ({
+  default: () => <div>NotificationPreferences</div>,
+}));
+vi.mock("@/components/asisten/ThemeToggle", () => ({ default: () => <div>ThemeToggle</div> }));
 vi.mock("@/components/asisten/TwoFactorAuth", () => ({ default: () => <div>TwoFactorAuth</div> }));
 
 function chainable(data: unknown[] = []) {
@@ -35,6 +40,8 @@ function chainable(data: unknown[] = []) {
   return obj;
 }
 
+type ChangeHandler = (payload: { new: Record<string, unknown> }) => void;
+
 function mockSupabase({
   gmailEmail = null as string | null,
   telegramUsername = null as string | null,
@@ -42,6 +49,7 @@ function mockSupabase({
   actionCount = 0,
   msgCount = 0,
 } = {}) {
+  const channels: { handler: ChangeHandler }[] = [];
   vi.doMock("@/lib/supabase/client", () => ({
     createClient: () => ({
       auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
@@ -56,8 +64,26 @@ function mockSupabase({
         if (table === "assistant_messages") return chainable(Array(msgCount).fill({}));
         throw new Error(`unexpected table: ${table}`);
       },
+      channel: () => {
+        const entry: { handler: ChangeHandler } = { handler: () => {} };
+        channels.push(entry);
+        const chan = {
+          on: (_event: string, _filter: unknown, handler: ChangeHandler) => {
+            entry.handler = handler;
+            return chan;
+          },
+          subscribe: () => chan,
+        };
+        return chan;
+      },
+      removeChannel: () => {},
     }),
   }));
+  return {
+    emitTelegramLinked: (row: Record<string, unknown>) => {
+      for (const c of channels) c.handler({ new: row });
+    },
+  };
 }
 
 function mockVoice(supported = true) {
@@ -133,7 +159,34 @@ describe("AiCorePage", () => {
     render(<AiCorePage />);
 
     expect(await screen.findByText("ActivityLog")).toBeInTheDocument();
+    expect(screen.getByText("ThemeToggle")).toBeInTheDocument();
+    expect(screen.getByText("NotificationPreferences")).toBeInTheDocument();
     expect(screen.getByText("DataExport")).toBeInTheDocument();
+    expect(screen.getByText("DataImport")).toBeInTheDocument();
     expect(screen.getByText("TwoFactorAuth")).toBeInTheDocument();
+  });
+
+  it("connects Telegram the instant the Realtime link-confirmation event arrives, no poll needed", async () => {
+    const { emitTelegramLinked } = mockSupabase();
+    mockVoice(true);
+    vi.stubGlobal("open", vi.fn());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ deepLink: "https://t.me/aslan_bot?start=abc123" }),
+      }))
+    );
+    const { default: AiCorePage } = await import("./page");
+    render(<AiCorePage />);
+
+    await screen.findByText("Chat Aslan langsung dari Telegram.");
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+
+    expect(await screen.findByText(/Buka Telegram, tekan Start/)).toBeInTheDocument();
+
+    emitTelegramLinked({ telegram_username: "budi123", linked_at: "2026-08-17T00:00:00.000Z" });
+
+    expect(await screen.findByText("@budi123")).toBeInTheDocument();
   });
 });

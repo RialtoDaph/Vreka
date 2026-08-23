@@ -3,6 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
+// Chart grid/cursor colors are picked reactively via useTheme() now (light
+// mode) -- stub it to dark so this file's assertions don't need to know
+// about theming.
+vi.mock("@/components/ThemeProvider", () => ({
+  useTheme: () => ({ preference: "dark", resolvedTheme: "dark", setPreference: vi.fn() }),
+}));
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();

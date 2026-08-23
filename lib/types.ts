@@ -87,6 +87,8 @@ export type SavingsGoal = {
   target_amount: number;
   current_amount: number;
   deadline: string | null;
+  asset_type: "cash" | "gold";
+  total_grams: number;
   created_at: string;
 };
 

@@ -13,6 +13,7 @@ import {
 } from "@/lib/lifeTimeline";
 import { formatDate } from "@/lib/format";
 import { localDateKey } from "@/lib/date";
+import { Rocket } from "lucide-react";
 import HudPanel from "@/components/HudPanel";
 import { errorBannerClass, ghostBtnClass, inputClass, labelClass, primaryBtnClass } from "@/lib/ui";
 
@@ -196,7 +197,7 @@ export default function TimelineKehidupanPage() {
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">Modul 07</p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">Timeline Kehidupan</h1>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">Timeline Kehidupan</h1>
         </div>
         <button onClick={toggleForm} className={ghostBtnClass}>
           {showForm ? "Batal" : "+ Milestone"}
@@ -213,7 +214,7 @@ export default function TimelineKehidupanPage() {
             className={`font-mono text-[11px] uppercase tracking-wider px-3 py-1.5 rounded-full border transition-colors ${
               filter === f.id
                 ? "bg-cyan-glow/10 border-cyan-glow/50 text-cyan-glow"
-                : "border-line text-slate-400 hover:text-slate-200"
+                : "border-line text-fg-subtle hover:text-fg-secondary"
             }`}
           >
             {f.label}
@@ -225,8 +226,11 @@ export default function TimelineKehidupanPage() {
         <HudPanel>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className={labelClass}>Judul</label>
+              <label htmlFor="milestone-title" className={labelClass}>
+                Judul
+              </label>
               <input
+                id="milestone-title"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -263,8 +267,11 @@ export default function TimelineKehidupanPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-3">
               <div>
-                <label className={labelClass}>Kategori</label>
+                <label htmlFor="milestone-category" className={labelClass}>
+                  Kategori
+                </label>
                 <select
+                  id="milestone-category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value as MilestoneCategory)}
                   className={inputClass}
@@ -277,8 +284,11 @@ export default function TimelineKehidupanPage() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Catatan (opsional)</label>
+                <label htmlFor="milestone-description" className={labelClass}>
+                  Catatan (opsional)
+                </label>
                 <input
+                  id="milestone-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Detail singkat"
@@ -295,11 +305,11 @@ export default function TimelineKehidupanPage() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat timeline...</p>
+          <p className="text-sm text-fg-subtle">Memuat timeline...</p>
         </HudPanel>
       ) : filtered.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Belum ada milestone. Tambah yang pertama lewat &quot;+ Milestone&quot;.</p>
+          <p className="text-sm text-fg-subtle">Belum ada milestone. Tambah yang pertama lewat &quot;+ Milestone&quot;.</p>
         </HudPanel>
       ) : (
         <div>
@@ -313,8 +323,9 @@ export default function TimelineKehidupanPage() {
 
           <div className="flex items-center gap-3 my-6">
             <span className="flex-1 h-px bg-gradient-to-r from-transparent to-cyan-glow/40" />
-            <span className="font-mono text-[10.5px] uppercase tracking-wider text-cyan-glow whitespace-nowrap">
-              ✦ Mulai pakai Vreka{startDate ? ` · ${formatDate(startDate)}` : ""}
+            <span className="font-mono text-[10.5px] uppercase tracking-wider text-cyan-glow whitespace-nowrap flex items-center gap-1.5">
+              <Rocket aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
+              Mulai pakai Vreka{startDate ? ` · ${formatDate(startDate)}` : ""}
             </span>
             <span className="flex-1 h-px bg-gradient-to-l from-transparent to-cyan-glow/40" />
           </div>
@@ -326,7 +337,7 @@ export default function TimelineKehidupanPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500 ml-[13px] pl-6">
+            <p className="text-sm text-fg-subtle ml-[13px] pl-6">
               Belum ada momen sejak mulai pakai Vreka.
             </p>
           )}
@@ -356,27 +367,27 @@ function TimelineRow({
         style={{ background: meta.color, boxShadow: `0 0 8px ${meta.color}80` }}
         aria-hidden="true"
       />
-      <p className="font-mono text-[10px] text-slate-500 mb-0.5">
+      <p className="font-mono text-[10px] text-fg-subtle mb-0.5">
         {dateLabel} · <span style={{ color: meta.color }}>{meta.label}</span>
       </p>
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm text-slate-200">{entry.title}</p>
-          {entry.description && <p className="text-xs text-slate-500 mt-0.5">{entry.description}</p>}
+          <p className="text-sm text-fg-secondary">{entry.title}</p>
+          {entry.description && <p className="text-xs text-fg-subtle mt-0.5">{entry.description}</p>}
         </div>
         {!entry.auto && (
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => onEdit(entry)}
               aria-label={`Edit milestone ${entry.title}`}
-              className="text-slate-600 hover:text-cyan-glow text-xs font-mono leading-none"
+              className="text-fg-subtle hover:text-cyan-glow text-xs font-mono leading-none"
             >
               Edit
             </button>
             <button
               onClick={() => onDelete(entry.id)}
               aria-label={`Hapus milestone ${entry.title}`}
-              className="text-slate-600 hover:text-rose-glow text-sm leading-none"
+              className="text-fg-subtle hover:text-rose-glow text-sm leading-none"
             >
               ×
             </button>

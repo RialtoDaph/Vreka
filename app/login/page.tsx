@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useQueryParamNotice } from "@/lib/useQueryParamNotice";
 import HudPanel from "@/components/HudPanel";
 
 export default function LoginPage() {
@@ -17,16 +18,13 @@ export default function LoginPage() {
 
   // /auth/callback bounces its failures back here as ?error=, and
   // /mfa's recovery-code flow bounces back here as ?notice= after
-  // disabling 2FA. Read them off window rather than useSearchParams so
-  // this page stays statically rendered.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+  // disabling 2FA.
+  useQueryParamNotice(["error", "notice"], (params) => {
     const reason = params.get("error");
     const note = params.get("notice");
     if (reason) setError(reason);
     if (note) setNotice(note);
-    if (reason || note) window.history.replaceState(null, "", window.location.pathname);
-  }, []);
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,10 +71,10 @@ export default function LoginPage() {
               System Online
             </span>
           </div>
-          <h1 className="font-display text-4xl font-bold tracking-wide text-white">
+          <h1 className="font-display text-4xl font-bold tracking-wide text-fg">
             VREKA
           </h1>
-          <p className="text-slate-400 text-sm mt-1 font-body">
+          <p className="text-fg-subtle text-sm mt-1 font-body">
             Command center pribadi kamu
           </p>
         </div>
@@ -89,7 +87,7 @@ export default function LoginPage() {
               className={`flex-1 py-2 uppercase tracking-wider transition-colors ${
                 mode === "signin"
                   ? "bg-cyan-glow/10 text-cyan-glow"
-                  : "text-slate-500 hover:text-slate-300"
+                  : "text-fg-subtle hover:text-fg-muted"
               }`}
             >
               Masuk
@@ -100,7 +98,7 @@ export default function LoginPage() {
               className={`flex-1 py-2 uppercase tracking-wider transition-colors ${
                 mode === "signup"
                   ? "bg-cyan-glow/10 text-cyan-glow"
-                  : "text-slate-500 hover:text-slate-300"
+                  : "text-fg-subtle hover:text-fg-muted"
               }`}
             >
               Daftar
@@ -109,29 +107,37 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+              <label
+                htmlFor="login-email"
+                className="block text-xs font-mono uppercase tracking-wider text-fg-subtle mb-1.5"
+              >
                 Email
               </label>
               <input
+                id="login-email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-panel2 border border-line rounded-sm px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-cyan-glow/60 transition-colors"
+                className="w-full bg-panel2 border border-line rounded-sm px-3 py-2.5 text-sm text-fg placeholder:text-slate-600 focus:border-cyan-glow/60 transition-colors"
                 placeholder="kamu@email.com"
               />
             </div>
             <div>
-              <label className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+              <label
+                htmlFor="login-password"
+                className="block text-xs font-mono uppercase tracking-wider text-fg-subtle mb-1.5"
+              >
                 Password
               </label>
               <input
+                id="login-password"
                 type="password"
                 required
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-panel2 border border-line rounded-sm px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-cyan-glow/60 transition-colors"
+                className="w-full bg-panel2 border border-line rounded-sm px-3 py-2.5 text-sm text-fg placeholder:text-slate-600 focus:border-cyan-glow/60 transition-colors"
                 placeholder="••••••••"
               />
             </div>

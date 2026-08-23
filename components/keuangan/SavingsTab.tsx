@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SavingsGoal } from "@/lib/types";
-import { formatCurrency, formatDate, parseAmount } from "@/lib/format";
+import { formatCurrency, formatDate, formatGrams, parseAmount } from "@/lib/format";
 import HudPanel from "@/components/HudPanel";
+import { useConfirm } from "@/lib/useConfirm";
 import {
   inputClass,
   labelClass,
@@ -23,12 +24,16 @@ export default function SavingsTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addFundId, setAddFundId] = useState<string | null>(null);
   const [addFundValue, setAddFundValue] = useState("");
+  const [addFundGrams, setAddFundGrams] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [current, setCurrent] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [assetType, setAssetType] = useState<"cash" | "gold">("cash");
+  const [totalGrams, setTotalGrams] = useState("");
 
   function resetForm() {
     setEditingId(null);
@@ -36,6 +41,8 @@ export default function SavingsTab() {
     setTarget("");
     setCurrent("");
     setDeadline("");
+    setAssetType("cash");
+    setTotalGrams("");
   }
 
   function toggleForm() {
@@ -49,6 +56,8 @@ export default function SavingsTab() {
     setTarget(String(goal.target_amount).replace(".", ","));
     setCurrent(String(goal.current_amount).replace(".", ","));
     setDeadline(goal.deadline ?? "");
+    setAssetType(goal.asset_type);
+    setTotalGrams(goal.total_grams ? String(goal.total_grams).replace(".", ",") : "");
     setShowForm(true);
   }
 
@@ -86,11 +95,14 @@ export default function SavingsTab() {
       return;
     }
 
+    const parsedGrams = totalGrams ? parseAmount(totalGrams) : 0;
     const payload = {
       name,
       target_amount: parsedTarget,
       current_amount: Number.isFinite(parsedCurrent) ? parsedCurrent : 0,
       deadline: deadline || null,
+      asset_type: assetType,
+      total_grams: assetType === "gold" && Number.isFinite(parsedGrams) ? parsedGrams : 0,
     };
 
     const { error: saveError } = editingId
@@ -115,22 +127,34 @@ export default function SavingsTab() {
       setError("Nominal dana nggak valid.");
       return;
     }
+    const patch: { current_amount: number; total_grams?: number } = {
+      current_amount: Number(goal.current_amount) + add,
+    };
+    if (goal.asset_type === "gold") {
+      const grams = parseAmount(addFundGrams);
+      if (!Number.isFinite(grams) || grams <= 0) {
+        setError("Berat emas (gram) nggak valid.");
+        return;
+      }
+      patch.total_grams = Number(goal.total_grams) + grams;
+    }
     setError(null);
     const { error: updateError } = await supabase
       .from("savings_goals")
-      .update({ current_amount: Number(goal.current_amount) + add })
+      .update(patch)
       .eq("id", goal.id);
     if (updateError) {
-      setError("Gagal tambah dana. Coba lagi.");
+      setError(goal.asset_type === "gold" ? "Gagal catat pembelian emas. Coba lagi." : "Gagal tambah dana. Coba lagi.");
       return;
     }
     setAddFundId(null);
     setAddFundValue("");
+    setAddFundGrams("");
     load();
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus target tabungan ini?")) return;
+    if (!(await confirm("Yakin mau hapus target tabungan ini?"))) return;
     setError(null);
     const previous = items;
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -168,6 +192,18 @@ export default function SavingsTab() {
                 />
               </div>
               <div>
+                <label htmlFor="savings-asset-type" className={labelClass}>Jenis Target</label>
+                <select
+                  id="savings-asset-type"
+                  value={assetType}
+                  onChange={(e) => setAssetType(e.target.value as "cash" | "gold")}
+                  className={inputClass}
+                >
+                  <option value="cash">Tabungan Biasa</option>
+                  <option value="gold">Emas Batangan</option>
+                </select>
+              </div>
+              <div>
                 <label htmlFor="savings-target" className={labelClass}>Target (€)</label>
                 <input
                   id="savings-target"
@@ -192,6 +228,20 @@ export default function SavingsTab() {
                   placeholder="0,00"
                 />
               </div>
+              {assetType === "gold" && (
+                <div>
+                  <label htmlFor="savings-grams" className={labelClass}>Sudah Punya (gram, opsional)</label>
+                  <input
+                    id="savings-grams"
+                    type="text"
+                    inputMode="decimal"
+                    value={totalGrams}
+                    onChange={(e) => setTotalGrams(e.target.value)}
+                    className={inputClass}
+                    placeholder="0"
+                  />
+                </div>
+              )}
               <div>
                 <label htmlFor="savings-deadline" className={labelClass}>Deadline (opsional)</label>
                 <input
@@ -212,11 +262,11 @@ export default function SavingsTab() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : items.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Belum ada target tabungan.</p>
+          <p className="text-sm text-fg-subtle">Belum ada target tabungan.</p>
         </HudPanel>
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -228,7 +278,7 @@ export default function SavingsTab() {
             return (
               <HudPanel key={goal.id}>
                 <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-sm font-semibold text-slate-100">{goal.name}</h3>
+                  <h3 className="text-sm font-semibold text-fg">{goal.name}</h3>
                   <div className="flex items-center gap-3 shrink-0">
                     <button onClick={() => startEdit(goal)} className={ghostBtnClass}>
                       Edit
@@ -244,12 +294,18 @@ export default function SavingsTab() {
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-xs font-mono text-slate-400 mb-3">
+                <div className="flex justify-between text-xs font-mono text-fg-subtle mb-3">
                   <span>{formatCurrency(Number(goal.current_amount))}</span>
                   <span>{formatCurrency(Number(goal.target_amount))} · {pct}%</span>
                 </div>
+                {goal.asset_type === "gold" && Number(goal.total_grams) > 0 && (
+                  <p className="text-[11px] text-fg-subtle mb-3">
+                    {formatGrams(Number(goal.total_grams))} · rata-rata{" "}
+                    {formatCurrency(Number(goal.current_amount) / Number(goal.total_grams))}/gram
+                  </p>
+                )}
                 {goal.deadline && (
-                  <p className="text-[11px] text-slate-600 mb-3">
+                  <p className="text-[11px] text-fg-subtle mb-3">
                     Deadline {formatDate(goal.deadline)}
                   </p>
                 )}
@@ -263,9 +319,24 @@ export default function SavingsTab() {
                       value={addFundValue}
                       onChange={(e) => setAddFundValue(e.target.value)}
                       className={inputClass}
-                      placeholder="Nominal"
-                      aria-label={`Tambah dana ke ${goal.name}`}
+                      placeholder={goal.asset_type === "gold" ? "Harga beli (€)" : "Nominal"}
+                      aria-label={
+                        goal.asset_type === "gold"
+                          ? `Harga beli emas untuk ${goal.name}`
+                          : `Tambah dana ke ${goal.name}`
+                      }
                     />
+                    {goal.asset_type === "gold" && (
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={addFundGrams}
+                        onChange={(e) => setAddFundGrams(e.target.value)}
+                        className={inputClass}
+                        placeholder="Gram"
+                        aria-label={`Berat emas untuk ${goal.name}`}
+                      />
+                    )}
                     <button onClick={() => handleAddFund(goal)} className={primaryBtnClass}>
                       OK
                     </button>
@@ -275,7 +346,7 @@ export default function SavingsTab() {
                     onClick={() => setAddFundId(goal.id)}
                     className={ghostBtnClass}
                   >
-                    + Tambah Dana
+                    {goal.asset_type === "gold" ? "+ Beli Emas" : "+ Tambah Dana"}
                   </button>
                 )}
               </HudPanel>
@@ -283,6 +354,8 @@ export default function SavingsTab() {
           })}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 }

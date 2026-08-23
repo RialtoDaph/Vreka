@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
 afterEach(() => {
@@ -65,6 +65,37 @@ function mockDisconnectedCalendar() {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({ json: async () => ({ connected: false, events: [] }) })
+  );
+}
+
+// Routes the same global fetch mock across the list GET plus a PATCH/DELETE
+// call the edit/delete flow makes, so tests can assert what those calls sent.
+function mockConnectedCalendar(
+  events: unknown[],
+  opts: {
+    onUpdate?: (body: Record<string, unknown>) => void;
+    onDelete?: (eventId: string | null) => void;
+  } = {}
+) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      if (url.startsWith("/api/google/calendar/list")) {
+        return { json: async () => ({ connected: true, events }) };
+      }
+      if (method === "PATCH") {
+        opts.onUpdate?.(JSON.parse(String(init?.body)));
+        return { ok: true, json: async () => ({ event: {} }) };
+      }
+      if (method === "DELETE") {
+        const eventId = new URL(url, "http://localhost").searchParams.get("eventId");
+        opts.onDelete?.(eventId);
+        return { ok: true, json: async () => ({ ok: true }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    })
   );
 }
 
@@ -194,6 +225,69 @@ describe("KalenderPage", () => {
     expect(await screen.findAllByText("Bayar Bank Transfer")).not.toHaveLength(0);
   });
 
+  it("shows a day's full item list inline in the week view, without opening a day modal", async () => {
+    const today = todayStr();
+    mockSupabase([
+      { title: "Tugas 1", deadline: `${today}T08:00:00Z` },
+      { title: "Tugas 2", deadline: `${today}T09:00:00Z` },
+      { title: "Tugas 3", deadline: `${today}T10:00:00Z` },
+    ]);
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    await screen.findByLabelText(today);
+    fireEvent.click(screen.getByText("Minggu"));
+
+    // All 3 show up directly (no "+N lagi" capping, no day click needed) --
+    // that's the whole point of the agenda view over the month grid's chips.
+    expect(await screen.findByText("Tugas 1")).toBeInTheDocument();
+    expect(screen.getByText("Tugas 2")).toBeInTheDocument();
+    expect(screen.getByText("Tugas 3")).toBeInTheDocument();
+    expect(screen.queryByText(/lagi/)).not.toBeInTheDocument();
+  });
+
+  it("shows Kosong for an empty day in the week view", async () => {
+    mockSupabase();
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    await screen.findByLabelText(todayStr());
+    fireEvent.click(screen.getByText("Minggu"));
+
+    expect((await screen.findAllByText("Kosong.")).length).toBeGreaterThan(0);
+  });
+
+  it("quick-adds an event for a specific day from the week view", async () => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowKey = tomorrow.toISOString().slice(0, 10);
+    // Only meaningful when tomorrow stays in the same visible week.
+    if (tomorrow.getDay() === 0) return;
+
+    mockSupabase();
+    mockDisconnectedCalendar();
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    await screen.findByLabelText(todayStr());
+    fireEvent.click(screen.getByText("Minggu"));
+
+    const tomorrowHeading = await screen.findByText(
+      new Intl.DateTimeFormat("id-ID", { weekday: "long", day: "2-digit", month: "short" }).format(tomorrow)
+    );
+    const dayPanel = tomorrowHeading.closest("div.relative") as HTMLElement;
+    fireEvent.click(within(dayPanel).getByText("+ Event"));
+
+    const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
+    expect(dateInput.value).toBe(tomorrowKey);
+  });
+
   it("shows a study session as a Pelajaran item on the day it happened", async () => {
     const today = todayStr();
     mockSupabase([], [], [], [
@@ -209,5 +303,87 @@ describe("KalenderPage", () => {
     // "· Pelajaran" (the item's category line) rather than a bare
     // "Pelajaran" match, which would also hit the legend row below the grid.
     expect(screen.getByText(/· Pelajaran/)).toBeInTheDocument();
+  });
+
+  it("edits a Google Calendar event's title and time, saving it back via PATCH", async () => {
+    const today = todayStr();
+    let updateBody: Record<string, unknown> | null = null;
+    mockSupabase();
+    mockConnectedCalendar(
+      [
+        {
+          id: "gcal-1",
+          summary: "Rapat Tim",
+          start: `${today}T10:00:00+07:00`,
+          end: `${today}T11:00:00+07:00`,
+          location: null,
+        },
+      ],
+      {
+        onUpdate: (body) => {
+          updateBody = body;
+        },
+      }
+    );
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    fireEvent.click(await screen.findByLabelText(today));
+    fireEvent.click(await screen.findByLabelText("Edit Rapat Tim"));
+
+    fireEvent.change(screen.getByDisplayValue("Rapat Tim"), { target: { value: "Rapat Tim (updated)" } });
+    fireEvent.click(screen.getByText("Simpan Perubahan"));
+
+    await waitFor(() => expect(updateBody).not.toBeNull());
+    expect(updateBody!.eventId).toBe("gcal-1");
+    expect(updateBody!.summary).toBe("Rapat Tim (updated)");
+  });
+
+  it("deletes a Google Calendar event via the Delete button after confirming", async () => {
+    const today = todayStr();
+    let deletedId: string | null = null;
+    mockSupabase();
+    mockConnectedCalendar(
+      [
+        {
+          id: "gcal-2",
+          summary: "Sesi Coaching",
+          start: `${today}T13:00:00+07:00`,
+          end: `${today}T14:00:00+07:00`,
+          location: null,
+        },
+      ],
+      {
+        onDelete: (eventId) => {
+          deletedId = eventId;
+        },
+      }
+    );
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    fireEvent.click(await screen.findByLabelText(today));
+    fireEvent.click(await screen.findByLabelText("Hapus Sesi Coaching"));
+
+    fireEvent.click(await screen.findByText("Ya, lanjut"));
+
+    await waitFor(() => expect(deletedId).toBe("gcal-2"));
+  });
+
+  it("doesn't show an Edit button for an all-day Google event, only Delete", async () => {
+    const today = todayStr();
+    mockSupabase();
+    mockConnectedCalendar([
+      { id: "gcal-3", summary: "Cuti", start: today, end: today, location: null },
+    ]);
+
+    const { default: KalenderPage } = await import("./page");
+    render(<KalenderPage />);
+
+    fireEvent.click(await screen.findByLabelText(today));
+    await screen.findByLabelText("Hapus Cuti");
+    expect(screen.queryByLabelText("Edit Cuti")).not.toBeInTheDocument();
   });
 });

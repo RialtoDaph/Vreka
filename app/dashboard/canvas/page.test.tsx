@@ -3,6 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 
+// Canvas picks its card/line colors reactively via useTheme() now (light
+// mode) -- stub it to the dark palette so the rest of this file's
+// assertions (card backgrounds, colors, etc) don't need to know about
+// theming at all.
+vi.mock("@/components/ThemeProvider", () => ({
+  useTheme: () => ({ preference: "dark", resolvedTheme: "dark", setPreference: vi.fn() }),
+}));
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -116,13 +124,13 @@ describe("CanvasKerjaPage", () => {
   });
 
   it("deletes a node after confirming", async () => {
-    vi.stubGlobal("confirm", () => true);
     mockSupabase({ nodes: [STICKY] });
     const { default: CanvasKerjaPage } = await import("./page");
     render(<CanvasKerjaPage />);
 
     await screen.findByDisplayValue("Catatan awal");
     fireEvent.click(screen.getByLabelText("Hapus kartu sticky"));
+    fireEvent.click(await screen.findByText("Ya, lanjut"));
 
     await waitFor(() => expect(screen.queryByDisplayValue("Catatan awal")).not.toBeInTheDocument());
     expect(
@@ -131,13 +139,13 @@ describe("CanvasKerjaPage", () => {
   });
 
   it("keeps the node when the delete confirmation is declined", async () => {
-    vi.stubGlobal("confirm", () => false);
     mockSupabase({ nodes: [STICKY] });
     const { default: CanvasKerjaPage } = await import("./page");
     render(<CanvasKerjaPage />);
 
     await screen.findByDisplayValue("Catatan awal");
     fireEvent.click(screen.getByLabelText("Hapus kartu sticky"));
+    fireEvent.click(await screen.findByText("Batal"));
 
     expect(screen.getByDisplayValue("Catatan awal")).toBeInTheDocument();
   });

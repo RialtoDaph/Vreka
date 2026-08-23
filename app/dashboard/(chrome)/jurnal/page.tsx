@@ -8,7 +8,10 @@ import { todayKey } from "@/lib/date";
 import { promptForDate } from "@/lib/journalPrompts";
 import { buildHeatmapCells, computeStreak } from "@/lib/habits";
 import HudPanel from "@/components/HudPanel";
-import { inputClass, primaryBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
+import MarkdownEditor from "@/components/MarkdownEditor";
+import { useConfirm } from "@/lib/useConfirm";
+import { Flame } from "lucide-react";
+import { primaryBtnClass, dangerBtnClass, errorBannerClass } from "@/lib/ui";
 
 export default function JurnalPage() {
   const supabase = createClient();
@@ -17,6 +20,7 @@ export default function JurnalPage() {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   const today = todayKey();
   const [selectedDate, setSelectedDate] = useState(today);
@@ -116,7 +120,7 @@ export default function JurnalPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Yakin mau hapus catatan ini?")) return;
+    if (!(await confirm("Yakin mau hapus catatan ini?"))) return;
     setError(null);
     const previous = entries;
     setEntries((prev) => prev.filter((e) => e.id !== id));
@@ -142,13 +146,13 @@ export default function JurnalPage() {
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-cyan-glow mb-1">
             Jurnal
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-fg">
             Catatan Harian
           </h1>
         </div>
         {streak > 0 && (
           <div className="flex items-center gap-2 border border-amber-glow/35 bg-amber-glow/10 rounded-full px-3.5 py-2">
-            <span aria-hidden="true">🔥</span>
+            <Flame aria-hidden="true" className="w-4 h-4 text-amber-glow" strokeWidth={2} />
             <span className="font-mono text-sm font-semibold text-amber-glow">{streak} hari beruntun</span>
           </div>
         )}
@@ -161,10 +165,11 @@ export default function JurnalPage() {
           <div className="flex items-center gap-2">
             <input
               type="date"
+              aria-label="Tanggal entri jurnal"
               value={selectedDate}
               max={today}
               onChange={(e) => e.target.value && handleDateChange(e.target.value)}
-              className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-cyan-glow/60 transition-colors"
+              className="bg-panel2 border border-line rounded-sm px-2.5 py-1.5 text-xs font-mono text-fg-secondary focus:border-cyan-glow/60 transition-colors"
             />
             {selectedDate !== today && (
               <button
@@ -175,19 +180,20 @@ export default function JurnalPage() {
               </button>
             )}
           </div>
-          <p className="text-xs font-mono uppercase tracking-wider text-slate-500">
+          <p className="text-xs font-mono uppercase tracking-wider text-fg-subtle">
             {formatDate(selectedDate)}
           </p>
         </div>
         <p className="text-sm text-cyan-glow/90 italic mb-3">{prompt}</p>
-        <textarea
+        <MarkdownEditor
           value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className={`${inputClass} min-h-32`}
+          onChange={setContent}
           placeholder="Tulis apa aja..."
+          minHeightClass="min-h-32"
+          ariaLabel="Entri jurnal"
         />
 
-        <p className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mt-4 mb-2">
+        <p className="text-[10px] font-mono uppercase tracking-wider text-fg-subtle mt-4 mb-2">
           30 hari terakhir
         </p>
         <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
@@ -210,11 +216,11 @@ export default function JurnalPage() {
 
       {loading ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Memuat...</p>
+          <p className="text-sm text-fg-subtle">Memuat...</p>
         </HudPanel>
       ) : otherEntries.length === 0 ? (
         <HudPanel>
-          <p className="text-sm text-slate-500">Belum ada catatan sebelumnya.</p>
+          <p className="text-sm text-fg-subtle">Belum ada catatan sebelumnya.</p>
         </HudPanel>
       ) : (
         <div className="space-y-3">
@@ -226,7 +232,7 @@ export default function JurnalPage() {
                   className="text-left flex-1 min-w-0"
                 >
                   <p className="text-xs font-mono text-cyan-glow/80">{formatDate(entry.entry_date)}</p>
-                  <p className="text-sm text-slate-400 truncate">{entry.content}</p>
+                  <p className="text-sm text-fg-subtle truncate">{entry.content}</p>
                 </button>
                 <button onClick={() => handleDelete(entry.id)} className={dangerBtnClass}>
                   Hapus
@@ -236,6 +242,8 @@ export default function JurnalPage() {
           ))}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 }

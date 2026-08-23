@@ -2,35 +2,8 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { EXPORTABLE_TABLES } from "@/lib/exportableTables";
 import { ghostBtnClass } from "@/lib/ui";
-
-// Semua tabel yang RLS-scope ke user_id — daftar ini sengaja eksplisit
-// (bukan introspeksi otomatis) biar jelas tabel apa aja yang keikut kalau
-// ada modul baru ditambah nanti.
-const EXPORTABLE_TABLES = [
-  "transactions",
-  "recurring_items",
-  "recurring_item_checks",
-  "debts",
-  "debt_payments",
-  "savings_goals",
-  "budgets",
-  "tasks",
-  "task_subtasks",
-  "study_notes",
-  "study_sessions",
-  "study_resources",
-  "habits",
-  "habit_checks",
-  "journal_entries",
-  "life_milestones",
-  "canvas_nodes",
-  "canvas_arrows",
-  "daily_briefings",
-  "assistant_memories",
-  "assistant_messages",
-  "assistant_audit_log",
-] as const;
 
 export default function DataExport() {
   const supabase = createClient();
@@ -69,10 +42,10 @@ export default function DataExport() {
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div className="min-w-0">
-        <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-fg-subtle mb-0.5">
           Data & Privasi
         </p>
-        <p className="text-slate-300 text-sm">
+        <p className="text-fg-muted text-sm">
           Download semua data kamu di Vreka (satu file JSON) — buat backup atau pindah platform.
         </p>
         {error && <p className="text-xs text-rose-glow mt-1">{error}</p>}
