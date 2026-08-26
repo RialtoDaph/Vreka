@@ -16,18 +16,37 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// `order`/`limit` actually sort and slice the working set (matching real
+// Postgres/Supabase semantics for how a chained query executes) instead of
+// being no-op passthroughs -- a page that queries ascending + a small limit
+// on an unbounded table (the exact bug this file regression-tests below)
+// would otherwise pass here while silently cutting off real data in prod.
 function chainable(data: unknown[] = []) {
+  let rows = data.slice();
   const obj: Record<string, unknown> = {
     select: () => obj,
-    order: () => obj,
-    limit: () => obj,
+    order: (column: string, opts?: { ascending?: boolean }) => {
+      const ascending = opts?.ascending !== false;
+      rows = rows.slice().sort((a, b) => {
+        const av = (a as Record<string, unknown>)[column];
+        const bv = (b as Record<string, unknown>)[column];
+        if (av === bv) return 0;
+        const before = av! < bv! ? -1 : 1;
+        return ascending ? before : -before;
+      });
+      return obj;
+    },
+    limit: (n: number) => {
+      rows = rows.slice(0, n);
+      return obj;
+    },
     not: () => obj,
     eq: () => obj,
     gte: () => obj,
     delete: () => obj,
-    maybeSingle: () => Promise.resolve({ data: data[0] ?? null, error: null }),
+    maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
     then: (resolve: (v: unknown) => unknown) =>
-      Promise.resolve({ data, error: null, count: data.length }).then(resolve),
+      Promise.resolve({ data: rows, error: null, count: rows.length }).then(resolve),
   };
   return obj;
 }
@@ -141,6 +160,37 @@ describe("AsistenPage", () => {
     render(<AsistenPage />);
 
     expect(await screen.findByText("Halo balik!")).toBeInTheDocument();
+  });
+
+  it("still shows today's message once history has grown past the page size", async () => {
+    // Regression test: the history query used to sort ascending and take
+    // the first 100 rows -- fine below 100 total messages, but once a
+    // user's history grew past that, every newer message (today's
+    // included) fell outside the cutoff and silently stopped rendering on
+    // reload despite being safely persisted. 120 old rows here is
+    // comfortably past the page size of 100.
+    const oldMessages = Array.from({ length: 120 }, (_, i) => ({
+      id: `old-${i}`,
+      user_id: "user-1",
+      role: i % 2 === 0 ? "user" : "assistant",
+      content: `pesan lama ${i}`,
+      created_at: new Date(Date.now() - (200 - i) * 60_000).toISOString(),
+    }));
+    const todayMessage = {
+      id: "today-1",
+      user_id: "user-1",
+      role: "assistant",
+      content: "Balesan hari ini",
+      created_at: new Date().toISOString(),
+    };
+    mockSupabase([...oldMessages, todayMessage]);
+    mockVoice();
+    mockStatusAslan();
+    mockRouter();
+    const { default: AsistenPage } = await import("./page");
+    render(<AsistenPage />);
+
+    expect(await screen.findByText("Balesan hari ini")).toBeInTheDocument();
   });
 
   it("sends a typed message and streams the reply", async () => {

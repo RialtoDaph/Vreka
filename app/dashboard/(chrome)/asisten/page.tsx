@@ -139,12 +139,18 @@ export default function AsistenPage() {
   }, []);
 
   async function refreshMessages() {
+    // Ordering ascending-then-limiting fetched the OLDEST 100 messages ever
+    // sent -- harmless below 100 total, but once a user's history grew past
+    // that, every message since (including anything from "today") fell
+    // outside the cutoff and silently stopped rendering on reload, even
+    // though it was safely persisted. Fetch the newest 100 instead, then
+    // reverse for chronological (oldest-first) display.
     const { data } = await supabase
       .from("assistant_messages")
       .select("*")
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(100);
-    setMessages(data ?? []);
+    setMessages((data ?? []).slice().reverse());
   }
 
   async function load() {
