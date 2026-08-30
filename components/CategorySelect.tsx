@@ -19,6 +19,7 @@ type Props = {
 // reverts to the last real selection on blur instead of becoming a stray
 // category that isn't in the enum anywhere else in the app.
 export default function CategorySelect({ id, value, onChange, groups, disabled, placeholder }: Props) {
+  const listboxId = id ? `${id}-listbox` : "categoryselect-listbox";
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
   // Separate from `query` so opening the dropdown on an already-selected
@@ -64,6 +65,7 @@ export default function CategorySelect({ id, value, onChange, groups, disabled, 
         type="text"
         role="combobox"
         aria-expanded={open}
+        aria-controls={listboxId}
         aria-autocomplete="list"
         autoComplete="off"
         disabled={disabled}
@@ -91,7 +93,7 @@ export default function CategorySelect({ id, value, onChange, groups, disabled, 
         className={inputClass}
       />
       {open && !disabled && (
-        <div className="absolute z-10 mt-1 w-full max-h-64 overflow-y-auto bg-panel border border-line rounded-sm shadow-glow">
+        <div id={listboxId} role="listbox" className="absolute z-10 mt-1 w-full max-h-64 overflow-y-auto bg-panel border border-line rounded-sm shadow-glow">
           {filteredGroups.length === 0 ? (
             <p className="px-3 py-2 text-xs text-fg-subtle">Nggak ada yang cocok.</p>
           ) : (

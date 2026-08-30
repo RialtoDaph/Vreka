@@ -7,6 +7,7 @@ import { AssistantMessage } from "@/lib/types";
 import { ASSISTANT_MODELS } from "@/lib/assistant/models";
 import { useVoiceAssistant } from "@/lib/assistant/useVoiceAssistant";
 import { readTextStream } from "@/lib/assistant/streamText";
+import Image from "next/image";
 import HudPanel from "@/components/HudPanel";
 import StatusAslan from "@/components/asisten/StatusAslan";
 import { inputClass, primaryBtnClass } from "@/lib/ui";
@@ -255,9 +256,11 @@ export default function AsistenPage() {
     <div className="space-y-6 flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] overflow-y-auto">
       <header className="flex items-end justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <img
+          <Image
             src="/aslan.png"
             alt=""
+            width={44}
+            height={44}
             className="w-11 h-11 rounded-full border border-cyan-glow/40 shadow-glow"
           />
           <div>
@@ -316,9 +319,11 @@ export default function AsistenPage() {
                 className={`flex items-end gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 {m.role !== "user" && (
-                  <img
+                  <Image
                     src="/aslan.png"
                     alt=""
+                    width={28}
+                    height={28}
                     className="w-7 h-7 rounded-full border border-cyan-glow/40 shrink-0"
                   />
                 )}
@@ -336,9 +341,11 @@ export default function AsistenPage() {
           )}
           {sending && awaitingFirstChunk && (
             <div className="flex items-end gap-2 justify-start">
-              <img
+              <Image
                 src="/aslan.png"
                 alt=""
+                width={28}
+                height={28}
                 className="w-7 h-7 rounded-full border border-cyan-glow/40 shrink-0"
               />
               <div className="max-w-[85%] rounded-sm px-3 py-2 text-sm border bg-panel2 border-line text-fg-subtle font-mono">

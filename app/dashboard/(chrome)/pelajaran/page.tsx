@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Flashcard, StudyNote, StudyResource } from "@/lib/types";
 import { nextReview, type ReviewRating } from "@/lib/spacedRepetition";
 import { computeStreak } from "@/lib/studyStreak";
-import { formatDate } from "@/lib/format";
 import { useConfirm } from "@/lib/useConfirm";
 import { Flame, Brain, Layers, Link2, X } from "lucide-react";
 import HudPanel from "@/components/HudPanel";
