@@ -41,6 +41,7 @@ export type RecurringItem = {
   created_at: string;
   auto_post: boolean;
   day_of_month: number | null;
+  account_id: string | null;
 };
 
 export type RecurringItemCheck = {

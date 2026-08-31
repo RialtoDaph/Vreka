@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { RecurringItem, RecurringItemCheck, TransactionType } from "@/lib/types";
+import { Account, RecurringItem, RecurringItemCheck, TransactionType } from "@/lib/types";
 import { formatCurrency, parseAmount } from "@/lib/format";
 import { currentMonthKey, todayKey } from "@/lib/date";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORY_GROUPS, EXPENSE_CATEGORY_GROUPS } from "@/lib/categories";
@@ -23,6 +23,7 @@ export default function RecurringTab() {
   const supabase = createClient();
   const [items, setItems] = useState<RecurringItem[]>([]);
   const [checks, setChecks] = useState<RecurringItemCheck[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -36,6 +37,7 @@ export default function RecurringTab() {
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [amount, setAmount] = useState("");
+  const [accountId, setAccountId] = useState<string>("");
   const [autoPost, setAutoPost] = useState(false);
   const [dayOfMonth, setDayOfMonth] = useState("1");
 
@@ -48,6 +50,7 @@ export default function RecurringTab() {
     setCategory(EXPENSE_CATEGORIES[0]);
     setCategoryTouched(false);
     setAmount("");
+    setAccountId("");
     setAutoPost(false);
     setDayOfMonth("1");
   }
@@ -71,6 +74,7 @@ export default function RecurringTab() {
     setCategory(item.category);
     setCategoryTouched(true);
     setAmount(String(item.amount).replace(".", ","));
+    setAccountId(item.account_id ?? "");
     setAutoPost(item.auto_post);
     setDayOfMonth(String(item.day_of_month ?? 1));
     setShowForm(true);
@@ -78,12 +82,14 @@ export default function RecurringTab() {
 
   async function load() {
     setLoading(true);
-    const [{ data: itemRows }, { data: checkRows }] = await Promise.all([
+    const [{ data: itemRows }, { data: checkRows }, { data: accountRows }] = await Promise.all([
       supabase.from("recurring_items").select("*").order("created_at", { ascending: true }),
       supabase.from("recurring_item_checks").select("*").eq("period", period),
+      supabase.from("accounts").select("*").order("created_at", { ascending: true }),
     ]);
     setItems(itemRows ?? []);
     setChecks(checkRows ?? []);
+    setAccounts(accountRows ?? []);
     setLoading(false);
   }
 
@@ -120,6 +126,7 @@ export default function RecurringTab() {
       category,
       name: name.trim(),
       amount: parsed,
+      account_id: accountId || null,
       auto_post: autoPost,
       day_of_month: autoPost ? day : null,
     };
@@ -188,6 +195,7 @@ export default function RecurringTab() {
           amount: item.amount,
           description: item.name,
           occurred_on: todayKey(),
+          account_id: item.account_id ?? null,
         })
         .select("id")
         .single();
@@ -308,6 +316,22 @@ export default function RecurringTab() {
                   placeholder="1.200,00"
                 />
               </div>
+              {accounts.length > 0 && (
+                <div>
+                  <label htmlFor="recurring-account" className={labelClass}>Rekening</label>
+                  <select
+                    id="recurring-account"
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="">— Tidak ada —</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div>
