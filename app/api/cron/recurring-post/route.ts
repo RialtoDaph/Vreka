@@ -82,10 +82,12 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    // Same reasoning as Aslan's add_transaction tool -- recurring_items has
-    // no per-item account of its own, so without this every auto-posted
-    // transaction would silently miss every account's balance.
-    const accountId = await getPrimaryAccountId(admin, item.user_id);
+    // Prefer the account the user picked for this specific pos tetap; fall
+    // back to their primary account for older items that predate per-item
+    // account selection (same reasoning as Aslan's add_transaction tool --
+    // without either, the transaction would silently miss every account's
+    // balance).
+    const accountId = item.account_id ?? (await getPrimaryAccountId(admin, item.user_id));
     const { data: tx, error: txError } = await admin
       .from("transactions")
       .insert({

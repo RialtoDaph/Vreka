@@ -75,6 +75,10 @@ function chainableTable(
       return obj;
     },
     single: () => Promise.resolve({ data: pendingResult, error: null }),
+    // Distinct from `rows[0]` -- a real .maybeSingle() resolves to `null`
+    // (not an error) when there's no matching row, e.g. no primary account
+    // set yet.
+    maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
     then: (resolve: (v: unknown) => unknown) => Promise.resolve({ data: rows, error: null }).then(resolve),
   };
   return obj;
@@ -83,6 +87,7 @@ function chainableTable(
 function mockSupabase(opts: {
   debts?: unknown[];
   payments?: unknown[];
+  accounts?: unknown[];
   onTxInsert?: (payload: Record<string, unknown>) => unknown;
   onPaymentInsert?: (payload: Record<string, unknown>) => unknown;
   onDebtUpdate?: (payload: Record<string, unknown>) => void;
@@ -90,6 +95,7 @@ function mockSupabase(opts: {
 } = {}) {
   const debts = opts.debts ?? DEBTS;
   const payments = opts.payments ?? [];
+  const accounts = opts.accounts ?? [];
   vi.doMock("@/lib/supabase/client", () => ({
     createClient: () => ({
       from: (table: string) => {
@@ -103,6 +109,7 @@ function mockSupabase(opts: {
             onInsert: (p) => opts.onTxInsert?.(p) ?? { id: "tx-1", ...p },
             onDelete: opts.onTxDelete,
           });
+        if (table === "accounts") return chainableTable(accounts);
         throw new Error(`unexpected table: ${table}`);
       },
       auth: { getUser: async () => ({ data: { user: { id: "user-1" } } }) },
@@ -204,12 +211,34 @@ describe("DebtsTab", () => {
       type: "expense",
       category: "Cicilan/Utang",
       amount: 150,
+      account_id: null,
     });
     expect(paymentInserts[0]).toMatchObject({ debt_id: "d1", amount: 150, transaction_id: "tx-1" });
     expect(await screen.findByText(/Udah dibayar 150,00 € dari 450,00 €/)).toBeInTheDocument();
     // The big amount now shows what's left, not the original total -- it
     // also matches the totals card above, since that's the only debt.
     expect(screen.getAllByText("300,00 €")).toHaveLength(2);
+  });
+
+  it("attributes a debt payment to the user's primary account when one is set", async () => {
+    const txInserts: Record<string, unknown>[] = [];
+    mockSupabase({
+      debts: [DEBTS[0]],
+      accounts: [{ id: "acc-1", is_primary: true }],
+      onTxInsert: (p) => {
+        txInserts.push(p);
+        return { id: "tx-1", ...p };
+      },
+    });
+    const { default: DebtsTab } = await import("./DebtsTab");
+    render(<DebtsTab />);
+
+    fireEvent.click(await screen.findByText("+ Bayar"));
+    fireEvent.change(screen.getByLabelText("Nominal pembayaran Budi"), { target: { value: "150" } });
+    fireEvent.click(screen.getByText("OK"));
+
+    await waitFor(() => expect(txInserts).toHaveLength(1));
+    expect(txInserts[0]).toMatchObject({ account_id: "acc-1" });
   });
 
   it("checks the budget threshold after paying a debt the user owes", async () => {

@@ -195,7 +195,10 @@ export default function RecurringTab() {
           amount: item.amount,
           description: item.name,
           occurred_on: todayKey(),
-          account_id: item.account_id ?? null,
+          // Prefer the account picked for this pos tetap; fall back to the
+          // primary account for older items that predate per-item account
+          // selection (same reasoning as the recurring-post cron).
+          account_id: item.account_id ?? accounts.find((a) => a.is_primary)?.id ?? null,
         })
         .select("id")
         .single();
