@@ -202,6 +202,33 @@ describe("GET /api/cron/recurring-post", () => {
     ]);
   });
 
+  it("prefers the pos tetap's own selected account over the user's primary rekening", async () => {
+    const { insertedTransactions } = mockAdmin({
+      dueItems: [
+        {
+          id: "item-1",
+          user_id: "user-1",
+          type: "expense",
+          category: "Tagihan",
+          name: "Internet",
+          amount: 45,
+          day_of_month: TODAY_DAY,
+          auto_post: true,
+          account_id: "acct-chosen",
+        },
+      ],
+      // A different primary account exists, but must NOT win -- the item's
+      // own account_id (set via the pos tetap form) takes precedence.
+      primaryAccountId: "acct-primary",
+    });
+    const { GET } = await import("./route");
+    await GET(req("test-secret"));
+
+    expect(insertedTransactions).toEqual([
+      expect.objectContaining({ account_id: "acct-chosen" }),
+    ]);
+  });
+
   it("skips a due item whose period-claim loses to a unique-violation, without inserting a duplicate transaction", async () => {
     const { insertedTransactions } = mockAdmin({
       dueItems: [

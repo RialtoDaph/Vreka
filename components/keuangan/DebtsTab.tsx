@@ -199,6 +199,17 @@ export default function DebtsTab() {
         return;
       }
 
+      // Same reasoning as Aslan's pay_debt tool -- without an account_id a
+      // debt payment made here would silently miss every account's balance
+      // (null is a normal, expected result when the user hasn't set a
+      // primary account, not an error).
+      const { data: primaryAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("is_primary", true)
+        .maybeSingle();
+
       const category = debt.direction === "i_owe" ? "Cicilan/Utang" : "Piutang Diterima";
       const { data: tx, error: txError } = await supabase
         .from("transactions")
@@ -210,6 +221,7 @@ export default function DebtsTab() {
           description:
             debt.direction === "i_owe" ? `Cicilan ${debt.party_name}` : `Pembayaran dari ${debt.party_name}`,
           occurred_on: todayKey(),
+          account_id: primaryAccount?.id ?? null,
         })
         .select("id")
         .single();
