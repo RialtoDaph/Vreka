@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { formatCurrency } from "@/lib/format";
 
 // Chart grid/cursor/pie-stroke colors are picked reactively via useTheme()
 // now (light mode) -- stub it to dark so this file's assertions don't need
@@ -64,6 +65,26 @@ function mockSupabase(txRows: unknown[], accountRows: unknown[] = []) {
 function currentMonthPrefix(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function previousMonthPrefix(): string {
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// formatCurrency's Intl output uses a non-breaking space before "€", but
+// Testing Library's default matcher only normalizes the DOM-side text, not
+// the raw string passed in -- so an exact-string match against
+// formatCurrency's own output fails even when the text is right there.
+// Normalizing both sides here sidesteps that mismatch.
+function normalizeText(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+function byCurrency(amount: number) {
+  const target = normalizeText(formatCurrency(amount));
+  return (content: string) => normalizeText(content) === target;
 }
 
 describe("AnalyticsTab", () => {
@@ -159,5 +180,76 @@ describe("AnalyticsTab", () => {
       expect(within(donutPanel).getByText(c)).toBeInTheDocument();
     }
     expect(within(donutPanel).queryByText("F")).not.toBeInTheDocument();
+  });
+
+  it("shows income/expense KPI tiles with a month-over-month delta and savings rate", async () => {
+    const month = currentMonthPrefix();
+    const prevMonth = previousMonthPrefix();
+    mockSupabase([
+      { type: "income", category: "Gaji", amount: 2000, occurred_on: `${month}-01`, account_id: null, to_account_id: null },
+      // Split across two categories so no single category amount collides
+      // with the 500 total (which would otherwise also match in the
+      // distribution list below and make the query ambiguous).
+      { type: "expense", category: "Makanan", amount: 300, occurred_on: `${month}-05`, account_id: null, to_account_id: null },
+      { type: "expense", category: "Transportasi", amount: 200, occurred_on: `${month}-06`, account_id: null, to_account_id: null },
+      { type: "income", category: "Gaji", amount: 1000, occurred_on: `${prevMonth}-01`, account_id: null, to_account_id: null },
+      { type: "expense", category: "Makanan", amount: 240, occurred_on: `${prevMonth}-05`, account_id: null, to_account_id: null },
+      { type: "expense", category: "Transportasi", amount: 160, occurred_on: `${prevMonth}-06`, account_id: null, to_account_id: null },
+    ]);
+    const { default: Analytics } = await import("./AnalyticsTab");
+    render(<Analytics />);
+
+    expect(await screen.findByText(byCurrency(2000))).toBeInTheDocument();
+    expect(screen.getByText(byCurrency(500))).toBeInTheDocument();
+    // Income doubled vs last month (bullish, so this delta reads as good).
+    expect(screen.getByText("▲ 100% vs bulan lalu")).toBeInTheDocument();
+    // Expense grew 25% vs last month (bearish -- growth in spend is bad).
+    expect(screen.getByText("▲ 25% vs bulan lalu")).toBeInTheDocument();
+    // Savings rate: (2000 - 500) / 2000 = 75%.
+    expect(screen.getByText("75%")).toBeInTheDocument();
+  });
+
+  it("projects month-end spending from the daily average pace so far", async () => {
+    const month = currentMonthPrefix();
+    mockSupabase([
+      { type: "expense", category: "Makanan", amount: 300, occurred_on: `${month}-01`, account_id: null, to_account_id: null },
+    ]);
+    const { default: Analytics } = await import("./AnalyticsTab");
+    render(<Analytics />);
+
+    await screen.findByText("Proyeksi Akhir Bulan");
+    const today = new Date();
+    const daysElapsed = today.getDate();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const expected = daysElapsed > 0 ? (300 / daysElapsed) * daysInMonth : 300;
+    expect(screen.getByText(byCurrency(expected))).toBeInTheDocument();
+  });
+
+  it("shows each category's share of spending and its change vs last month", async () => {
+    const month = currentMonthPrefix();
+    const prevMonth = previousMonthPrefix();
+    mockSupabase([
+      { type: "expense", category: "Makanan", amount: 300, occurred_on: `${month}-05`, account_id: null, to_account_id: null },
+      { type: "expense", category: "Makanan", amount: 200, occurred_on: `${prevMonth}-05`, account_id: null, to_account_id: null },
+    ]);
+    const { default: Analytics } = await import("./AnalyticsTab");
+    render(<Analytics />);
+
+    await screen.findByText("Makanan");
+    // Only category this month -- 100% of total spend.
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    // Grew from 200 to 300 -- up 50% vs last month.
+    expect(screen.getByText("▲50%")).toBeInTheDocument();
+  });
+
+  it("lets you switch the trend window between 3/6/12 months", async () => {
+    mockSupabase([]);
+    const { default: Analytics } = await import("./AnalyticsTab");
+    render(<Analytics />);
+
+    expect(await screen.findByText("3 Bln")).toBeInTheDocument();
+    expect(screen.getByText("6 Bln")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("12 Bln"));
+    expect(screen.getByText("12 Bln")).toBeInTheDocument();
   });
 });
